@@ -32,6 +32,17 @@ NODE_ENV=development
 # File Upload Configuration
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=5242880
+
+# CORS Configuration
+# 允許的來源（用逗號分隔多個 URL）
+# 開發環境範例: ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+# 生產環境範例: ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+
+# AWS CloudFront URL (可選)
+# 設置 CloudFront 分發的 URL，例如: https://d1234567890.cloudfront.net
+# 或自定義域名: https://cdn.yourdomain.com
+CLOUDFRONT_URL=
 ```
 
 ### 3. 重新啟動後端服務器

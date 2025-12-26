@@ -11,19 +11,32 @@ Router 53 create record for subdomain (A Record)
 
 ### To Deploy
 
-## Linkup to serve
+Linkup to serve
 
 chmod 400 bigcstaffportal.pem
-ssh -i bigcstaffportal.pem ubuntu@3.1.139.29
+<!-- ssh -i bigcstaffportal.pem ubuntu@3.1.139.29 -->
+ssh -i "bigcstaffportal.pem" ubuntu@ec2-3-1-139-29.ap-southeast-1.compute.amazonaws.com
+hostname
+sudo hostnamectl set-hostname postgresql-server
 
 ## Update Advanced package tool
 
-sudo apt update
+sudo apt update -y && sudo apt full-upgade -y
 
 ## install postgres
+sudo apt install postgresql -y
+sudo -i -u postgres
 
-sudo apt install postgresql
+## system administration and install database
+psql
+create user admin with password 'admin' superuser;
+create database staffportal;
+\c staffportal
+grant all privileges on database staffportal to admin;
+\q
+exit
 
+## install nodejs
 nodejs on ubuntu: https://github.com/nodesource/distributions/blob/master/README.md
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - &&\
 sudo apt-get install -y nodejs
@@ -42,19 +55,10 @@ unclick the "Allow write access" then "Add key"
 git clone
 -->
 
-## Create Database
-
-sudo su postgres
-psql
-create user admin with password 'admin' superuser;
-create database home;
-\q
-exit
-
 ## update .env
 
 vi .env
-DB_NAME = home
+DB_NAME = staffportal
 DB_USER = admin
 DB_PASSWORD = admin
 :wq
@@ -81,6 +85,25 @@ proxy_set_header Host $host;
 proxy_cache_bypass $http_upgrade;
 }
 
+## change settings
+cd /etc/postgresql/16/main
+sudo vi postgresql.conf
+change listening from 'localhost' to '*'
+:x
+
+sudo vi pg_hba.conf
+host    all             all             0.0.0.0/0   md5
+
+sudo service postgresql restart
+sudo systemctl restart postgresql
+sudo service postgresql status
+
+sudo -i -u postgres
+
+psql
+
+\l
+
 # Create Certificate
 
 sudo apt-get install python3-certbot-nginx
@@ -97,7 +120,7 @@ sudo apt install npm
 ## make it forever start
 
 sudo npm install -g forever
-forever start index.js
+forever start server.js
 
 ## use sql on remote server
 
