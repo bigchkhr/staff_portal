@@ -1,8 +1,8 @@
 node_modules/
 .env
 .env.local
-# uploads/*
-# !uploads/.gitkeep
+# 覆蓋根目錄的 uploads/ 規則，允許 backend/uploads 被追蹤
+!uploads/
 *.log
 .DS_Store
 

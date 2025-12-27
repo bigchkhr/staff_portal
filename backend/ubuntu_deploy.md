@@ -117,6 +117,24 @@ sudo service nginx restart
 
 sudo apt install npm
 
+## S3
+sudo apt install -y awscli
+sudo apt install -y awscli
+
+sudo apt update
+sudo apt install -y unzip curl
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
+aws s3 ls s3://bigchkstaffportal
+aws s3 cp s3://bigchkstaffportal/your-file.txt
+
+# AWS Credentials - 請在環境變數或 AWS credentials 檔案中設定
+# Access key: (請從 AWS Console 取得)
+# Secret access key: (請從 AWS Console 取得)
+
+
 ## make it forever start
 
 sudo npm install -g forever
