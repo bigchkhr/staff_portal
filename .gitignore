@@ -110,6 +110,8 @@ dist
 
 # Uploads
 uploads/
+# 例外：允許 backend/uploads 被追蹤
+!backend/uploads/
 
 # Build files
 frontend/build/
