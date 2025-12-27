@@ -13,7 +13,7 @@ const apiLimiter = rateLimit({
 // 登入 API 的嚴格 Rate Limiting（防暴力破解）
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 5, // 只允許 5 次嘗試
+  max: 3, // 只允許 5 次嘗試
   message: '登入嘗試次數過多，請 15 分鐘後再試',
   skipSuccessfulRequests: true, // 成功的請求不計入
   standardHeaders: true,
