@@ -17,8 +17,25 @@ if (!process.env.JWT_SECRET) {
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const {
+  helmetConfig,
+  apiLimiter,
+  requestSizeLimit,
+  securityLogger
+} = require('./middleware/security');
 
 const app = express();
+
+// 安全頭設置
+app.use(helmetConfig);
+
+// 安全日誌記錄
+if (process.env.NODE_ENV === 'production') {
+  app.use(securityLogger);
+}
+
+// 信任代理（如果使用 nginx 或 load balancer）
+app.set('trust proxy', 1);
 
 // CORS Configuration
 // 支持多個允許的來源（用逗號分隔）
@@ -89,8 +106,13 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// 請求大小限制（防止記憶體耗盡攻擊）
+app.use(express.json(requestSizeLimit.json));
+app.use(express.urlencoded(requestSizeLimit.urlencoded));
+
+// API Rate Limiting
+app.use('/api', apiLimiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -108,7 +130,6 @@ const adminRoutes = require('./routes/admin.routes');
 const documentRoutes = require('./routes/document.routes');
 const todoRoutes = require('./routes/todo.routes');
 const formLibraryRoutes = require('./routes/formLibrary.routes');
-const webhookRoutes = require('./routes/webhookRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -122,7 +143,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/form-library', formLibraryRoutes);
-app.use('/api', webhookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
