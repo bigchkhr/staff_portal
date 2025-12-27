@@ -1,23 +1,100 @@
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
+const jwt = require('jsonwebtoken');
+const User = require('../database/models/User');
 
-// 一般 API 的 Rate Limiting
+// HR 成員檢查緩存（避免每次請求都查詢數據庫）
+const hrMemberCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 緩存 5 分鐘
+
+// 定期清理過期緩存（每 10 分鐘清理一次）
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of hrMemberCache.entries()) {
+    if (now - value.timestamp >= CACHE_TTL) {
+      hrMemberCache.delete(key);
+    }
+  }
+}, 10 * 60 * 1000);
+
+// 檢查用戶是否為 HR Group 成員（帶緩存）
+const checkHRMembership = async (userId) => {
+  const cacheKey = `hr_member_${userId}`;
+  const cached = hrMemberCache.get(cacheKey);
+  
+  // 如果緩存存在且未過期，直接返回
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.isHRMember;
+  }
+  
+  // 查詢數據庫
+  try {
+    const isHRMember = await User.isHRMember(userId);
+    // 更新緩存
+    hrMemberCache.set(cacheKey, {
+      isHRMember,
+      timestamp: Date.now()
+    });
+    return isHRMember;
+  } catch (error) {
+    console.warn('[checkHRMembership] Error:', error.message);
+    return false;
+  }
+};
+
+// 一般 API 的 Rate Limiting（HR Group 成員不受限制）
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 100, // 限制 100 個請求
-  message: '請求過於頻繁，請稍後再試',
+  windowMs: 5 * 60 * 1000, // 5 分鐘
+  max: 300, // 限制 300 個請求
+  message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ 
+      message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試',
+      error: 'TOO_MANY_REQUESTS'
+    });
+  },
+  // 跳過 HR Group 成員的請求
+  skip: async (req) => {
+    try {
+      // 嘗試從 Authorization header 獲取 token
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return false; // 沒有 token，不跳過（應用 rate limit）
+      }
+
+      // 解析 token（不驗證，只獲取 userId）
+      const decoded = jwt.decode(token);
+      if (!decoded || !decoded.userId) {
+        return false; // token 無效，不跳過
+      }
+
+      // 檢查是否為 HR Group 成員（使用緩存）
+      const isHRMember = await checkHRMembership(decoded.userId);
+      return isHRMember; // 如果是 HR 成員，跳過 rate limit
+    } catch (error) {
+      // 如果檢查失敗，不跳過（應用 rate limit 以確保安全）
+      console.warn('[apiLimiter] Error checking HR membership:', error.message);
+      return false;
+    }
+  }
 });
 
 // 登入 API 的嚴格 Rate Limiting（防暴力破解）
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 3, // 只允許 5 次嘗試
-  message: '登入嘗試次數過多，請 15 分鐘後再試',
+  max: 3, // 只允許 3 次嘗試
+  message: { message: 'Too many login attempts. Please try again in 15 minutes. 登入嘗試次數過多，請 15 分鐘後再試' },
   skipSuccessfulRequests: true, // 成功的請求不計入
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ 
+      message: 'Too many login attempts. Please try again in 15 minutes. 登入嘗試次數過多，請 15 分鐘後再試',
+      error: 'TOO_MANY_LOGIN_ATTEMPTS'
+    });
+  }
 });
 
 // IP 白名單中間件（用於敏感端點）

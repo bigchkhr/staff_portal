@@ -48,7 +48,9 @@ const Login = () => {
       navigate('/');
     } else {
       console.error('Login failed:', result.message);
-      setError(result.message || t('login.loginFailed'));
+      // 顯示錯誤訊息，優先使用返回的訊息
+      const errorMsg = result.message || t('login.loginFailed');
+      setError(errorMsg);
     }
     
     setLoading(false);

@@ -63,9 +63,24 @@ export const AuthProvider = ({ children }) => {
       console.error('Frontend: Error response:', error.response?.data);
       console.error('Frontend: Error status:', error.response?.status);
       
+      // 優先顯示後端返回的錯誤訊息
+      let errorMessage = '登入失敗，請檢查員工編號和密碼';
+      
+      if (error.response?.status === 429) {
+        // Rate limit 錯誤
+        errorMessage = error.response?.data?.message || '登入嘗試次數過多，請 15 分鐘後再試';
+      } else if (error.response?.data?.message) {
+        // 其他後端錯誤訊息
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       return {
         success: false,
-        message: error.response?.data?.message || error.response?.data?.error || '登入失敗，請檢查員工編號和密碼'
+        message: errorMessage
       };
     }
   };
