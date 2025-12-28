@@ -346,7 +346,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/approvals/${application.id}" 
+              <a href="${process.env.FRONTEND_URL || 'http://bigchkstaffportal.s3-website-ap-southeast-1.amazonaws.com'}/approvals/${application.id}" 
                  style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Application / 查看申請
               </a>
@@ -446,7 +446,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/leaves/${application.id}" 
+              <a href="${process.env.FRONTEND_URL || 'http://bigchkstaffportal.s3-website-ap-southeast-1.amazonaws.com'}/leaves/${application.id}" 
                  style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>
@@ -541,7 +541,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/leaves/${application.id}" 
+              <a href="${process.env.FRONTEND_URL || 'http://bigchkstaffportal.s3-website-ap-southeast-1.amazonaws.com'}/leaves/${application.id}" 
                  style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>
@@ -668,7 +668,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/approvals/${application.id}" 
+              <a href="${process.env.FRONTEND_URL || 'http://bigchkstaffportal.s3-website-ap-southeast-1.amazonaws.com'}/approvals/${application.id}" 
                  style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>
