@@ -169,7 +169,7 @@ const AdminExtraWorkingHoursPaperFlow = () => {
           {t('adminExtraWorkingHoursPaperFlow.title')}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          {t('adminExtraWorkingHoursPaperFlow.description')}
+          {t('adminExtraWorkingHoursPaperFlow.pageDescription')}
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>

@@ -67,9 +67,9 @@ const ExtraWorkingHoursApplication = () => {
         !formData.end_date || !formData.end_time || !formData.total_hours) {
       await Swal.fire({
         icon: 'warning',
-        title: '請填寫所有必填欄位',
-        text: '請填寫開始日期、開始時間、結束日期、結束時間及總時數',
-        confirmButtonText: '確定',
+        title: t('extraWorkingHoursApplication.validationFailed'),
+        text: t('extraWorkingHoursApplication.fillAllFields'),
+        confirmButtonText: t('common.confirm'),
         confirmButtonColor: '#3085d6'
       });
       setLoading(false);
@@ -93,9 +93,9 @@ const ExtraWorkingHoursApplication = () => {
       
       await Swal.fire({
         icon: 'success',
-        title: '額外工作時數申報已提交',
-        text: `交易編號: ${response.data.application.transaction_id}`,
-        confirmButtonText: '確定',
+        title: t('extraWorkingHoursApplication.submitSuccess'),
+        text: t('extraWorkingHoursApplication.transactionId', { transactionId: response.data.application.transaction_id }),
+        confirmButtonText: t('common.confirm'),
         confirmButtonColor: '#3085d6'
       });
       
@@ -111,9 +111,9 @@ const ExtraWorkingHoursApplication = () => {
     } catch (error) {
       await Swal.fire({
         icon: 'error',
-        title: '申報失敗',
-        text: error.response?.data?.message || '提交申請時發生錯誤',
-        confirmButtonText: '確定',
+        title: t('extraWorkingHoursApplication.submitFailed'),
+        text: error.response?.data?.message || t('extraWorkingHoursApplication.submitError'),
+        confirmButtonText: t('common.confirm'),
         confirmButtonColor: '#d33'
       });
     } finally {
@@ -125,7 +125,7 @@ const ExtraWorkingHoursApplication = () => {
     <Container maxWidth="md">
       <Paper sx={{ p: 4 }}>
         <Typography variant="h5" gutterBottom>
-          額外工作時數申報
+          {t('extraWorkingHoursApplication.title')}
         </Typography>
 
         <Box component="form" onSubmit={handleSubmit}>
@@ -133,7 +133,7 @@ const ExtraWorkingHoursApplication = () => {
             <Grid container spacing={2} sx={{ mb: 2 }}>
               <Grid item xs={12} sm={6}>
                 <DatePicker
-                  label="開始日期"
+                  label={t('extraWorkingHoursApplication.startDate')}
                   value={formData.start_date}
                   onChange={(date) => setFormData(prev => ({ ...prev, start_date: date }))}
                   format="DD/MM/YYYY"
@@ -142,7 +142,7 @@ const ExtraWorkingHoursApplication = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TimePicker
-                  label="開始時間"
+                  label={t('extraWorkingHoursApplication.startTime')}
                   value={formData.start_time}
                   onChange={(time) => setFormData(prev => ({ ...prev, start_time: time }))}
                   slotProps={{ textField: { fullWidth: true, required: true } }}
@@ -150,7 +150,7 @@ const ExtraWorkingHoursApplication = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <DatePicker
-                  label="結束日期"
+                  label={t('extraWorkingHoursApplication.endDate')}
                   value={formData.end_date}
                   onChange={(date) => setFormData(prev => ({ ...prev, end_date: date }))}
                   format="DD/MM/YYYY"
@@ -160,7 +160,7 @@ const ExtraWorkingHoursApplication = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TimePicker
-                  label="結束時間"
+                  label={t('extraWorkingHoursApplication.endTime')}
                   value={formData.end_time}
                   onChange={(time) => setFormData(prev => ({ ...prev, end_time: time }))}
                   slotProps={{ textField: { fullWidth: true, required: true } }}
@@ -171,19 +171,19 @@ const ExtraWorkingHoursApplication = () => {
 
           <TextField
             fullWidth
-            label="總時數"
+            label={t('extraWorkingHoursApplication.totalHours')}
             type="number"
             value={formData.total_hours}
             onChange={(e) => setFormData(prev => ({ ...prev, total_hours: e.target.value }))}
             required
             sx={{ mb: 2 }}
             inputProps={{ min: 0, step: 0.5 }}
-            helperText="系統會根據開始和結束時間自動計算，也可手動輸入"
+            helperText={t('extraWorkingHoursApplication.totalHoursHelper')}
           />
 
           <TextField
             fullWidth
-            label="額外工作原因"
+            label={t('extraWorkingHoursApplication.reason')}
             multiline
             rows={3}
             value={formData.reason}
@@ -193,7 +193,7 @@ const ExtraWorkingHoursApplication = () => {
 
           <TextField
             fullWidth
-            label="內容描述"
+            label={t('extraWorkingHoursApplication.description')}
             multiline
             rows={4}
             value={formData.description}
@@ -211,7 +211,7 @@ const ExtraWorkingHoursApplication = () => {
             fullWidth
             disabled={loading}
           >
-            {loading ? '提交中...' : '提交申請'}
+            {loading ? t('extraWorkingHoursApplication.submitting') : t('extraWorkingHoursApplication.submit')}
           </Button>
         </Box>
       </Paper>

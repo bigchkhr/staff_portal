@@ -67,6 +67,8 @@ const syncLeaveApplicationStages = async (knex) => {
 
 exports.seed = async function (knex) {
   // 清空所有表（注意順序，避免外鍵約束問題）
+  await knex('announcement_attachments').del();
+  await knex('announcements').del();
   await knex('leave_balance_transactions').del();
   await knex('leave_applications').del();
   await knex('outdoor_work_applications').del();
@@ -644,10 +646,10 @@ exports.seed = async function (knex) {
   const staffPos = positions.find(p => p.name === 'Staff');
 
   // 建立系統管理員（HR 群組成員）
-  const adminPasswordHash = await bcrypt.hash('admin123', 10);
+  const adminPasswordHash = await bcrypt.hash('bigc0723!', 10);
   const [admin] = await knex('users').insert([
     {
-      employee_number: 'admin',
+      employee_number: 'superuser',
       surname: 'Admin',
       given_name: 'System',
       alias: 'Admin',
@@ -675,32 +677,32 @@ exports.seed = async function (knex) {
 
   // 建立個人待辦事項示例數據
   // 為前幾個用戶創建一些示例個人待辦事項
-  const sampleUsers = await knex('users').select('id').limit(5);
+  // const sampleUsers = await knex('users').select('id').limit(5);
   
-  if (sampleUsers.length > 0) {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const nextWeek = new Date(today);
-    nextWeek.setDate(nextWeek.getDate() + 7);
+  // if (sampleUsers.length > 0) {
+  //   const today = new Date();
+  //   const tomorrow = new Date(today);
+  //   tomorrow.setDate(tomorrow.getDate() + 1);
+  //   const nextWeek = new Date(today);
+  //   nextWeek.setDate(nextWeek.getDate() + 7);
     
-    const personalTodos = [];
+  //   const personalTodos = [];
     
-    sampleUsers.forEach((user, index) => {
-      personalTodos.push({
-        user_id: user.id,
-        title: `個人待辦事項 ${index + 1}`,
-        description: '這是一個示例個人待辦事項',
-        status: index % 3 === 0 ? 'completed' : (index % 3 === 1 ? 'in_progress' : 'pending'),
-        due_date: index % 2 === 0 ? tomorrow.toISOString().split('T')[0] : nextWeek.toISOString().split('T')[0],
-        priority: (index % 3) + 1
-      });
-    });
+  //   sampleUsers.forEach((user, index) => {
+  //     personalTodos.push({
+  //       user_id: user.id,
+  //       title: `個人待辦事項 ${index + 1}`,
+  //       description: '這是一個示例個人待辦事項',
+  //       status: index % 3 === 0 ? 'completed' : (index % 3 === 1 ? 'in_progress' : 'pending'),
+  //       due_date: index % 2 === 0 ? tomorrow.toISOString().split('T')[0] : nextWeek.toISOString().split('T')[0],
+  //       priority: (index % 3) + 1
+  //     });
+  //   });
     
-    if (personalTodos.length > 0) {
-      await knex('user_todos').insert(personalTodos);
-    }
-  }
+  //   if (personalTodos.length > 0) {
+  //     await knex('user_todos').insert(personalTodos);
+  //   }
+  // }
 
   // 建立 Payroll Alert Items 示例數據
   // 為 HR Group 成員創建一些示例 Payroll Alert Items

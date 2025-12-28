@@ -36,7 +36,8 @@ import {
   Lock as LockIcon,
   ExitToApp as ExitToAppIcon,
   Description as DescriptionIcon,
-  Language as LanguageIcon
+  Language as LanguageIcon,
+  Notifications as NotificationsIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -56,6 +57,7 @@ const Layout = ({ children }) => {
 
   const menuItems = [
     { key: 'dashboard', icon: <DashboardIcon />, path: '/', show: true },
+    { key: 'announcements', icon: <NotificationsIcon />, path: '/announcements', show: true },
     { key: 'applyLeave', icon: <AssignmentIcon />, path: '/leave/apply', show: true },
     { key: 'leaveHistory', icon: <HistoryIcon />, path: '/leave/history', show: true },
     { key: 'leaveBalance', icon: <AccountBalanceIcon />, path: '/leave/balance', show: true },

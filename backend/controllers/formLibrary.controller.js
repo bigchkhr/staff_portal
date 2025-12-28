@@ -84,6 +84,43 @@ class FormLibraryController {
     }
   }
 
+  // 在線查看表單
+  async viewForm(req, res) {
+    try {
+      const { id } = req.params;
+      const form = await FormLibrary.findById(id);
+
+      if (!form) {
+        return res.status(404).json({ message: '表單不存在' });
+      }
+
+      // 檢查權限：如果表單不可見，只有HR可以查看
+      if (!form.visible_to_users) {
+        const isHRMember = await User.isHRMember(req.user.id);
+        if (!isHRMember) {
+          return res.status(403).json({ message: '您沒有權限查看此表單' });
+        }
+      }
+
+      const filePath = path.resolve(form.file_path);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: '文件不存在於伺服器' });
+      }
+
+      // 設置Content-Type header以便瀏覽器顯示
+      res.setHeader('Content-Type', form.file_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(form.display_name)}${path.extname(form.file_name)}"`);
+      
+      // 發送文件流
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('View form error:', error);
+      res.status(500).json({ message: '查看表單時發生錯誤' });
+    }
+  }
+
   // 下載表單
   async downloadForm(req, res) {
     try {

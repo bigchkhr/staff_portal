@@ -132,6 +132,7 @@ const adminRoutes = require('./routes/admin.routes');
 const documentRoutes = require('./routes/document.routes');
 const todoRoutes = require('./routes/todo.routes');
 const formLibraryRoutes = require('./routes/formLibrary.routes');
+const announcementRoutes = require('./routes/announcement.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -147,6 +148,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/form-library', formLibraryRoutes);
+app.use('/api/announcements', announcementRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

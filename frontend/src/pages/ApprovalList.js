@@ -78,31 +78,31 @@ const ApprovalList = () => {
 
   const getApplicationTypeText = (app) => {
     if (app.application_type === 'extra_working_hours') {
-      return '額外工作時數申報';
+      return t('approvalList.extraWorkingHoursApplication');
     }
     if (app.application_type === 'outdoor_work') {
-      return '外勤工作申請';
+      return t('approvalList.outdoorWorkApplication');
     }
-    return '假期申請';
+    return t('approvalList.leaveApplication');
   };
 
   const getApplicationTypeDisplay = (app) => {
     if (app.application_type === 'extra_working_hours') {
       return {
-        type: '額外工作時數申報',
+        type: t('approvalList.extraWorkingHoursApplication'),
         dateRange: app.start_date && app.end_date 
           ? `${formatDate(app.start_date)} ${app.start_time || ''} ~ ${formatDate(app.end_date)} ${app.end_time || ''}`
           : '-',
-        value: `${app.total_hours || 0} 小時`
+        value: `${app.total_hours || 0} ${t('approvalList.hours')}`
       };
     }
     if (app.application_type === 'outdoor_work') {
       return {
-        type: '外勤工作申請',
+        type: t('approvalList.outdoorWorkApplication'),
         dateRange: app.start_date && app.end_date 
           ? `${formatDate(app.start_date)} ${app.start_time || ''} ~ ${formatDate(app.end_date)} ${app.end_time || ''}`
           : '-',
-        value: `${app.total_hours || 0} 小時`
+        value: `${app.total_hours || 0} ${t('approvalList.hours')}`
       };
     }
     return {
@@ -180,7 +180,7 @@ const ApprovalList = () => {
               <>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="text.secondary" display="block">
-                    時間範圍
+                    {t('approvalList.timeRange')}
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 1 }}>
                     {app.start_date && app.end_date 
@@ -190,16 +190,16 @@ const ApprovalList = () => {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary" display="block">
-                    總時數
+                    {t('approvalList.totalHours')}
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                    {app.total_hours || 0} 小時
+                    {app.total_hours || 0} {t('approvalList.hours')}
                   </Typography>
                 </Grid>
                 {app.application_type === 'outdoor_work' && app.start_location && (
                   <Grid item xs={12}>
                     <Typography variant="caption" color="text.secondary" display="block">
-                      開始地點
+                      {t('approvalList.startLocation')}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       {app.start_location}
@@ -209,7 +209,7 @@ const ApprovalList = () => {
                 {app.application_type === 'outdoor_work' && app.end_location && (
                   <Grid item xs={12}>
                     <Typography variant="caption" color="text.secondary" display="block">
-                      結束地點
+                      {t('approvalList.endLocation')}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       {app.end_location}
@@ -219,7 +219,7 @@ const ApprovalList = () => {
                 {app.application_type === 'outdoor_work' && app.transportation && (
                   <Grid item xs={12}>
                     <Typography variant="caption" color="text.secondary" display="block">
-                      交通工具
+                      {t('approvalList.transportation')}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       {app.transportation}
@@ -229,7 +229,7 @@ const ApprovalList = () => {
                 {app.application_type === 'outdoor_work' && app.expense && (
                   <Grid item xs={12}>
                     <Typography variant="caption" color="text.secondary" display="block">
-                      費用
+                      {t('approvalList.expense')}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1 }}>
                       ${parseFloat(app.expense).toFixed(2)}
@@ -339,10 +339,10 @@ const ApprovalList = () => {
                 <TableRow>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.transactionId')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.applicant')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>申請類型</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.applicationType')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.year')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>日期/時間</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>天數/時數</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.dateTime')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.daysHours')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.currentStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('common.actions')}</TableCell>
                 </TableRow>

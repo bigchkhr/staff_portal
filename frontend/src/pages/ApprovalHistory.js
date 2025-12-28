@@ -304,22 +304,22 @@ const ApprovalHistory = () => {
 
   const getApplicationTypeText = (app) => {
     if (app.application_type === 'extra_working_hours') {
-      return '額外工作時數申報';
+      return t('approvalHistory.extraWorkingHoursApplication');
     }
     if (app.application_type === 'outdoor_work') {
-      return '外勤工作申請';
+      return t('approvalHistory.outdoorWorkApplication');
     }
-    return '假期申請';
+    return t('approvalHistory.leaveApplication');
   };
 
   const getLeaveTypeDisplay = (application) => {
     // 如果是額外工作時數申報，返回申請類型
     if (application.application_type === 'extra_working_hours') {
-      return '額外工作時數申報';
+      return t('approvalHistory.extraWorkingHoursApplication');
     }
     // 如果是外勤工作申請，返回申請類型
     if (application.application_type === 'outdoor_work') {
-      return '外勤工作申請';
+      return t('approvalHistory.outdoorWorkApplication');
     }
     
     // 根據當前語言選擇使用 name_zh 或 name
@@ -336,7 +336,7 @@ const ApprovalHistory = () => {
 
   const getApplicationDisplayValue = (app) => {
     if (app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') {
-      return `${app.total_hours || 0} 小時`;
+      return `${app.total_hours || 0} ${t('approvalHistory.hours')}`;
     }
     return app.days || app.total_days || 0;
   };
@@ -372,8 +372,8 @@ const ApprovalHistory = () => {
     const leaveTypeNameZh = app.leave_type_name_zh?.toLowerCase() || '';
     const applicantNameZh = app.applicant_display_name?.toLowerCase() || '';
     const applicantUsername = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
-    const applicationType = app.application_type === 'extra_working_hours' ? '額外工作時數申報' : 
-                            app.application_type === 'outdoor_work' ? '外勤工作申請' : '';
+    const applicationType = app.application_type === 'extra_working_hours' ? t('approvalHistory.extraWorkingHoursApplication') : 
+                            app.application_type === 'outdoor_work' ? t('approvalHistory.outdoorWorkApplication') : '';
     
     return transactionId.includes(keyword) ||
            leaveTypeNameZh.includes(keyword) ||
@@ -434,7 +434,7 @@ const ApprovalHistory = () => {
               <>
                 <Grid item xs={12}>
                   <Typography variant="caption" color="text.secondary" display="block">
-                    時間範圍
+                    {t('approvalHistory.timeRange')}
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 1 }}>
                     {getApplicationDateRange(app)}
@@ -442,10 +442,10 @@ const ApprovalHistory = () => {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="caption" color="text.secondary" display="block">
-                    總時數
+                    {t('approvalHistory.totalHours')}
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                    {app.total_hours || 0} 小時
+                    {app.total_hours || 0} {t('approvalHistory.hours')}
                   </Typography>
                 </Grid>
               </>
@@ -886,18 +886,18 @@ const ApprovalHistory = () => {
                     label={t('approvalHistory.monthFilter') || t('leaveHistory.monthFilter')}
                   >
                     <MenuItem value="">{t('approvalHistory.allMonths') || t('leaveHistory.allMonths')}</MenuItem>
-                    <MenuItem value="1">{t('approvalHistory.month1') || '1月'}</MenuItem>
-                    <MenuItem value="2">{t('approvalHistory.month2') || '2月'}</MenuItem>
-                    <MenuItem value="3">{t('approvalHistory.month3') || '3月'}</MenuItem>
-                    <MenuItem value="4">{t('approvalHistory.month4') || '4月'}</MenuItem>
-                    <MenuItem value="5">{t('approvalHistory.month5') || '5月'}</MenuItem>
-                    <MenuItem value="6">{t('approvalHistory.month6') || '6月'}</MenuItem>
-                    <MenuItem value="7">{t('approvalHistory.month7') || '7月'}</MenuItem>
-                    <MenuItem value="8">{t('approvalHistory.month8') || '8月'}</MenuItem>
-                    <MenuItem value="9">{t('approvalHistory.month9') || '9月'}</MenuItem>
-                    <MenuItem value="10">{t('approvalHistory.month10') || '10月'}</MenuItem>
-                    <MenuItem value="11">{t('approvalHistory.month11') || '11月'}</MenuItem>
-                    <MenuItem value="12">{t('approvalHistory.month12') || '12月'}</MenuItem>
+                    <MenuItem value="1">{t('approvalHistory.month1')}</MenuItem>
+                    <MenuItem value="2">{t('approvalHistory.month2')}</MenuItem>
+                    <MenuItem value="3">{t('approvalHistory.month3')}</MenuItem>
+                    <MenuItem value="4">{t('approvalHistory.month4')}</MenuItem>
+                    <MenuItem value="5">{t('approvalHistory.month5')}</MenuItem>
+                    <MenuItem value="6">{t('approvalHistory.month6')}</MenuItem>
+                    <MenuItem value="7">{t('approvalHistory.month7')}</MenuItem>
+                    <MenuItem value="8">{t('approvalHistory.month8')}</MenuItem>
+                    <MenuItem value="9">{t('approvalHistory.month9')}</MenuItem>
+                    <MenuItem value="10">{t('approvalHistory.month10')}</MenuItem>
+                    <MenuItem value="11">{t('approvalHistory.month11')}</MenuItem>
+                    <MenuItem value="12">{t('approvalHistory.month12')}</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1001,11 +1001,11 @@ const ApprovalHistory = () => {
                 <TableRow>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.transactionId')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.applicant')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>申請類型</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.applicationType')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.year')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>開始日期/時間</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>結束日期/時間</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>天數/時數</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.startDateTime')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.endDateTime')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.daysHours')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.status')}</TableCell>

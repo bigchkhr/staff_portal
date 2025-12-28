@@ -111,19 +111,19 @@ const ExtraWorkingHoursHistory = () => {
 
   const getStatusText = (status) => {
     const statusMap = {
-      pending: '待批核',
-      approved: '已批准',
-      rejected: '已拒絕',
-      cancelled: '已取消'
+      pending: t('extraWorkingHoursHistory.pending'),
+      approved: t('extraWorkingHoursHistory.approved'),
+      rejected: t('extraWorkingHoursHistory.rejected'),
+      cancelled: t('extraWorkingHoursHistory.cancelled')
     };
     return statusMap[status] || status;
   };
 
   const getFlowTypeText = (app) => {
     if (app.is_paper_flow === true || app.flow_type === 'paper-flow') {
-      return '紙本流程';
+      return t('extraWorkingHoursHistory.paperFlow');
     }
-    return '電子流程';
+    return t('extraWorkingHoursHistory.eFlow');
   };
 
   const formatDateTime = (date, time) => {
@@ -160,7 +160,7 @@ const ExtraWorkingHoursHistory = () => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
             <Typography variant="caption" color="text.secondary" display="block">
-              交易編號
+              {t('extraWorkingHoursHistory.transactionId')}
             </Typography>
             <Typography variant="body1" fontWeight="bold">
               {app.transaction_id}
@@ -176,7 +176,7 @@ const ExtraWorkingHoursHistory = () => {
         <Grid container spacing={1}>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
-              開始時間
+              {t('extraWorkingHoursHistory.startTime')}
             </Typography>
             <Typography variant="body2">
               {formatDateTime(app.start_date, app.start_time)}
@@ -184,7 +184,7 @@ const ExtraWorkingHoursHistory = () => {
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
-              結束時間
+              {t('extraWorkingHoursHistory.endTime')}
             </Typography>
             <Typography variant="body2">
               {formatDateTime(app.end_date, app.end_time)}
@@ -192,15 +192,15 @@ const ExtraWorkingHoursHistory = () => {
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
-              總時數
+              {t('extraWorkingHoursHistory.totalHours')}
             </Typography>
             <Typography variant="body2">
-              {app.total_hours} 小時
+              {app.total_hours} {t('extraWorkingHoursHistory.hours')}
             </Typography>
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
-              流程類型
+              {t('extraWorkingHoursHistory.flowType')}
             </Typography>
             <Chip
               label={getFlowTypeText(app)}
@@ -225,12 +225,12 @@ const ExtraWorkingHoursHistory = () => {
     <Box>
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h5" gutterBottom>
-          額外工作時數申報歷史
+          {t('extraWorkingHoursHistory.title')}
         </Typography>
         
         <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <TextField
-            placeholder="搜尋交易編號、申請人、原因..."
+            placeholder={t('extraWorkingHoursHistory.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             InputProps={{
@@ -244,44 +244,44 @@ const ExtraWorkingHoursHistory = () => {
           />
           <Accordion expanded={advancedSearchExpanded} onChange={(e, expanded) => setAdvancedSearchExpanded(expanded)}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="body2">進階搜尋</Typography>
+              <Typography variant="body2">{t('extraWorkingHoursHistory.advancedSearch')}</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6} md={3}>
                   <FormControl fullWidth>
-                    <InputLabel>狀態</InputLabel>
+                    <InputLabel>{t('extraWorkingHoursHistory.status')}</InputLabel>
                     <Select
                       value={filterStatus}
-                      label="狀態"
+                      label={t('extraWorkingHoursHistory.status')}
                       onChange={(e) => setFilterStatus(e.target.value)}
                     >
-                      <MenuItem value="">全部</MenuItem>
-                      <MenuItem value="pending">待批核</MenuItem>
-                      <MenuItem value="approved">已批准</MenuItem>
-                      <MenuItem value="rejected">已拒絕</MenuItem>
-                      <MenuItem value="cancelled">已取消</MenuItem>
+                      <MenuItem value="">{t('extraWorkingHoursHistory.all')}</MenuItem>
+                      <MenuItem value="pending">{t('extraWorkingHoursHistory.pending')}</MenuItem>
+                      <MenuItem value="approved">{t('extraWorkingHoursHistory.approved')}</MenuItem>
+                      <MenuItem value="rejected">{t('extraWorkingHoursHistory.rejected')}</MenuItem>
+                      <MenuItem value="cancelled">{t('extraWorkingHoursHistory.cancelled')}</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <FormControl fullWidth>
-                    <InputLabel>流程類型</InputLabel>
+                    <InputLabel>{t('extraWorkingHoursHistory.flowType')}</InputLabel>
                     <Select
                       value={filterFlowType}
-                      label="流程類型"
+                      label={t('extraWorkingHoursHistory.flowType')}
                       onChange={(e) => setFilterFlowType(e.target.value)}
                     >
-                      <MenuItem value="">全部</MenuItem>
-                      <MenuItem value="e-flow">電子流程</MenuItem>
-                      <MenuItem value="paper-flow">紙本流程</MenuItem>
+                      <MenuItem value="">{t('extraWorkingHoursHistory.all')}</MenuItem>
+                      <MenuItem value="e-flow">{t('extraWorkingHoursHistory.eFlow')}</MenuItem>
+                      <MenuItem value="paper-flow">{t('extraWorkingHoursHistory.paperFlow')}</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     fullWidth
-                    label="開始日期（從）"
+                    label={t('extraWorkingHoursHistory.dateFrom')}
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
@@ -291,7 +291,7 @@ const ExtraWorkingHoursHistory = () => {
                 <Grid item xs={12} sm={6} md={3}>
                   <TextField
                     fullWidth
-                    label="結束日期（到）"
+                    label={t('extraWorkingHoursHistory.dateTo')}
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
@@ -301,10 +301,10 @@ const ExtraWorkingHoursHistory = () => {
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button variant="contained" onClick={handleApplyFilter}>
-                      套用篩選
+                      {t('extraWorkingHoursHistory.applyFilter')}
                     </Button>
                     <Button variant="outlined" onClick={handleClearFilter}>
-                      清除
+                      {t('extraWorkingHoursHistory.clearFilter')}
                     </Button>
                   </Box>
                 </Grid>
@@ -317,7 +317,7 @@ const ExtraWorkingHoursHistory = () => {
       {isMobile ? (
         <Box>
           {applications.length === 0 ? (
-            <Alert severity="info">沒有找到申請記錄</Alert>
+            <Alert severity="info">{t('extraWorkingHoursHistory.noRecords')}</Alert>
           ) : (
             applications.map(renderMobileCard)
           )}
@@ -327,20 +327,20 @@ const ExtraWorkingHoursHistory = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>交易編號</TableCell>
-                <TableCell>開始時間</TableCell>
-                <TableCell>結束時間</TableCell>
-                <TableCell>總時數</TableCell>
-                <TableCell>額外工作原因</TableCell>
-                <TableCell>流程類型</TableCell>
-                <TableCell>狀態</TableCell>
-                <TableCell>申請日期</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.transactionId')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.startTime')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.endTime')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.totalHours')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.reason')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.flowType')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.status')}</TableCell>
+                <TableCell>{t('extraWorkingHoursHistory.applicationDate')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center">沒有找到申請記錄</TableCell>
+                  <TableCell colSpan={8} align="center">{t('extraWorkingHoursHistory.noRecords')}</TableCell>
                 </TableRow>
               ) : (
                 applications.map((app) => (
@@ -352,7 +352,7 @@ const ExtraWorkingHoursHistory = () => {
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       {formatDateTime(app.end_date, app.end_time)}
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.total_hours} 小時</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.total_hours} {t('extraWorkingHoursHistory.hours')}</TableCell>
                     <TableCell>{app.reason || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip

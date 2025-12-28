@@ -30,7 +30,10 @@ import {
   Delete as DeleteIcon, 
   Edit as EditIcon,
   Download as DownloadIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Visibility as VisibilityIcon,
+  GetApp as GetAppIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +61,10 @@ const FormLibrary = () => {
   const [searchQuery, setSearchQuery] = useState(''); // 實際用於查詢的狀態
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fileDialogOpen, setFileDialogOpen] = useState(false);
+  const [viewingForm, setViewingForm] = useState(null);
+  const [fileBlobUrl, setFileBlobUrl] = useState(null);
+  const [loadingFile, setLoadingFile] = useState(false);
 
   useEffect(() => {
     fetchForms();
@@ -215,6 +222,49 @@ const FormLibrary = () => {
     }
   };
 
+  const handleView = async (form) => {
+    try {
+      setLoadingFile(true);
+      setViewingForm(form);
+      setFileDialogOpen(true);
+
+      const isImage = form.file_type && form.file_type.startsWith('image/');
+      const isPDF = form.file_type === 'application/pdf' || form.file_name?.toLowerCase().endsWith('.pdf');
+      
+      // 使用 view 端點查看文件
+      const response = await axios.get(`/api/form-library/${form.id}/view`, {
+        responseType: 'blob',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // 從響應中獲取正確的 MIME 類型
+      const contentType = response.headers['content-type'] || form.file_type || 'application/octet-stream';
+      
+      // 創建 blob URL（使用正確的 MIME 類型）
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = window.URL.createObjectURL(blob);
+      setFileBlobUrl(blobUrl);
+    } catch (error) {
+      console.error('View form error:', error);
+      setFileDialogOpen(false);
+      setViewingForm(null);
+      setError(error.response?.data?.message || t('formLibrary.downloadError'));
+    } finally {
+      setLoadingFile(false);
+    }
+  };
+
+  const handleCloseFileDialog = () => {
+    if (fileBlobUrl) {
+      window.URL.revokeObjectURL(fileBlobUrl);
+      setFileBlobUrl(null);
+    }
+    setFileDialogOpen(false);
+    setViewingForm(null);
+  };
+
   const handleDownload = async (formId, displayName, fileName) => {
     try {
       const response = await axios.get(`/api/form-library/${formId}/download`, {
@@ -228,6 +278,8 @@ const FormLibrary = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      // 清理 blob URL
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download error:', error);
       setError(error.response?.data?.message || t('formLibrary.downloadError'));
@@ -280,7 +332,7 @@ const FormLibrary = () => {
             {t('formLibrary.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {t('formLibrary.description')}
+            {t('formLibrary.pageDescription')}
           </Typography>
         </Box>
         {isSystemAdmin && (
@@ -398,38 +450,56 @@ const FormLibrary = () => {
                     {form.display_name}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDownload(form.id, form.display_name, form.file_name)}
-                      sx={{ 
-                        color: 'primary.main',
-                        '&:hover': { backgroundColor: 'primary.light', color: 'white' }
-                      }}
-                    >
-                      <DownloadIcon fontSize="small" />
-                    </IconButton>
+                    <Tooltip title={t('formLibrary.view')}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleView(form)}
+                        sx={{ 
+                          color: 'info.main',
+                          '&:hover': { backgroundColor: 'info.light', color: 'white' }
+                        }}
+                      >
+                        <VisibilityIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t('formLibrary.download')}>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDownload(form.id, form.display_name, form.file_name)}
+                        sx={{ 
+                          color: 'primary.main',
+                          '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                        }}
+                      >
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     {isSystemAdmin && (
                       <>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEdit(form)}
-                          sx={{ 
-                            color: 'info.main',
-                            '&:hover': { backgroundColor: 'info.light', color: 'white' }
-                          }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDelete(form.id)}
-                          sx={{ 
-                            color: 'error.main',
-                            '&:hover': { backgroundColor: 'error.light', color: 'white' }
-                          }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
+                        <Tooltip title={t('formLibrary.edit')}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEdit(form)}
+                            sx={{ 
+                              color: 'warning.main',
+                              '&:hover': { backgroundColor: 'warning.light', color: 'white' }
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={t('formLibrary.delete')}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDelete(form.id)}
+                            sx={{ 
+                              color: 'error.main',
+                              '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                       </>
                     )}
                   </Box>
@@ -597,6 +667,18 @@ const FormLibrary = () => {
                     )}
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                        <Tooltip title={t('formLibrary.view')}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleView(form)}
+                            sx={{ 
+                              color: 'info.main',
+                              '&:hover': { backgroundColor: 'info.light', color: 'white' }
+                            }}
+                          >
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
                         <Tooltip title={t('formLibrary.download')}>
                           <IconButton
                             size="small"
@@ -616,8 +698,8 @@ const FormLibrary = () => {
                                 size="small"
                                 onClick={() => handleEdit(form)}
                                 sx={{ 
-                                  color: 'info.main',
-                                  '&:hover': { backgroundColor: 'info.light', color: 'white' }
+                                  color: 'warning.main',
+                                  '&:hover': { backgroundColor: 'warning.light', color: 'white' }
                                 }}
                               >
                                 <EditIcon fontSize="small" />
@@ -850,6 +932,109 @@ const FormLibrary = () => {
           </DialogActions>
         </Dialog>
       )}
+
+      {/* 查看文件對話框 */}
+      <Dialog
+        open={fileDialogOpen}
+        onClose={handleCloseFileDialog}
+        maxWidth="lg"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: { borderRadius: { xs: 0, sm: 2 } }
+        }}
+      >
+        <DialogTitle sx={{ 
+          pb: 2,
+          borderBottom: 1,
+          borderColor: 'divider'
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              {viewingForm?.display_name || t('formLibrary.viewFile')}
+            </Typography>
+            <IconButton onClick={handleCloseFileDialog}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: { xs: 1, sm: 2 }, py: { xs: 1, sm: 2 } }}>
+          {loadingFile ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+              <CircularProgress />
+              <Typography variant="body2" sx={{ ml: 2 }}>
+                {t('common.loading')}
+              </Typography>
+            </Box>
+          ) : fileBlobUrl && viewingForm ? (
+            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              {viewingForm.file_type?.startsWith('image/') ? (
+                <img
+                  src={fileBlobUrl}
+                  alt={viewingForm.display_name}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '80vh',
+                    objectFit: 'contain'
+                  }}
+                />
+              ) : viewingForm.file_type === 'application/pdf' || viewingForm.file_name?.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={fileBlobUrl}
+                  title={viewingForm.display_name}
+                  style={{
+                    width: '100%',
+                    height: '80vh',
+                    border: 'none'
+                  }}
+                />
+              ) : (
+                <Box sx={{ textAlign: 'center', p: 4 }}>
+                  <Typography variant="body1" gutterBottom>
+                    {t('formLibrary.cannotPreviewFileType')}
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    component="a"
+                    href={fileBlobUrl}
+                    download={viewingForm.file_name}
+                    startIcon={<GetAppIcon />}
+                    sx={{ mt: 2 }}
+                  >
+                    {t('formLibrary.download')}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions sx={{ 
+          px: { xs: 2, sm: 3 }, 
+          py: 2,
+          borderTop: 1,
+          borderColor: 'divider'
+        }}>
+          {fileBlobUrl && viewingForm && (
+            <Button
+              component="a"
+              href={fileBlobUrl}
+              download={`${viewingForm.display_name}${viewingForm.file_name.substring(viewingForm.file_name.lastIndexOf('.'))}`}
+              variant="contained"
+              startIcon={<GetAppIcon />}
+              sx={{ textTransform: 'none' }}
+            >
+              {t('formLibrary.download')}
+            </Button>
+          )}
+          <Button 
+            onClick={handleCloseFileDialog} 
+            variant="outlined"
+            sx={{ textTransform: 'none' }}
+          >
+            {t('formLibrary.close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

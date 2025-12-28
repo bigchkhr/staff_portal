@@ -73,8 +73,19 @@ const LeaveBalance = () => {
           value={year}
           onChange={(year) => setYear(year)}
           labelKey="leaveBalance.year"
-          sx={{ mb: 3, minWidth: 200 }}
+          sx={{ mb: 2, minWidth: 200 }}
         />
+
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'error.main',
+            mb: 3,
+            fontSize: '0.875rem'
+          }}
+        >
+          {t('leaveBalance.resignationNotice')}
+        </Typography>
 
         <Paper 
           elevation={1}

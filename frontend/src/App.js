@@ -33,6 +33,7 @@ import HRDocumentUpload from './pages/HRDocumentUpload';
 import EmployeeDocuments from './pages/EmployeeDocuments';
 import FormLibrary from './pages/FormLibrary';
 import DepartmentGroupBalances from './pages/DepartmentGroupBalances';
+import Announcements from './pages/Announcements';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -81,6 +82,7 @@ function App() {
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
+            <Route path="/announcements" element={<PrivateRoute><Announcements /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

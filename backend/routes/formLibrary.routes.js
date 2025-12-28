@@ -13,6 +13,9 @@ router.post('/upload', isSystemAdmin, uploadSingle.single('file'), formLibraryCo
 // 獲取所有表單列表（用戶端：只顯示可見的，HR：顯示所有）
 router.get('/all', formLibraryController.getAllForms);
 
+// 在線查看表單
+router.get('/:id/view', formLibraryController.viewForm);
+
 // 下載表單
 router.get('/:id/download', formLibraryController.downloadForm);
 
