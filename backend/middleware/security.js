@@ -42,13 +42,33 @@ const checkHRMembership = async (userId) => {
   }
 };
 
-// 一般 API 的 Rate Limiting（HR Group 成員不受限制）
+// 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 成員不受限制）
 const apiLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 分鐘
   max: 150, // 限制 150 個請求
   message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,
   legacyHeaders: false,
+  // 基於用戶 ID 進行限制（而不是 IP）
+  keyGenerator: (req) => {
+    try {
+      // 嘗試從 Authorization header 獲取 token
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        // 解析 token（不驗證，只獲取 userId）
+        const decoded = jwt.decode(token);
+        if (decoded && decoded.userId) {
+          // 使用用戶 ID 作為 key
+          return `user_${decoded.userId}`;
+        }
+      }
+      // 如果沒有 token 或無法解析，回退到使用 IP 地址
+      return req.ip || req.connection.remoteAddress || 'unknown';
+    } catch (error) {
+      // 如果解析失敗，回退到使用 IP 地址
+      return req.ip || req.connection.remoteAddress || 'unknown';
+    }
+  },
   handler: (req, res) => {
     res.status(429).json({ 
       message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試',
