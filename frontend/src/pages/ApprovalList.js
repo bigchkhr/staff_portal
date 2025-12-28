@@ -76,6 +76,44 @@ const ApprovalList = () => {
     return false;
   };
 
+  const getApplicationTypeText = (app) => {
+    if (app.application_type === 'extra_working_hours') {
+      return '額外工作時數申報';
+    }
+    if (app.application_type === 'outdoor_work') {
+      return '外勤工作申請';
+    }
+    return '假期申請';
+  };
+
+  const getApplicationTypeDisplay = (app) => {
+    if (app.application_type === 'extra_working_hours') {
+      return {
+        type: '額外工作時數申報',
+        dateRange: app.start_date && app.end_date 
+          ? `${formatDate(app.start_date)} ${app.start_time || ''} ~ ${formatDate(app.end_date)} ${app.end_time || ''}`
+          : '-',
+        value: `${app.total_hours || 0} 小時`
+      };
+    }
+    if (app.application_type === 'outdoor_work') {
+      return {
+        type: '外勤工作申請',
+        dateRange: app.start_date && app.end_date 
+          ? `${formatDate(app.start_date)} ${app.start_time || ''} ~ ${formatDate(app.end_date)} ${app.end_time || ''}`
+          : '-',
+        value: `${app.total_hours || 0} 小時`
+      };
+    }
+    return {
+      type: i18n.language === 'en' 
+        ? (app.leave_type_name || app.leave_type_name_zh || '')
+        : (app.leave_type_name_zh || app.leave_type_name || ''),
+      dateRange: `${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}`,
+      value: app.days || app.total_days || 0
+    };
+  };
+
   const getStageText = (stage) => {
     const stageMap = {
       checker: t('approvalList.stageChecker'),
@@ -126,40 +164,117 @@ const ApprovalList = () => {
                 )}
               </Typography>
             </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalList.leaveType')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {i18n.language === 'en' 
-                  ? (app.leave_type_name || app.leave_type_name_zh || '')
-                  : (app.leave_type_name_zh || app.leave_type_name || '')}
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalList.year')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalList.yearSuffix')}
-              </Typography>
-            </Grid>
             <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalList.date')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {formatDate(app.start_date)} ~ {formatDate(app.end_date)}
-              </Typography>
+              <Chip 
+                label={getApplicationTypeText(app)} 
+                size="small" 
+                color={
+                  app.application_type === 'extra_working_hours' ? 'secondary' : 
+                  app.application_type === 'outdoor_work' ? 'info' : 
+                  'primary'
+                } 
+                sx={{ mb: 1 }} 
+              />
             </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalList.days')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                {app.days}
-              </Typography>
-            </Grid>
+            {app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work' ? (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    時間範圍
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {app.start_date && app.end_date 
+                      ? `${formatDate(app.start_date)} ${app.start_time || ''} ~ ${formatDate(app.end_date)} ${app.end_time || ''}`
+                      : '-'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    總時數
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                    {app.total_hours || 0} 小時
+                  </Typography>
+                </Grid>
+                {app.application_type === 'outdoor_work' && app.start_location && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      開始地點
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      {app.start_location}
+                    </Typography>
+                  </Grid>
+                )}
+                {app.application_type === 'outdoor_work' && app.end_location && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      結束地點
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      {app.end_location}
+                    </Typography>
+                  </Grid>
+                )}
+                {app.application_type === 'outdoor_work' && app.transportation && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      交通工具
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      {app.transportation}
+                    </Typography>
+                  </Grid>
+                )}
+                {app.application_type === 'outdoor_work' && app.expense && (
+                  <Grid item xs={12}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      費用
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      ${parseFloat(app.expense).toFixed(2)}
+                    </Typography>
+                  </Grid>
+                )}
+              </>
+            ) : (
+              <>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalList.leaveType')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {i18n.language === 'en' 
+                      ? (app.leave_type_name || app.leave_type_name_zh || '')
+                      : (app.leave_type_name_zh || app.leave_type_name || '')}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalList.year')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalList.yearSuffix')}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalList.date')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {formatDate(app.start_date)} ~ {formatDate(app.end_date)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalList.days')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                    {app.days}
+                  </Typography>
+                </Grid>
+              </>
+            )}
           </Grid>
 
           <Divider sx={{ my: 1.5 }} />
@@ -168,7 +283,7 @@ const ApprovalList = () => {
             fullWidth
             variant="contained"
             size="small"
-            onClick={() => navigate(`/approval/${app.id}`)}
+            onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
             startIcon={<VisibilityIcon />}
           >
             {t('approvalList.viewDetails')}
@@ -224,10 +339,10 @@ const ApprovalList = () => {
                 <TableRow>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.transactionId')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.applicant')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.leaveType')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>申請類型</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.year')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.date')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.days')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>日期/時間</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>天數/時數</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalList.currentStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('common.actions')}</TableCell>
                 </TableRow>
@@ -254,18 +369,37 @@ const ApprovalList = () => {
                           )}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {i18n.language === 'en' 
-                            ? (app.leave_type_name || app.leave_type_name_zh || '')
-                            : (app.leave_type_name_zh || app.leave_type_name || '')
-                          }
+                          <Chip 
+                            label={getApplicationTypeText(app)} 
+                            size="small" 
+                            color={
+                              app.application_type === 'extra_working_hours' ? 'secondary' : 
+                              app.application_type === 'outdoor_work' ? 'info' : 
+                              'primary'
+                            } 
+                            sx={{ mb: 0.5 }} 
+                          />
+                          <br />
+                          {(() => {
+                            const display = getApplicationTypeDisplay(app);
+                            return display.type;
+                          })()}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalList.yearSuffix')}
+                          {(app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') ? '-' : (app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-') + t('approvalList.yearSuffix'))}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {formatDate(app.start_date)} ~ {formatDate(app.end_date)}
+                          {(() => {
+                            const display = getApplicationTypeDisplay(app);
+                            return display.dateRange;
+                          })()}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.days}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const display = getApplicationTypeDisplay(app);
+                            return display.value;
+                          })()}
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip
                             label={getStageText(stage)}
@@ -277,7 +411,7 @@ const ApprovalList = () => {
                           <Button
                             variant="contained"
                             size="small"
-                            onClick={() => navigate(`/approval/${app.id}`)}
+                            onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
                             startIcon={<VisibilityIcon />}
                           >
                             {t('approvalList.viewDetails')}

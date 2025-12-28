@@ -1,4 +1,6 @@
 const LeaveApplication = require('../database/models/LeaveApplication');
+const ExtraWorkingHoursApplication = require('../database/models/ExtraWorkingHoursApplication');
+const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
 const LeaveBalance = require('../database/models/LeaveBalance');
 const User = require('../database/models/User');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
@@ -10,9 +12,23 @@ class ApprovalController {
   async approve(req, res) {
     try {
       const { id } = req.params;
-      const { remarks, action, level } = req.body;
+      const { remarks, action, level, application_type } = req.body;
 
-      const application = await LeaveApplication.findById(id);
+      // 根據 application_type 決定使用哪個 model
+      let application;
+      let ApplicationModel;
+      
+      if (application_type === 'extra_working_hours') {
+        ApplicationModel = ExtraWorkingHoursApplication;
+        application = await ExtraWorkingHoursApplication.findById(id);
+      } else if (application_type === 'outdoor_work') {
+        ApplicationModel = OutdoorWorkApplication;
+        application = await OutdoorWorkApplication.findById(id);
+      } else {
+        ApplicationModel = LeaveApplication;
+        application = await LeaveApplication.findById(id);
+      }
+      
       if (!application) {
         return res.status(404).json({ message: '申請不存在' });
       }
@@ -59,7 +75,14 @@ class ApprovalController {
         
         // 方法2：如果方法1不滿足，檢查是否有權限批核（只有當前階段的批核者才能拒絕）
         if (!canReject) {
-          const canApproveResult = await User.canApprove(userId, id);
+          let canApproveResult;
+          if (application_type === 'extra_working_hours') {
+            canApproveResult = await User.canApproveExtraWorkingHours(userId, id);
+          } else if (application_type === 'outdoor_work') {
+            canApproveResult = await User.canApproveOutdoorWork(userId, id);
+          } else {
+            canApproveResult = await User.canApprove(userId, id);
+          }
           console.log('[Reject] canApprove result:', canApproveResult);
           canReject = canApproveResult;
         }
@@ -70,11 +93,11 @@ class ApprovalController {
           return res.status(403).json({ message: '無權限進行此操作' });
         }
         
-        await LeaveApplication.reject(id, req.user.id, remarks || '已拒絕');
+        await ApplicationModel.reject(id, req.user.id, remarks || '已拒絕');
         
         // 發送拒絕通知給申請者
         try {
-          const rejectedApplication = await LeaveApplication.findById(id);
+          const rejectedApplication = await ApplicationModel.findById(id);
           if (rejectedApplication) {
             await emailService.sendRejectionNotification(
               rejectedApplication, 
@@ -88,7 +111,7 @@ class ApprovalController {
 
         // 如果是 HR Group 成員拒絕的 e-flow 申請，發送通知給 HR Group 其他成員
         try {
-          const rejectedApplication = await LeaveApplication.findById(id);
+          const rejectedApplication = await ApplicationModel.findById(id);
           if (rejectedApplication && rejectedApplication.flow_type === 'e-flow') {
             const isHRMember = await User.isHRMember(req.user.id);
             if (isHRMember) {
@@ -108,7 +131,14 @@ class ApprovalController {
       }
 
       // 批准申請：檢查使用者是否有權限批核
-      const canApprove = await User.canApprove(req.user.id, id);
+      let canApprove;
+      if (application_type === 'extra_working_hours') {
+        canApprove = await User.canApproveExtraWorkingHours(req.user.id, id);
+      } else if (application_type === 'outdoor_work') {
+        canApprove = await User.canApproveOutdoorWork(req.user.id, id);
+      } else {
+        canApprove = await User.canApprove(req.user.id, id);
+      }
       if (!canApprove) {
         return res.status(403).json({ message: '無權限進行此操作' });
       }
@@ -146,7 +176,7 @@ class ApprovalController {
         }
 
         // 執行批核（使用自動確定的階段）
-        const updatedApplication = await LeaveApplication.approve(id, req.user.id, currentLevel, remarks);
+        const updatedApplication = await ApplicationModel.approve(id, req.user.id, currentLevel, remarks);
 
         // 發送 email 通知
         try {
@@ -184,7 +214,8 @@ class ApprovalController {
 
         // 當申請完全批准（status === 'approved'）時，處理餘額扣除或發還
         // 注意：餘額處理失敗不應該影響批核成功的響應，因為申請已經成功核准
-        if (updatedApplication.status === 'approved') {
+        // 額外工作時數申報和外勤工作申請不需要處理餘額
+        if (updatedApplication.status === 'approved' && application_type !== 'extra_working_hours' && application_type !== 'outdoor_work') {
           try {
             const LeaveType = require('../database/models/LeaveType');
             const leaveType = await LeaveType.findById(updatedApplication.leave_type_id);
@@ -260,8 +291,23 @@ class ApprovalController {
 
   async getPendingApprovals(req, res) {
     try {
-      const applications = await LeaveApplication.getPendingApprovals(req.user.id);
-      res.json({ applications });
+      const leaveApplications = await LeaveApplication.getPendingApprovals(req.user.id);
+      const extraWorkingHoursApplications = await ExtraWorkingHoursApplication.getPendingApprovals(req.user.id);
+      const outdoorWorkApplications = await OutdoorWorkApplication.getPendingApprovals(req.user.id);
+      
+      // 為每種申請類型添加標識
+      const leaveApps = leaveApplications.map(app => ({ ...app, application_type: 'leave' }));
+      const extraWorkingHoursApps = extraWorkingHoursApplications.map(app => ({ ...app, application_type: 'extra_working_hours' }));
+      const outdoorWorkApps = outdoorWorkApplications.map(app => ({ ...app, application_type: 'outdoor_work' }));
+      
+      // 合併並按創建時間排序
+      const allApplications = [...leaveApps, ...extraWorkingHoursApps, ...outdoorWorkApps].sort((a, b) => {
+        const dateA = new Date(a.created_at || 0);
+        const dateB = new Date(b.created_at || 0);
+        return dateA - dateB;
+      });
+      
+      res.json({ applications: allApplications });
     } catch (error) {
       console.error('Get pending approvals error:', error);
       res.status(500).json({ message: '獲取待批核申請時發生錯誤' });
@@ -406,7 +452,117 @@ class ApprovalController {
         }
       }
 
-      const allApplications = await query.orderBy('leave_applications.created_at', 'desc');
+      const allLeaveApplications = await query.orderBy('leave_applications.created_at', 'desc');
+      
+      // 獲取額外工作時數申報
+      let extraWorkingHoursQuery = knex('extra_working_hours_applications')
+        .leftJoin('users', 'extra_working_hours_applications.user_id', 'users.id')
+        .select(
+          'extra_working_hours_applications.*',
+          knex.raw('extra_working_hours_applications.id as transaction_id'),
+          'users.employee_number as user_employee_number',
+          'users.employee_number as applicant_employee_number',
+          'users.surname as user_surname',
+          'users.given_name as user_given_name',
+          'users.display_name as user_display_name',
+          'users.display_name as applicant_display_name'
+        )
+        .where('extra_working_hours_applications.status', '!=', 'pending');
+
+      // 狀態篩選
+      if (status && status !== 'all' && status !== 'reversed') {
+        extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.status', status);
+      }
+
+      // 流程類型篩選
+      if (flow_type) {
+        extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.flow_type', flow_type);
+      }
+
+      // 部門群組篩選
+      if (department_group_id) {
+        const deptGroupId = parseInt(department_group_id);
+        if (!isNaN(deptGroupId) && deptGroupId > 0) {
+          const DepartmentGroup = require('../database/models/DepartmentGroup');
+          const group = await DepartmentGroup.findById(deptGroupId);
+          if (group && group.user_ids && group.user_ids.length > 0) {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.whereIn('extra_working_hours_applications.user_id', group.user_ids);
+          } else {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.where('1', '=', '0');
+          }
+        }
+      }
+
+      // 日期範圍篩選
+      if (start_date_from || end_date_to) {
+        if (start_date_from && end_date_to) {
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where(function() {
+            this.where('extra_working_hours_applications.start_date', '<=', end_date_to)
+                .andWhere('extra_working_hours_applications.end_date', '>=', start_date_from);
+          });
+        } else if (start_date_from) {
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.end_date', '>=', start_date_from);
+        } else if (end_date_to) {
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.start_date', '<=', end_date_to);
+        }
+      }
+
+      const allExtraWorkingHoursApplications = await extraWorkingHoursQuery.orderBy('extra_working_hours_applications.created_at', 'desc');
+      
+      // 獲取外勤工作申請
+      let outdoorWorkQuery = knex('outdoor_work_applications')
+        .leftJoin('users', 'outdoor_work_applications.user_id', 'users.id')
+        .select(
+          'outdoor_work_applications.*',
+          knex.raw('outdoor_work_applications.id as transaction_id'),
+          'users.employee_number as user_employee_number',
+          'users.employee_number as applicant_employee_number',
+          'users.surname as user_surname',
+          'users.given_name as user_given_name',
+          'users.display_name as user_display_name',
+          'users.display_name as applicant_display_name'
+        )
+        .where('outdoor_work_applications.status', '!=', 'pending');
+
+      // 狀態篩選
+      if (status && status !== 'all' && status !== 'reversed') {
+        outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.status', status);
+      }
+
+      // 流程類型篩選
+      if (flow_type) {
+        outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.flow_type', flow_type);
+      }
+
+      // 部門群組篩選
+      if (department_group_id) {
+        const deptGroupId = parseInt(department_group_id);
+        if (!isNaN(deptGroupId) && deptGroupId > 0) {
+          const DepartmentGroup = require('../database/models/DepartmentGroup');
+          const group = await DepartmentGroup.findById(deptGroupId);
+          if (group && group.user_ids && group.user_ids.length > 0) {
+            outdoorWorkQuery = outdoorWorkQuery.whereIn('outdoor_work_applications.user_id', group.user_ids);
+          } else {
+            outdoorWorkQuery = outdoorWorkQuery.where('1', '=', '0');
+          }
+        }
+      }
+
+      // 日期範圍篩選
+      if (start_date_from || end_date_to) {
+        if (start_date_from && end_date_to) {
+          outdoorWorkQuery = outdoorWorkQuery.where(function() {
+            this.where('outdoor_work_applications.start_date', '<=', end_date_to)
+                .andWhere('outdoor_work_applications.end_date', '>=', start_date_from);
+          });
+        } else if (start_date_from) {
+          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.end_date', '>=', start_date_from);
+        } else if (end_date_to) {
+          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.start_date', '<=', end_date_to);
+        }
+      }
+
+      const allOutdoorWorkApplications = await outdoorWorkQuery.orderBy('outdoor_work_applications.created_at', 'desc');
       
       // 獲取用戶所屬的授權群組
       const userDelegationGroups = await knex('delegation_groups')
@@ -421,21 +577,10 @@ class ApprovalController {
       const isHRMember = await User.isHRMember(userId);
       const processedApplications = [];
       
-      console.log(`[getApprovalHistory] 開始處理，總申請數: ${allApplications.length}, 用戶ID: ${userId}, 是否HR成員: ${isHRMember}`);
+      console.log(`[getApprovalHistory] 開始處理，假期申請數: ${allLeaveApplications.length}, 額外工作時數申請數: ${allExtraWorkingHoursApplications.length}, 外勤工作申請數: ${allOutdoorWorkApplications.length}, 用戶ID: ${userId}, 是否HR成員: ${isHRMember}`);
       
-      // 調試：檢查是否有 paper-flow 申請
-      const paperFlowApps = allApplications.filter(app => app.is_paper_flow === true || app.flow_type === 'paper-flow');
-      console.log(`[getApprovalHistory] 發現 ${paperFlowApps.length} 個 paper-flow 申請:`, 
-        paperFlowApps.map(app => ({
-          id: app.id,
-          transaction_id: app.transaction_id,
-          is_paper_flow: app.is_paper_flow,
-          flow_type: app.flow_type,
-          status: app.status
-        }))
-      );
-      
-      for (const app of allApplications) {
+      // 處理假期申請
+      for (const app of allLeaveApplications) {
         let isApprover = false;
         let userApprovalStage = null; // 記錄用戶在哪個階段批核的
         
@@ -570,11 +715,176 @@ class ApprovalController {
         }
       }
 
+      // 處理額外工作時數申報
+      for (const app of allExtraWorkingHoursApplications) {
+        let isApprover = false;
+        let userApprovalStage = null;
+        
+        // 方法1：檢查是否直接設置為批核者
+        if (app.checker_id === userId && app.checker_at) {
+          isApprover = true;
+          userApprovalStage = 'checker';
+        } else if (app.approver_1_id === userId && app.approver_1_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_1';
+        } else if (app.approver_2_id === userId && app.approver_2_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_2';
+        } else if (app.approver_3_id === userId && app.approver_3_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_3';
+        } else if (app.rejected_by_id === userId) {
+          isApprover = true;
+          userApprovalStage = 'rejected';
+        }
+        
+        // 方法2：檢查是否為 paper-flow 且用戶是 HR Group 成員
+        const isPaperFlow = app.is_paper_flow === true || app.flow_type === 'paper-flow';
+        if (!isApprover && isPaperFlow && app.status === 'approved' && isHRMember) {
+          isApprover = true;
+          userApprovalStage = 'paper_flow';
+        }
+        
+        // 方法3：檢查是否通過授權群組批核過
+        if (!isApprover && userDelegationGroupIds.length > 0) {
+          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+          if (departmentGroups && departmentGroups.length > 0) {
+            const deptGroup = departmentGroups[0];
+            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+            
+            for (const step of approvalFlow) {
+              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                let stepApproved = false;
+                if (step.level === 'checker' && app.checker_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'checker';
+                } else if (step.level === 'approver_1' && app.approver_1_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_1';
+                } else if (step.level === 'approver_2' && app.approver_2_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_2';
+                } else if (step.level === 'approver_3' && app.approver_3_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_3';
+                }
+                
+                if (stepApproved) {
+                  isApprover = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        if (isApprover) {
+          app.user_approval_stage = userApprovalStage;
+          app.application_type = 'extra_working_hours';
+          processedApplications.push(app);
+        }
+      }
+      
+      // 處理外勤工作申請
+      for (const app of allOutdoorWorkApplications) {
+        let isApprover = false;
+        let userApprovalStage = null;
+        
+        // 方法1：檢查是否直接設置為批核者
+        if (app.checker_id === userId && app.checker_at) {
+          isApprover = true;
+          userApprovalStage = 'checker';
+        } else if (app.approver_1_id === userId && app.approver_1_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_1';
+        } else if (app.approver_2_id === userId && app.approver_2_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_2';
+        } else if (app.approver_3_id === userId && app.approver_3_at) {
+          isApprover = true;
+          userApprovalStage = 'approver_3';
+        } else if (app.rejected_by_id === userId) {
+          isApprover = true;
+          userApprovalStage = 'rejected';
+        }
+        
+        // 方法2：檢查是否為 paper-flow 且用戶是 HR Group 成員
+        const isPaperFlow = app.is_paper_flow === true || app.flow_type === 'paper-flow';
+        if (!isApprover && isPaperFlow && app.status === 'approved' && isHRMember) {
+          isApprover = true;
+          userApprovalStage = 'paper_flow';
+        }
+        
+        // 方法3：檢查是否通過授權群組批核過
+        if (!isApprover && userDelegationGroupIds.length > 0) {
+          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+          if (departmentGroups && departmentGroups.length > 0) {
+            const deptGroup = departmentGroups[0];
+            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+            
+            for (const step of approvalFlow) {
+              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                let stepApproved = false;
+                if (step.level === 'checker' && app.checker_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'checker';
+                } else if (step.level === 'approver_1' && app.approver_1_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_1';
+                } else if (step.level === 'approver_2' && app.approver_2_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_2';
+                } else if (step.level === 'approver_3' && app.approver_3_at) {
+                  stepApproved = true;
+                  userApprovalStage = 'approver_3';
+                }
+                
+                if (stepApproved) {
+                  isApprover = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        if (isApprover) {
+          app.user_approval_stage = userApprovalStage;
+          app.application_type = 'outdoor_work';
+          processedApplications.push(app);
+        }
+      }
+      
       // 格式化申請數據並添加相關的 reverse transaction
       const LeaveApplicationModel = require('../database/models/LeaveApplication');
       const formattedApplications = [];
       
       for (const app of processedApplications) {
+        // 如果是額外工作時數申報，直接格式化
+        if (app.application_type === 'extra_working_hours') {
+          const formattedApp = {
+            ...app,
+            transaction_id: app.transaction_id || `EWH-${String(app.id).padStart(6, '0')}`,
+            applicant_display_name: app.applicant_display_name || app.user_display_name,
+            user_approval_stage: app.user_approval_stage || null
+          };
+          formattedApplications.push(formattedApp);
+          continue;
+        }
+        
+        // 如果是外勤工作申請，直接格式化
+        if (app.application_type === 'outdoor_work') {
+          const formattedApp = {
+            ...app,
+            transaction_id: app.transaction_id || `ODW-${String(app.id).padStart(6, '0')}`,
+            applicant_display_name: app.applicant_display_name || app.user_display_name,
+            user_approval_stage: app.user_approval_stage || null
+          };
+          formattedApplications.push(formattedApp);
+          continue;
+        }
+        
+        // 處理假期申請
         const isPaperFlow = app.is_paper_flow === true || app.flow_type === 'paper-flow';
         
         // 查詢與此申請相關的 reverse transaction
@@ -604,8 +914,9 @@ class ApprovalController {
           transaction_id: app.transaction_id || `LA-${String(app.id).padStart(6, '0')}`,
           applicant_display_name: app.applicant_display_name || app.user_display_name,
           days: app.days !== undefined && app.days !== null ? app.days : app.total_days,
-          is_paper_flow: isPaperFlow, // 確保前端能正確識別
-          user_approval_stage: app.user_approval_stage || null, // 記錄用戶在哪個階段批核的
+          is_paper_flow: isPaperFlow,
+          application_type: 'leave',
+          user_approval_stage: app.user_approval_stage || null,
           reversal_transactions: reversalTransactions.map(rev => ({
             ...rev,
             transaction_id: rev.transaction_id || `LA-${String(rev.id).padStart(6, '0')}`,
@@ -616,9 +927,16 @@ class ApprovalController {
         
         formattedApplications.push(formattedApp);
       }
-
-      console.log(`[getApprovalHistory] 最終返回 ${formattedApplications.length} 個申請，其中 paper-flow: ${formattedApplications.filter(a => a.is_paper_flow).length} 個`);
-
+      
+      // 按創建時間排序
+      formattedApplications.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0);
+        const dateB = new Date(b.created_at || 0);
+        return dateB - dateA; // 降序
+      });
+      
+      console.log(`[getApprovalHistory] 最終返回 ${formattedApplications.length} 個申請`);
+      
       res.json({ applications: formattedApplications });
     } catch (error) {
       console.error('Get approval history error:', error);

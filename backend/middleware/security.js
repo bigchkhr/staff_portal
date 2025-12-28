@@ -44,8 +44,8 @@ const checkHRMembership = async (userId) => {
 
 // 一般 API 的 Rate Limiting（HR Group 成員不受限制）
 const apiLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 分鐘
-  max: 300, // 限制 300 個請求
+  windowMs: 10 * 60 * 1000, // 10 分鐘
+  max: 150, // 限制 150 個請求
   message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,
   legacyHeaders: false,

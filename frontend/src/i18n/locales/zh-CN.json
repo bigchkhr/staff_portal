@@ -47,7 +47,7 @@
     "loginButton": "登录",
     "loggingIn": "登录中...",
     "loginFailed": "登录失败，请检查员工编号和密码",
-    "disclaimer": "请勿向其他第三方提供你的登录资料"
+    "disclaimer": "请勿向任何第三方提供你的登录资料"
   },
   "layout": {
     "appTitle": "Big C HK Staff Portal",
@@ -55,6 +55,8 @@
     "applyLeave": "申请假期",
     "leaveHistory": "申请历史",
     "leaveBalance": "假期余额",
+    "applyExtraWorkingHours": "额外工作时数申报",
+    "extraWorkingHoursHistory": "额外工作时数历史",
     "myDocuments": "我的文件",
     "pendingApproval": "待批核",
     "approvalHistory": "批核记录",

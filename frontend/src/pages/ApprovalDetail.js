@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -34,11 +34,13 @@ import Swal from 'sweetalert2';
 const ApprovalDetail = () => {
   const { t, i18n } = useTranslation();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [application, setApplication] = useState(null);
+  const [applicationType, setApplicationType] = useState('leave');
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
   const [comment, setComment] = useState('');
@@ -58,8 +60,10 @@ const ApprovalDetail = () => {
   const [hrRejecting, setHrRejecting] = useState(false);
 
   useEffect(() => {
-    fetchApplication();
-  }, [id]);
+    const type = searchParams.get('type') || 'leave';
+    setApplicationType(type);
+    fetchApplication(type);
+  }, [id, searchParams]);
 
   useEffect(() => {
     if (application && user) {
@@ -74,12 +78,18 @@ const ApprovalDetail = () => {
     }
   }, [application, id]);
 
-  const fetchApplication = async () => {
+  const fetchApplication = async (type = 'leave') => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/leaves/${id}`);
+      let response;
+      if (type === 'extra_working_hours') {
+        response = await axios.get(`/api/extra-working-hours/${id}`);
+      } else if (type === 'outdoor_work') {
+        response = await axios.get(`/api/outdoor-work/${id}`);
+      } else {
+        response = await axios.get(`/api/leaves/${id}`);
+      }
       console.log('Application data:', response.data.application);
-      console.log('Application date:', response.data.application?.application_date);
       setApplication(response.data.application);
     } catch (error) {
       console.error('Fetch application error:', error);
@@ -105,6 +115,11 @@ const ApprovalDetail = () => {
   };
 
   const fetchDocuments = async () => {
+    // 額外工作時數申報和外勤工作申請目前不支持文件上傳
+    if (applicationType === 'extra_working_hours' || applicationType === 'outdoor_work') {
+      setDocuments([]);
+      return;
+    }
     try {
       const response = await axios.get(`/api/leaves/${id}/documents`);
       setDocuments(response.data.documents || []);
@@ -191,8 +206,16 @@ const ApprovalDetail = () => {
     if (!isCurrentStageApprover) {
       try {
         // 調用後端 API 檢查用戶是否有權限批核當前階段
-        // 後端的 can-approve 現在只返回當前階段的權限
-        const response = await axios.get(`/api/users/can-approve/${id}`);
+        let response;
+        if (applicationType === 'outdoor_work') {
+          response = await axios.get(`/api/users/can-approve/${id}`, {
+            params: { application_type: applicationType }
+          });
+        } else {
+          response = await axios.get(`/api/users/can-approve/${id}`, {
+            params: { application_type: applicationType }
+          });
+        }
         const canApproveFromBackend = response.data.canApprove || false;
         
         if (canApproveFromBackend) {
@@ -228,7 +251,8 @@ const ApprovalDetail = () => {
     try {
       await axios.post(`/api/approvals/${id}/approve`, {
         action,
-        remarks: comment
+        remarks: comment,
+        application_type: applicationType
       });
 
       // 使用 Sweet Alert 顯示成功訊息
@@ -262,7 +286,8 @@ const ApprovalDetail = () => {
     try {
       await axios.post(`/api/approvals/${id}/approve`, {
         action: 'reject',
-        remarks: hrRejectionReason || 'HR Group 拒絕申請'
+        remarks: hrRejectionReason || 'HR Group 拒絕申請',
+        application_type: applicationType
       });
 
       // 使用 Sweet Alert 顯示成功訊息
@@ -405,56 +430,224 @@ const ApprovalDetail = () => {
                   secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
                 />
               </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.leaveType')}
-                  secondary={i18n.language === 'en' 
-                    ? (application.leave_type_name || application.leave_type_name_zh || '')
-                    : (application.leave_type_name_zh || application.leave_type_name || '')}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.year')}
-                  secondary={application.year || (application.start_date ? new Date(application.start_date).getFullYear() : '-') + t('approvalDetail.yearSuffix')}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.applicationDate')}
-                  secondary={application.application_date ? formatDate(application.application_date) : '-'}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.startDate')}
-                  secondary={formatDate(application.start_date)}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.endDate')}
-                  secondary={formatDate(application.end_date)}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.days')}
-                  secondary={application.days}
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1' }}
-                />
-              </ListItem>
+              {applicationType === 'extra_working_hours' ? (
+                <>
+                  <ListItem>
+                    <ListItemText 
+                      primary="申請類型"
+                      secondary="額外工作時數申報"
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="申請日期"
+                      secondary={application.application_date ? formatDate(application.application_date) : '-'}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="開始日期時間"
+                      secondary={application.start_date && application.start_time 
+                        ? `${formatDate(application.start_date)} ${application.start_time}`
+                        : formatDate(application.start_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="結束日期時間"
+                      secondary={application.end_date && application.end_time 
+                        ? `${formatDate(application.end_date)} ${application.end_time}`
+                        : formatDate(application.end_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="總時數"
+                      secondary={`${application.total_hours || 0} 小時`}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  {application.reason && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="額外工作原因"
+                        secondary={application.reason}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                  {application.description && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="內容描述"
+                        secondary={application.description}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                </>
+              ) : applicationType === 'outdoor_work' ? (
+                <>
+                  <ListItem>
+                    <ListItemText 
+                      primary="申請類型"
+                      secondary="外勤工作申請"
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="申請日期"
+                      secondary={application.application_date ? formatDate(application.application_date) : '-'}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="開始日期時間"
+                      secondary={application.start_date && application.start_time 
+                        ? `${formatDate(application.start_date)} ${application.start_time}`
+                        : formatDate(application.start_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="結束日期時間"
+                      secondary={application.end_date && application.end_time 
+                        ? `${formatDate(application.end_date)} ${application.end_time}`
+                        : formatDate(application.end_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary="總時數"
+                      secondary={`${application.total_hours || 0} 小時`}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  {application.start_location && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="開始地點"
+                        secondary={application.start_location}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                  {application.end_location && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="結束地點"
+                        secondary={application.end_location}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                  {application.transportation && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="交通工具"
+                        secondary={application.transportation}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                  {application.expense && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="費用"
+                        secondary={`$${parseFloat(application.expense).toFixed(2)}`}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                  {application.purpose && (
+                    <ListItem>
+                      <ListItemText 
+                        primary="目的"
+                        secondary={application.purpose}
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1' }}
+                      />
+                    </ListItem>
+                  )}
+                </>
+              ) : (
+                <>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.leaveType')}
+                      secondary={i18n.language === 'en' 
+                        ? (application.leave_type_name || application.leave_type_name_zh || '')
+                        : (application.leave_type_name_zh || application.leave_type_name || '')}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.year')}
+                      secondary={application.year || (application.start_date ? new Date(application.start_date).getFullYear() : '-') + t('approvalDetail.yearSuffix')}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.applicationDate')}
+                      secondary={application.application_date ? formatDate(application.application_date) : '-'}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.startDate')}
+                      secondary={formatDate(application.start_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.endDate')}
+                      secondary={formatDate(application.end_date)}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t('approvalDetail.days')}
+                      secondary={application.days}
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1' }}
+                    />
+                  </ListItem>
+                </>
+              )}
               <ListItem>
                 <ListItemText 
                   primary={t('approvalDetail.status')}
@@ -469,7 +662,7 @@ const ApprovalDetail = () => {
                   secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
                 />
               </ListItem>
-              {application.reason && (
+              {applicationType !== 'extra_working_hours' && application.reason && (
                 <ListItem>
                 <ListItemText 
                   primary={t('approvalDetail.reason')}
@@ -595,7 +788,7 @@ const ApprovalDetail = () => {
               )}
             </List>
 
-            {documents.length > 0 && (
+            {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (
               <>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="h6" gutterBottom>

@@ -302,7 +302,26 @@ const ApprovalHistory = () => {
     return null;
   };
 
+  const getApplicationTypeText = (app) => {
+    if (app.application_type === 'extra_working_hours') {
+      return '額外工作時數申報';
+    }
+    if (app.application_type === 'outdoor_work') {
+      return '外勤工作申請';
+    }
+    return '假期申請';
+  };
+
   const getLeaveTypeDisplay = (application) => {
+    // 如果是額外工作時數申報，返回申請類型
+    if (application.application_type === 'extra_working_hours') {
+      return '額外工作時數申報';
+    }
+    // 如果是外勤工作申請，返回申請類型
+    if (application.application_type === 'outdoor_work') {
+      return '外勤工作申請';
+    }
+    
     // 根據當前語言選擇使用 name_zh 或 name
     const leaveTypeName = i18n.language === 'en' 
       ? (application.leave_type_name || application.leave_type_name_zh || '')
@@ -313,6 +332,26 @@ const ApprovalHistory = () => {
       return `${leaveTypeName} (${t('approvalHistory.reversal')})`;
     }
     return leaveTypeName;
+  };
+
+  const getApplicationDisplayValue = (app) => {
+    if (app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') {
+      return `${app.total_hours || 0} 小時`;
+    }
+    return app.days || app.total_days || 0;
+  };
+
+  const getApplicationDateRange = (app) => {
+    if (app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') {
+      const startStr = app.start_date && app.start_time 
+        ? `${formatDate(app.start_date)} ${app.start_time}`
+        : formatDate(app.start_date);
+      const endStr = app.end_date && app.end_time 
+        ? `${formatDate(app.end_date)} ${app.end_time}`
+        : formatDate(app.end_date);
+      return `${startStr} ~ ${endStr}`;
+    }
+    return `${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}`;
   };
 
   const handleSearch = () => {
@@ -333,11 +372,14 @@ const ApprovalHistory = () => {
     const leaveTypeNameZh = app.leave_type_name_zh?.toLowerCase() || '';
     const applicantNameZh = app.applicant_display_name?.toLowerCase() || '';
     const applicantUsername = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
+    const applicationType = app.application_type === 'extra_working_hours' ? '額外工作時數申報' : 
+                            app.application_type === 'outdoor_work' ? '外勤工作申請' : '';
     
     return transactionId.includes(keyword) ||
            leaveTypeNameZh.includes(keyword) ||
            applicantNameZh.includes(keyword) ||
-           applicantUsername.includes(keyword);
+           applicantUsername.includes(keyword) ||
+           applicationType.toLowerCase().includes(keyword);
   });
 
   const renderMobileCard = (app, isReversal = false) => {
@@ -376,53 +418,88 @@ const ApprovalHistory = () => {
                 )}
               </Typography>
             </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.leaveType')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {getLeaveTypeDisplay(app)}
-              </Typography>
+            <Grid item xs={12}>
+              <Chip 
+                label={getApplicationTypeText(app)} 
+                size="small" 
+                color={
+                  app.application_type === 'extra_working_hours' ? 'secondary' : 
+                  app.application_type === 'outdoor_work' ? 'info' : 
+                  'primary'
+                } 
+                sx={{ mb: 1 }} 
+              />
             </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.year')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalHistory.yearSuffix')}
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.startDate')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {formatDate(app.start_date)}
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.endDate')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {formatDate(app.end_date)}
-              </Typography>
-            </Grid>
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.days')}
-              </Typography>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  mb: 1, 
-                  fontWeight: 'medium',
-                  color: isReversal ? 'error.main' : 'inherit'
-                }}
-              >
-                {isReversal ? `-${Math.abs(app.days)}` : app.days}
-              </Typography>
-            </Grid>
+            {app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work' ? (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    時間範圍
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {getApplicationDateRange(app)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    總時數
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                    {app.total_hours || 0} 小時
+                  </Typography>
+                </Grid>
+              </>
+            ) : (
+              <>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.leaveType')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {getLeaveTypeDisplay(app)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.year')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalHistory.yearSuffix')}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.startDate')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {formatDate(app.start_date)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.endDate')}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {formatDate(app.end_date)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.days')}
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      mb: 1, 
+                      fontWeight: 'medium',
+                      color: isReversal ? 'error.main' : 'inherit'
+                    }}
+                  >
+                    {isReversal ? `-${Math.abs(app.days)}` : app.days}
+                  </Typography>
+                </Grid>
+              </>
+            )}
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" display="block">
                 {t('approvalHistory.approvalStage')}
@@ -451,12 +528,12 @@ const ApprovalHistory = () => {
               fullWidth
               variant="outlined"
               size="small"
-              onClick={() => navigate(`/approval/${app.id}`)}
+              onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
               startIcon={<VisibilityIcon />}
             >
               {t('approvalHistory.viewDetails')}
             </Button>
-            {!isReversal && canManageFiles(app) && (
+            {!isReversal && app.application_type !== 'extra_working_hours' && canManageFiles(app) && (
               <Button
                 fullWidth
                 variant="outlined"
@@ -924,11 +1001,11 @@ const ApprovalHistory = () => {
                 <TableRow>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.transactionId')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.applicant')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.leaveType')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>申請類型</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.year')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.startDate')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.endDate')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.days')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>開始日期/時間</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>結束日期/時間</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>天數/時數</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.status')}</TableCell>
@@ -953,13 +1030,34 @@ const ApprovalHistory = () => {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{getLeaveTypeDisplay(app)}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalHistory.yearSuffix')}
+                          <Chip 
+                            label={getApplicationTypeText(app)} 
+                            size="small" 
+                            color={
+                              app.application_type === 'extra_working_hours' ? 'secondary' : 
+                              app.application_type === 'outdoor_work' ? 'info' : 
+                              'primary'
+                            } 
+                            sx={{ mb: 0.5 }} 
+                          />
+                          <br />
+                          {getLeaveTypeDisplay(app)}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.start_date)}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.end_date)}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.days}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {(app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') ? '-' : (app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-') + t('approvalHistory.yearSuffix'))}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {(app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') 
+                            ? (app.start_date && app.start_time ? `${formatDate(app.start_date)} ${app.start_time}` : formatDate(app.start_date))
+                            : formatDate(app.start_date)}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {(app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') 
+                            ? (app.end_date && app.end_time ? `${formatDate(app.end_date)} ${app.end_time}` : formatDate(app.end_date))
+                            : formatDate(app.end_date)}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{getApplicationDisplayValue(app)}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip
                             label={getApprovalStage(app)}
@@ -980,12 +1078,12 @@ const ApprovalHistory = () => {
                             <Button
                               variant="contained"
                               size="small"
-                              onClick={() => navigate(`/approval/${app.id}`)}
+                              onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
                               startIcon={<VisibilityIcon />}
                             >
                               {t('approvalHistory.viewDetails')}
                             </Button>
-                            {canManageFiles(app) && (
+                            {(app.application_type !== 'extra_working_hours' && app.application_type !== 'outdoor_work') && canManageFiles(app) && (
                               <Button
                                 variant="outlined"
                                 size="small"
@@ -995,7 +1093,7 @@ const ApprovalHistory = () => {
                                 {t('approvalHistory.manageFiles')}
                               </Button>
                             )}
-                            {canShowReversalButton(app) && (
+                            {(app.application_type !== 'extra_working_hours' && app.application_type !== 'outdoor_work') && canShowReversalButton(app) && (
                               <Button
                                 variant="contained"
                                 size="small"

@@ -69,6 +69,8 @@ exports.seed = async function (knex) {
   // 清空所有表（注意順序，避免外鍵約束問題）
   await knex('leave_balance_transactions').del();
   await knex('leave_applications').del();
+  await knex('outdoor_work_applications').del();
+  await knex('extra_working_hours_applications').del();
   await knex('payroll_alert_items').del();
   await knex('hr_todos').del();
   await knex('user_todos').del();
@@ -749,4 +751,64 @@ exports.seed = async function (knex) {
   // }
 
   await syncLeaveApplicationStages(knex);
+
+  // 同步額外工作時數申報的批核階段
+  const extraWorkingHoursApplications = await knex('extra_working_hours_applications').select(
+    'id',
+    'checker_id',
+    'checker_at',
+    'approver_1_id',
+    'approver_1_at',
+    'approver_2_id',
+    'approver_2_at',
+    'approver_3_id',
+    'approver_3_at',
+    'current_approval_stage'
+  );
+
+  if (extraWorkingHoursApplications.length > 0) {
+    for (const application of extraWorkingHoursApplications) {
+      const updates = {};
+      const resolvedStage = determineSeedApprovalStage(application);
+      if (application.current_approval_stage !== resolvedStage) {
+        updates.current_approval_stage = resolvedStage;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await knex('extra_working_hours_applications')
+          .where('id', application.id)
+          .update(updates);
+      }
+    }
+  }
+
+  // 同步外勤工作申請的批核階段
+  const outdoorWorkApplications = await knex('outdoor_work_applications').select(
+    'id',
+    'checker_id',
+    'checker_at',
+    'approver_1_id',
+    'approver_1_at',
+    'approver_2_id',
+    'approver_2_at',
+    'approver_3_id',
+    'approver_3_at',
+    'current_approval_stage'
+  );
+
+  if (outdoorWorkApplications.length > 0) {
+    for (const application of outdoorWorkApplications) {
+      const updates = {};
+      const resolvedStage = determineSeedApprovalStage(application);
+      if (application.current_approval_stage !== resolvedStage) {
+        updates.current_approval_stage = resolvedStage;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await knex('outdoor_work_applications')
+          .where('id', application.id)
+          .update(updates);
+      }
+    }
+  }
 };

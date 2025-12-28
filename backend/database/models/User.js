@@ -324,6 +324,163 @@ class User {
 
     return false;
   }
+
+  static async canApproveExtraWorkingHours(userId, applicationId) {
+    const application = await knex('extra_working_hours_applications')
+      .where('id', applicationId)
+      .first();
+    
+    if (!application) {
+      return false;
+    }
+
+    if (application.status !== 'pending') {
+      return false;
+    }
+
+    let currentStage = application.current_approval_stage;
+    if (!currentStage) {
+      if (!application.checker_at && application.checker_id) {
+        currentStage = 'checker';
+      } else if (!application.approver_1_at && application.approver_1_id) {
+        currentStage = 'approver_1';
+      } else if (!application.approver_2_at && application.approver_2_id) {
+        currentStage = 'approver_2';
+      } else if (!application.approver_3_at && application.approver_3_id) {
+        currentStage = 'approver_3';
+      } else {
+        currentStage = 'completed';
+      }
+    }
+
+    if (currentStage === 'completed') {
+      return false;
+    }
+
+    if (currentStage === 'checker' && application.checker_id === userId && !application.checker_at) {
+      return true;
+    } else if (currentStage === 'approver_1' && application.approver_1_id === userId && !application.approver_1_at) {
+      return true;
+    } else if (currentStage === 'approver_2' && application.approver_2_id === userId && !application.approver_2_at) {
+      return true;
+    } else if (currentStage === 'approver_3' && application.approver_3_id === userId && !application.approver_3_at) {
+      return true;
+    }
+
+    const DepartmentGroup = require('./DepartmentGroup');
+    const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
+    
+    if (departmentGroups && departmentGroups.length > 0) {
+      const deptGroup = departmentGroups[0];
+      const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+      
+      if (currentStage && currentStage !== 'completed') {
+        const currentStep = approvalFlow.find(step => step.level === currentStage);
+        if (currentStep && currentStep.delegation_group_id) {
+          const isInDelegationGroup = await knex('delegation_groups')
+            .where('id', currentStep.delegation_group_id)
+            .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+            .first();
+          
+          if (isInDelegationGroup) {
+            let stepIsPending = false;
+            
+            if (currentStep.level === 'checker') {
+              stepIsPending = !!(application.checker_id && application.checker_at == null);
+            } else if (currentStep.level === 'approver_1') {
+              stepIsPending = !!(application.approver_1_id && application.approver_1_at == null);
+            } else if (currentStep.level === 'approver_2') {
+              stepIsPending = !!(application.approver_2_id && application.approver_2_at == null);
+            } else if (currentStep.level === 'approver_3') {
+              stepIsPending = !!(application.approver_3_id && application.approver_3_at == null);
+            }
+            
+            if (stepIsPending) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  static async canApproveOutdoorWork(userId, applicationId) {
+    const application = await knex('outdoor_work_applications')
+      .where('id', applicationId)
+      .first();
+
+    if (!application || application.status !== 'pending') {
+      return false;
+    }
+
+    let currentStage = application.current_approval_stage;
+    if (!currentStage || currentStage === 'completed') {
+      if (!application.checker_at && application.checker_id) {
+        currentStage = 'checker';
+      } else if (!application.approver_1_at && application.approver_1_id) {
+        currentStage = 'approver_1';
+      } else if (!application.approver_2_at && application.approver_2_id) {
+        currentStage = 'approver_2';
+      } else if (!application.approver_3_at && application.approver_3_id) {
+        currentStage = 'approver_3';
+      } else {
+        currentStage = 'completed';
+      }
+    }
+
+    if (currentStage === 'completed') {
+      return false;
+    }
+
+    // Method 1: Check if the user is directly assigned as the current stage approver
+    if (currentStage === 'checker' && application.checker_id === userId && !application.checker_at) {
+      return true;
+    } else if (currentStage === 'approver_1' && application.approver_1_id === userId && !application.approver_1_at) {
+      return true;
+    } else if (currentStage === 'approver_2' && application.approver_2_id === userId && !application.approver_2_at) {
+      return true;
+    } else if (currentStage === 'approver_3' && application.approver_3_id === userId && !application.approver_3_at) {
+      return true;
+    }
+
+    // Method 2: Check if the user belongs to the corresponding delegation group for the current stage
+    const DepartmentGroup = require('./DepartmentGroup');
+    const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
+
+    if (departmentGroups && departmentGroups.length > 0) {
+      const deptGroup = departmentGroups[0];
+      const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+
+      if (currentStage && currentStage !== 'completed') {
+        const currentStep = approvalFlow.find(step => step.level === currentStage);
+        if (currentStep && currentStep.delegation_group_id) {
+          const isInDelegationGroup = await knex('delegation_groups')
+            .where('id', currentStep.delegation_group_id)
+            .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+            .first();
+
+          if (isInDelegationGroup) {
+            let stepIsPending = false;
+            if (currentStep.level === 'checker') {
+              stepIsPending = !!(application.checker_id && application.checker_at == null);
+            } else if (currentStep.level === 'approver_1') {
+              stepIsPending = !!(application.approver_1_id && application.approver_1_at == null);
+            } else if (currentStep.level === 'approver_2') {
+              stepIsPending = !!(application.approver_2_id && application.approver_2_at == null);
+            } else if (currentStep.level === 'approver_3') {
+              stepIsPending = !!(application.approver_3_id && application.approver_3_at == null);
+            }
+            if (stepIsPending) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
 }
 
 module.exports = User;

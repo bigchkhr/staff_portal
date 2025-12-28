@@ -62,7 +62,17 @@ class UserController {
   async checkCanApprove(req, res) {
     try {
       const { id } = req.params;
-      const canApprove = await User.canApprove(req.user.id, id);
+      const { application_type } = req.query;
+      
+      let canApprove;
+      if (application_type === 'extra_working_hours') {
+        canApprove = await User.canApproveExtraWorkingHours(req.user.id, id);
+      } else if (application_type === 'outdoor_work') {
+        canApprove = await User.canApproveOutdoorWork(req.user.id, id);
+      } else {
+        canApprove = await User.canApprove(req.user.id, id);
+      }
+      
       res.json({ canApprove });
     } catch (error) {
       console.error('Check can approve error:', error);
