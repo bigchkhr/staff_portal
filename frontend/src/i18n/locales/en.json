@@ -392,7 +392,7 @@
     "noDocuments": "No documents",
     "fetchError": "Error fetching document list",
     "downloadError": "Error downloading file",
-    "disclaimer": "Employees are responsible for protecting their personal data and must not disclose their passwords and encrypted data to any third parties"
+    "disclaimer": "The salary payslip is accompanied by a password encryption comprising the first 5 alphanumeric characters of your Hong Kong ID, your complete English surname, and last 2 digits of your year of birth. For example, if your Hong Kong identity card number is A123456(7), your English surname is CHAO, and your date of birth is 1998-05-09, then your password would be A12345CHAO98. Please keep your personal information confidential and never provide it to any party."
   },
   "approvalHistory": {
     "title": "Approval History",
