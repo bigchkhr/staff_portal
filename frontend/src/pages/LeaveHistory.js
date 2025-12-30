@@ -292,8 +292,29 @@ const LeaveHistory = () => {
       ? `${leaveTypeName} (${t('leaveHistory.reversal')})`
       : leaveTypeName;
 
+    const isReversed = app.is_reversed === true;
+
     return (
-      <Card key={app.id} sx={{ mb: 2 }}>
+      <Card 
+        key={app.id} 
+        sx={{ 
+          mb: 2,
+          ...(isReversed ? {
+            '& .MuiTypography-root': {
+              textDecoration: 'line-through',
+              color: 'error.main'
+            },
+            '& .MuiChip-label': {
+              textDecoration: 'line-through',
+              color: 'error.main'
+            },
+            '& .MuiButton-root': {
+              textDecoration: 'line-through',
+              color: 'error.main'
+            }
+          } : {})
+        }}
+      >
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Box>
@@ -604,7 +625,24 @@ const LeaveHistory = () => {
                   </TableRow>
                 ) : (
                   filteredApplications.map((app) => (
-                    <TableRow key={app.id} hover>
+                    <TableRow 
+                      key={app.id} 
+                      hover
+                      sx={app.is_reversed === true ? {
+                        '& .MuiTableCell-root': {
+                          textDecoration: 'line-through',
+                          color: 'error.main',
+                          '& .MuiChip-label': {
+                            textDecoration: 'line-through',
+                            color: 'error.main'
+                          },
+                          '& .MuiButton-root': {
+                            textDecoration: 'line-through',
+                            color: 'error.main'
+                          }
+                        }
+                      } : {}}
+                    >
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.applicant_display_name}</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>

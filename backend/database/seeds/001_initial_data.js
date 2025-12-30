@@ -251,7 +251,7 @@ exports.seed = async function (knex) {
     {
       name: 'Accounting',
       name_zh: '會計部群組',
-      description: '會計部門群組',
+      description: '',
       user_ids: [4, 7, 9, 18, 348, 432],
       checker_id: null,
       approver_1_id: accountingDelegId,
@@ -261,7 +261,7 @@ exports.seed = async function (knex) {
     {
       name: 'B2B',
       name_zh: '企客業務部群組',
-      description: '企客業務部門群組',
+      description: '',
       user_ids: [205, 478, 487],
       checker_id: null,
       approver_1_id: b2bDelegId,
@@ -271,7 +271,7 @@ exports.seed = async function (knex) {
     {
       name: 'Business Development',
       name_zh: '業務拓展部群組',
-      description: '業務拓展部門群組',
+      description: '',
       user_ids: [],
       checker_id: null,
       approver_1_id: bdDelegId,
@@ -281,7 +281,7 @@ exports.seed = async function (knex) {
     {
       name: 'Category',
       name_zh: '品類部群組',
-      description: '品類部門群組',
+      description: '',
       user_ids: [],
       checker_id: null,
       approver_1_id: categoryDelegId,
@@ -291,7 +291,7 @@ exports.seed = async function (knex) {
     {
       name: 'General Administration',
       name_zh: '行政部群組',
-      description: '行政部門群組',
+      description: '',
       user_ids: [25, 290, 315],
       checker_id: null,
       approver_1_id: gaDelegId,
@@ -301,7 +301,7 @@ exports.seed = async function (knex) {
     {
       name: 'Human Resources',
       name_zh: '人力資源部群組',
-      description: '人力資源部門群組',
+      description: '',
       user_ids: [31],
       checker_id: null,
       approver_1_id: hrDelegId,
@@ -311,7 +311,7 @@ exports.seed = async function (knex) {
     {
       name: 'IT',
       name_zh: '資訊科技部群組',
-      description: '資訊科技部門群組',
+      description: '',
       user_ids: [475],
       checker_id: null,
       approver_1_id: itDelegId,
@@ -321,7 +321,7 @@ exports.seed = async function (knex) {
     {
       name: 'Marketing',
       name_zh: '市場推廣部群組',
-      description: '市場推廣部門群組',
+      description: '',
       user_ids: [],
       checker_id: null,
       approver_1_id: marketingDelegId,
@@ -331,7 +331,7 @@ exports.seed = async function (knex) {
     {
       name: 'Merchandising',
       name_zh: '採購部群組',
-      description: '採購部門群組',
+      description: '',
       user_ids: [20, 21, 154, 275, 278, 311, 318, 471, 486],
       checker_id: null,
       approver_1_id: merchandisingDelegId,
@@ -341,7 +341,7 @@ exports.seed = async function (knex) {
     {
       name: 'Project',
       name_zh: '專案部群組',
-      description: '專案部門群組',
+      description: '',
       user_ids: [],
       checker_id: null,
       approver_1_id: projectDelegId,
@@ -351,7 +351,7 @@ exports.seed = async function (knex) {
     {
       name: 'Retail Administration',
       name_zh: '零售行政群組',
-      description: '零售行政群組',
+      description: '',
       user_ids: [38, 234],
       checker_id: null,
       approver_1_id: retailHeadsDelegId,
@@ -361,7 +361,7 @@ exports.seed = async function (knex) {
     {
       name: 'Supply Chain and Logistics',
       name_zh: '供應鏈及物流部群組',
-      description: '供應鏈及物流部門群組',
+      description: '',
       user_ids: [267, 268, 270, 271, 273],
       checker_id: null,
       approver_1_id: scDelegId,
@@ -371,7 +371,7 @@ exports.seed = async function (knex) {
     {
       name: 'Property',
       name_zh: '物業部群組',
-      description: '供物業部門群組',
+      description: '',
       user_ids: [],
       checker_id: null,
       approver_1_id: scDelegId,
@@ -611,10 +611,20 @@ exports.seed = async function (knex) {
     {
       name: 'Direct Reporting to MD',
       name_zh: '直接向MD匯報群組',
-      description: '直接向MD匯報群組',
-      user_ids: [3, 450, 451, 478, 26, 29, 32, 412, 23, 291, 265, 284, 312],
+      description: '',
+      user_ids: [3, 19, 450, 451, 478, 26, 29, 32, 412, 23, 291, 265, 284, 312],
       checker_id: null,
       approver_1_id: 38,
+      approver_2_id: null,
+      approver_3_id: hrGroupId
+    },
+    {
+      name: 'Managing Director',
+      name_zh: '董事總經理',
+      description: '',
+      user_ids: [68],
+      checker_id: null,
+      approver_1_id: null,
       approver_2_id: null,
       approver_3_id: hrGroupId
     },

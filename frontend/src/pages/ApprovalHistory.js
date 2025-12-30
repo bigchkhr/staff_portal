@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import {
   Box,
   Paper,
@@ -57,6 +57,209 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDateTime, formatDate } from '../utils/dateFormat';
+
+// 記憶化的移動端卡片組件
+const MobileCard = memo(({ app, isReversal, onViewDetails, onManageFiles, onReversal, getStatusText, getStatusColor, getApplicationTypeText, getLeaveTypeDisplay, getApplicationDateRange, getApprovalStage, getApprovalDate, canManageFiles, canShowReversalButton, t, formatDate, formatDateTime }) => {
+  const isReversed = app.is_reversed === true;
+  return (
+    <Card 
+      sx={{ 
+        mb: 2, 
+        backgroundColor: isReversal ? '#f8f9fa' : 'inherit',
+        ...(isReversed ? {
+          '& .MuiTypography-root': {
+            textDecoration: 'line-through',
+            color: 'error.main'
+          },
+          '& .MuiChip-label': {
+            textDecoration: 'line-through',
+            color: 'error.main'
+          },
+          '& .MuiButton-root': {
+            textDecoration: 'line-through',
+            color: 'error.main'
+          }
+        } : {})
+      }}
+    >
+      <CardContent>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {isReversal ? t('approvalHistory.reversalPrefix') : t('approvalHistory.transactionId')}
+            </Typography>
+            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+              {app.transaction_id}
+            </Typography>
+          </Box>
+          <Chip
+            label={getStatusText(app)}
+            color={getStatusColor(app)}
+            size="small"
+          />
+        </Box>
+
+        <Divider sx={{ my: 1.5 }} />
+
+        <Grid container spacing={1.5}>
+          <Grid item xs={12}>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {t('approvalHistory.applicant')}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {app.applicant_display_name}
+              {(app.applicant_employee_number || app.user_employee_number) && (
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  ({app.applicant_employee_number || app.user_employee_number})
+                </Typography>
+              )}
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <Chip 
+              label={getApplicationTypeText(app)} 
+              size="small" 
+              color={
+                app.application_type === 'extra_working_hours' ? 'secondary' : 
+                app.application_type === 'outdoor_work' ? 'info' : 
+                'primary'
+              } 
+              sx={{ mb: 1 }} 
+            />
+          </Grid>
+          {app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work' ? (
+            <>
+              <Grid item xs={12}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.timeRange')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {getApplicationDateRange(app)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.totalHours')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                  {app.total_hours || 0} {t('approvalHistory.hours')}
+                </Typography>
+              </Grid>
+            </>
+          ) : (
+            <>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.leaveType')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {getLeaveTypeDisplay(app)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.year')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalHistory.yearSuffix')}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.startDate')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {formatDate(app.start_date)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.endDate')}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {formatDate(app.end_date)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {t('approvalHistory.days')}
+                </Typography>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    mb: 1, 
+                    fontWeight: 'medium',
+                    color: isReversal ? 'error.main' : 'inherit'
+                  }}
+                >
+                  {isReversal ? `-${Math.abs(app.days)}` : app.days}
+                </Typography>
+              </Grid>
+            </>
+          )}
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {t('approvalHistory.approvalStage')}
+            </Typography>
+            <Chip
+              label={isReversal ? t('approvalHistory.hrReversal') : getApprovalStage(app)}
+              size="small"
+              color={isReversal ? 'info' : 'primary'}
+              sx={{ mt: 0.5 }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {t('approvalHistory.approvalTime')}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {formatDateTime(isReversal ? app.created_at : getApprovalDate(app))}
+            </Typography>
+          </Grid>
+        </Grid>
+
+        <Divider sx={{ my: 1.5 }} />
+
+        <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
+          <Button
+            fullWidth
+            variant="outlined"
+            size="small"
+            onClick={onViewDetails}
+            startIcon={<VisibilityIcon />}
+          >
+            {t('approvalHistory.viewDetails')}
+          </Button>
+          {!isReversal && app.application_type !== 'extra_working_hours' && canManageFiles(app) && (
+            <Button
+              fullWidth
+              variant="outlined"
+              size="small"
+              onClick={onManageFiles}
+              startIcon={<AttachFileIcon />}
+            >
+              {t('approvalHistory.manageFiles')}
+            </Button>
+          )}
+          {!isReversal && canShowReversalButton(app) && (
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              color="warning"
+              startIcon={<UndoIcon />}
+              onClick={onReversal}
+            >
+              {t('approvalHistory.reversal')}
+            </Button>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  );
+});
+
+MobileCard.displayName = 'MobileCard';
 
 const ApprovalHistory = () => {
   const { t, i18n } = useTranslation();
@@ -182,7 +385,7 @@ const ApprovalHistory = () => {
     fetchApprovalHistory();
   };
 
-  const getStatusColor = (application) => {
+  const getStatusColor = useCallback((application) => {
     // 如果已被銷假，顯示特殊顏色
     if (application.is_reversed === true) {
       return 'info';
@@ -206,9 +409,9 @@ const ApprovalHistory = () => {
       cancelled: 'default'
     };
     return statusMap[application.status] || 'default';
-  };
+  }, []);
 
-  const getStatusText = (application) => {
+  const getStatusText = useCallback((application) => {
     // 如果已被銷假，顯示「已銷假」
     if (application && application.is_reversed === true) {
       return t('approvalHistory.reversed');
@@ -232,9 +435,9 @@ const ApprovalHistory = () => {
       cancelled: t('approvalHistory.cancelled')
     };
     return statusMap[application.status] || application.status;
-  };
+  }, [t]);
 
-  const getApprovalStage = (application) => {
+  const getApprovalStage = useCallback((application) => {
     // 優先使用後端返回的 user_approval_stage
     if (application.user_approval_stage) {
       const stageMap = {
@@ -266,9 +469,9 @@ const ApprovalHistory = () => {
       return t('approvalHistory.stageRejected');
     }
     return t('approvalHistory.stageUnknown');
-  };
+  }, [t, user]);
 
-  const getApprovalDate = (application) => {
+  const getApprovalDate = useCallback((application) => {
     // 如果是 paper-flow，使用創建時間（因為提交即批准）
     if (application.is_paper_flow || application.user_approval_stage === 'paper_flow') {
       return application.created_at;
@@ -300,9 +503,9 @@ const ApprovalHistory = () => {
       return application.rejected_at;
     }
     return null;
-  };
+  }, [user]);
 
-  const getApplicationTypeText = (app) => {
+  const getApplicationTypeText = useCallback((app) => {
     if (app.application_type === 'extra_working_hours') {
       return t('approvalHistory.extraWorkingHoursApplication');
     }
@@ -310,9 +513,9 @@ const ApprovalHistory = () => {
       return t('approvalHistory.outdoorWorkApplication');
     }
     return t('approvalHistory.leaveApplication');
-  };
+  }, [t]);
 
-  const getLeaveTypeDisplay = (application) => {
+  const getLeaveTypeDisplay = useCallback((application) => {
     // 如果是額外工作時數申報，返回申請類型
     if (application.application_type === 'extra_working_hours') {
       return t('approvalHistory.extraWorkingHoursApplication');
@@ -332,16 +535,16 @@ const ApprovalHistory = () => {
       return `${leaveTypeName} (${t('approvalHistory.reversal')})`;
     }
     return leaveTypeName;
-  };
+  }, [t, i18n]);
 
-  const getApplicationDisplayValue = (app) => {
+  const getApplicationDisplayValue = useCallback((app) => {
     if (app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') {
       return `${app.total_hours || 0} ${t('approvalHistory.hours')}`;
     }
     return app.days || app.total_days || 0;
-  };
+  }, [t]);
 
-  const getApplicationDateRange = (app) => {
+  const getApplicationDateRange = useCallback((app) => {
     if (app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work') {
       const startStr = app.start_date && app.start_time 
         ? `${formatDate(app.start_date)} ${app.start_time}`
@@ -352,235 +555,41 @@ const ApprovalHistory = () => {
       return `${startStr} ~ ${endStr}`;
     }
     return `${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}`;
-  };
+  }, [formatDate]);
 
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
     setSearchKeyword(search);
-  };
+  }, [search]);
 
-  const handleSearchKeyPress = (e) => {
+  const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
-      handleSearch();
+      setSearchKeyword(search);
     }
-  };
+  }, [search]);
 
-  const filteredApplications = applications.filter(app => {
-    if (!searchKeyword) return true;
-    
-    const keyword = searchKeyword.toLowerCase();
-    const transactionId = app.transaction_id?.toString().toLowerCase() || '';
-    const leaveTypeNameZh = app.leave_type_name_zh?.toLowerCase() || '';
-    const applicantNameZh = app.applicant_display_name?.toLowerCase() || '';
-    const applicantUsername = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
-    const applicationType = app.application_type === 'extra_working_hours' ? t('approvalHistory.extraWorkingHoursApplication') : 
-                            app.application_type === 'outdoor_work' ? t('approvalHistory.outdoorWorkApplication') : '';
-    
-    return transactionId.includes(keyword) ||
-           leaveTypeNameZh.includes(keyword) ||
-           applicantNameZh.includes(keyword) ||
-           applicantUsername.includes(keyword) ||
-           applicationType.toLowerCase().includes(keyword);
-  });
+  const filteredApplications = useMemo(() => {
+    return applications.filter(app => {
+      if (!searchKeyword) return true;
+      
+      const keyword = searchKeyword.toLowerCase();
+      const transactionId = app.transaction_id?.toString().toLowerCase() || '';
+      const leaveTypeNameZh = app.leave_type_name_zh?.toLowerCase() || '';
+      const applicantNameZh = app.applicant_display_name?.toLowerCase() || '';
+      const applicantUsername = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
+      const applicationType = app.application_type === 'extra_working_hours' ? t('approvalHistory.extraWorkingHoursApplication') : 
+                              app.application_type === 'outdoor_work' ? t('approvalHistory.outdoorWorkApplication') : '';
+      
+      return transactionId.includes(keyword) ||
+             leaveTypeNameZh.includes(keyword) ||
+             applicantNameZh.includes(keyword) ||
+             applicantUsername.includes(keyword) ||
+             applicationType.toLowerCase().includes(keyword);
+    });
+  }, [applications, searchKeyword, t]);
 
-  const renderMobileCard = (app, isReversal = false) => {
-    return (
-      <Card key={isReversal ? `reversal-${app.id}` : app.id} sx={{ mb: 2, backgroundColor: isReversal ? '#f8f9fa' : 'inherit' }}>
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-            <Box>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {isReversal ? t('approvalHistory.reversalPrefix') : t('approvalHistory.transactionId')}
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                {app.transaction_id}
-              </Typography>
-            </Box>
-            <Chip
-              label={getStatusText(app)}
-              color={getStatusColor(app)}
-              size="small"
-            />
-          </Box>
+  const isHRMember = useMemo(() => user?.is_hr_member || user?.is_system_admin, [user]);
 
-          <Divider sx={{ my: 1.5 }} />
-
-          <Grid container spacing={1.5}>
-            <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.applicant')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {app.applicant_display_name}
-                {(app.applicant_employee_number || app.user_employee_number) && (
-                  <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                    ({app.applicant_employee_number || app.user_employee_number})
-                  </Typography>
-                )}
-              </Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <Chip 
-                label={getApplicationTypeText(app)} 
-                size="small" 
-                color={
-                  app.application_type === 'extra_working_hours' ? 'secondary' : 
-                  app.application_type === 'outdoor_work' ? 'info' : 
-                  'primary'
-                } 
-                sx={{ mb: 1 }} 
-              />
-            </Grid>
-            {app.application_type === 'extra_working_hours' || app.application_type === 'outdoor_work' ? (
-              <>
-                <Grid item xs={12}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.timeRange')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {getApplicationDateRange(app)}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.totalHours')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                    {app.total_hours || 0} {t('approvalHistory.hours')}
-                  </Typography>
-                </Grid>
-              </>
-            ) : (
-              <>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.leaveType')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {getLeaveTypeDisplay(app)}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.year')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('approvalHistory.yearSuffix')}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.startDate')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {formatDate(app.start_date)}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.endDate')}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    {formatDate(app.end_date)}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.days')}
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      mb: 1, 
-                      fontWeight: 'medium',
-                      color: isReversal ? 'error.main' : 'inherit'
-                    }}
-                  >
-                    {isReversal ? `-${Math.abs(app.days)}` : app.days}
-                  </Typography>
-                </Grid>
-              </>
-            )}
-            <Grid item xs={6}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.approvalStage')}
-              </Typography>
-              <Chip
-                label={isReversal ? t('approvalHistory.hrReversal') : getApprovalStage(app)}
-                size="small"
-                color={isReversal ? 'info' : 'primary'}
-                sx={{ mt: 0.5 }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('approvalHistory.approvalTime')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {formatDateTime(isReversal ? app.created_at : getApprovalDate(app))}
-              </Typography>
-            </Grid>
-          </Grid>
-
-          <Divider sx={{ my: 1.5 }} />
-
-          <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              size="small"
-              onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
-              startIcon={<VisibilityIcon />}
-            >
-              {t('approvalHistory.viewDetails')}
-            </Button>
-            {!isReversal && app.application_type !== 'extra_working_hours' && canManageFiles(app) && (
-              <Button
-                fullWidth
-                variant="outlined"
-                size="small"
-                onClick={() => handleOpenFileDialog(app)}
-                startIcon={<AttachFileIcon />}
-              >
-                {t('approvalHistory.manageFiles')}
-              </Button>
-            )}
-            {!isReversal && canShowReversalButton(app) && (
-              <Button
-                fullWidth
-                variant="contained"
-                size="small"
-                color="warning"
-                startIcon={<UndoIcon />}
-                onClick={() => handleReversalClick(app)}
-              >
-                {t('approvalHistory.reversal')}
-              </Button>
-            )}
-          </Box>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const isHRMember = user?.is_hr_member || user?.is_system_admin;
-
-  const handleOpenFileDialog = async (application) => {
-    setSelectedApplication(application);
-    setFileDialogOpen(true);
-    setError('');
-    setSuccess('');
-    await fetchDocuments(application.id);
-  };
-
-  const handleCloseFileDialog = () => {
-    setFileDialogOpen(false);
-    setSelectedApplication(null);
-    setDocuments([]);
-    setError('');
-    setSuccess('');
-  };
-
-  const fetchDocuments = async (applicationId) => {
+  const fetchDocuments = useCallback(async (applicationId) => {
     try {
       const response = await axios.get(`/api/leaves/${applicationId}/documents`);
       setDocuments(response.data.documents || []);
@@ -588,6 +597,127 @@ const ApprovalHistory = () => {
       console.error('Fetch documents error:', error);
       setError(t('approvalHistory.fetchFilesError'));
     }
+  }, [t]);
+
+  const handleOpenFileDialog = useCallback(async (application) => {
+    setSelectedApplication(application);
+    setFileDialogOpen(true);
+    setError('');
+    setSuccess('');
+    await fetchDocuments(application.id);
+  }, [fetchDocuments]);
+
+  const handleReversalClick = useCallback((application) => {
+    setSelectedReversalApplication(application);
+    setReversalDialogOpen(true);
+  }, []);
+
+  // 記憶化回調函數
+  const handleViewDetails = useCallback((app) => {
+    navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`);
+  }, [navigate]);
+
+  const handleManageFilesClick = useCallback((app) => {
+    handleOpenFileDialog(app);
+  }, [handleOpenFileDialog]);
+
+  const handleReversalClickCallback = useCallback((app) => {
+    handleReversalClick(app);
+  }, [handleReversalClick]);
+
+  const canManageFiles = useCallback((application) => {
+    // 只有 HR Group 獲授權人且申請已批核時才能管理檔案
+    return isHRMember && application.status === 'approved';
+  }, [isHRMember]);
+
+  const canShowReversalButton = useCallback((application) => {
+    // 只有 HR 成員可以看到銷假按鈕
+    if (!isHRMember) {
+      return false;
+    }
+    
+    // 只有已批核的申請才能銷假
+    if (application.status !== 'approved') {
+      return false;
+    }
+    
+    // 如果已經被銷假，不顯示按鈕
+    if (application.is_reversed) {
+      return false;
+    }
+    
+    // 如果是銷假交易本身，不顯示按鈕
+    if (application.is_reversal_transaction) {
+      return false;
+    }
+    
+    return true;
+  }, [isHRMember]);
+
+  // 記憶化移動端列表
+  const mobileCardList = useMemo(() => {
+    if (filteredApplications.length === 0) {
+      return (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          {t('approvalHistory.noRecords')}
+        </Alert>
+      );
+    }
+    return filteredApplications.map((app) => (
+      <React.Fragment key={app.id}>
+        <MobileCard
+          app={app}
+          isReversal={false}
+          onViewDetails={() => handleViewDetails(app)}
+          onManageFiles={() => handleManageFilesClick(app)}
+          onReversal={() => handleReversalClickCallback(app)}
+          getStatusText={getStatusText}
+          getStatusColor={getStatusColor}
+          getApplicationTypeText={getApplicationTypeText}
+          getLeaveTypeDisplay={getLeaveTypeDisplay}
+          getApplicationDateRange={getApplicationDateRange}
+          getApprovalStage={getApprovalStage}
+          getApprovalDate={getApprovalDate}
+          canManageFiles={canManageFiles}
+          canShowReversalButton={canShowReversalButton}
+          t={t}
+          formatDate={formatDate}
+          formatDateTime={formatDateTime}
+        />
+        {app.reversal_transactions && app.reversal_transactions.length > 0 && (
+          app.reversal_transactions.map((reversal) => (
+            <MobileCard
+              key={`reversal-${reversal.id}`}
+              app={reversal}
+              isReversal={true}
+              onViewDetails={() => handleViewDetails(reversal)}
+              onManageFiles={() => handleManageFilesClick(reversal)}
+              onReversal={() => handleReversalClickCallback(reversal)}
+              getStatusText={getStatusText}
+              getStatusColor={getStatusColor}
+              getApplicationTypeText={getApplicationTypeText}
+              getLeaveTypeDisplay={getLeaveTypeDisplay}
+              getApplicationDateRange={getApplicationDateRange}
+              getApprovalStage={getApprovalStage}
+              getApprovalDate={getApprovalDate}
+              canManageFiles={canManageFiles}
+              canShowReversalButton={canShowReversalButton}
+              t={t}
+              formatDate={formatDate}
+              formatDateTime={formatDateTime}
+            />
+          ))
+        )}
+      </React.Fragment>
+    ));
+  }, [filteredApplications, t, handleViewDetails, handleManageFilesClick, handleReversalClickCallback, getStatusText, getStatusColor, getApplicationTypeText, getLeaveTypeDisplay, getApplicationDateRange, getApprovalStage, getApprovalDate, canManageFiles, canShowReversalButton]);
+
+  const handleCloseFileDialog = () => {
+    setFileDialogOpen(false);
+    setSelectedApplication(null);
+    setDocuments([]);
+    setError('');
+    setSuccess('');
   };
 
   const handleFileUpload = async (event) => {
@@ -668,40 +798,6 @@ const ApprovalHistory = () => {
       return <DescriptionIcon />;
     }
     return <DescriptionIcon />;
-  };
-
-  const canManageFiles = (application) => {
-    // 只有 HR Group 獲授權人且申請已批核時才能管理檔案
-    return isHRMember && application.status === 'approved';
-  };
-
-  const canShowReversalButton = (application) => {
-    // 只有 HR 成員可以看到銷假按鈕
-    if (!isHRMember) {
-      return false;
-    }
-    
-    // 只有已批核的申請才能銷假
-    if (application.status !== 'approved') {
-      return false;
-    }
-    
-    // 如果已經被銷假，不顯示按鈕
-    if (application.is_reversed) {
-      return false;
-    }
-    
-    // 如果是銷假交易本身，不顯示按鈕
-    if (application.is_reversal_transaction) {
-      return false;
-    }
-    
-    return true;
-  };
-
-  const handleReversalClick = (application) => {
-    setSelectedReversalApplication(application);
-    setReversalDialogOpen(true);
   };
 
   const handleReversalConfirm = async () => {
@@ -969,21 +1065,7 @@ const ApprovalHistory = () => {
         {isMobile ? (
           // 手機版：卡片式布局
           <Box>
-            {filteredApplications.length === 0 ? (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                {t('approvalHistory.noRecords')}
-              </Alert>
-            ) : (
-              filteredApplications.map((app) => (
-                <React.Fragment key={app.id}>
-                  {renderMobileCard(app)}
-                  {/* 顯示相關的 Reverse Transaction */}
-                  {app.reversal_transactions && app.reversal_transactions.length > 0 && (
-                    app.reversal_transactions.map((reversal) => renderMobileCard(reversal, true))
-                  )}
-                </React.Fragment>
-              ))
-            )}
+            {mobileCardList}
           </Box>
         ) : (
           // 桌面版：表格布局（帶橫向滾動）
@@ -1020,7 +1102,23 @@ const ApprovalHistory = () => {
                 ) : (
                   filteredApplications.map((app) => (
                     <React.Fragment key={app.id}>
-                      <TableRow hover>
+                      <TableRow 
+                        hover
+                        sx={app.is_reversed === true ? {
+                          '& .MuiTableCell-root': {
+                            textDecoration: 'line-through',
+                            color: 'error.main',
+                            '& .MuiChip-label': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            },
+                            '& .MuiButton-root': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            }
+                          }
+                        } : {}}
+                      >
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {app.applicant_display_name}
@@ -1110,7 +1208,27 @@ const ApprovalHistory = () => {
                       {/* 顯示相關的 Reverse Transaction */}
                       {app.reversal_transactions && app.reversal_transactions.length > 0 && (
                         app.reversal_transactions.map((reversal) => (
-                          <TableRow key={`reversal-${reversal.id}`} hover sx={{ backgroundColor: '#f8f9fa' }}>
+                          <TableRow 
+                            key={`reversal-${reversal.id}`} 
+                            hover 
+                            sx={{ 
+                              backgroundColor: '#f8f9fa',
+                              ...(reversal.is_reversed === true ? {
+                                '& .MuiTableCell-root': {
+                                  textDecoration: 'line-through',
+                                  color: 'error.main',
+                                  '& .MuiChip-label': {
+                                    textDecoration: 'line-through',
+                                    color: 'error.main'
+                                  },
+                                  '& .MuiButton-root': {
+                                    textDecoration: 'line-through',
+                                    color: 'error.main'
+                                  }
+                                }
+                              } : {})
+                            }}
+                          >
                             <TableCell sx={{ pl: 4, position: 'relative', whiteSpace: 'nowrap' }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
