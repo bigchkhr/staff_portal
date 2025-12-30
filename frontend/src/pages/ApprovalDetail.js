@@ -692,7 +692,7 @@ const ApprovalDetail = () => {
                           : t('approvalDetail.pendingCheck')}
                       </Box>
                       {application.checker_remarks && (
-                        <Typography variant="body2" sx={{ color: '#1565C0', mt: 1, fontWeight: 'bold' }}>
+                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
                           {application.checker_remarks}
                         </Typography>
                       )}
@@ -713,7 +713,7 @@ const ApprovalDetail = () => {
                           : application.checker_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
                       </Box>
                       {application.approver_1_remarks && (
-                        <Typography variant="body2" sx={{ color: '#1565C0', mt: 1, fontWeight: 'bold' }}>
+                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
                           {application.approver_1_remarks}
                         </Typography>
                       )}
@@ -734,7 +734,7 @@ const ApprovalDetail = () => {
                           : application.approver_1_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
                       </Box>
                       {application.approver_2_remarks && (
-                        <Typography variant="body2" sx={{ color: '#1565C0', mt: 1, fontWeight: 'bold' }}>
+                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
                           {application.approver_2_remarks}
                         </Typography>
                       )}
@@ -755,7 +755,7 @@ const ApprovalDetail = () => {
                           : application.approver_2_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
                       </Box>
                       {application.approver_3_remarks && (
-                        <Typography variant="body2" sx={{ color: '#1565C0', mt: 1, fontWeight: 'bold' }}>
+                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
                           {application.approver_3_remarks}
                         </Typography>
                       )}
@@ -775,7 +775,7 @@ const ApprovalDetail = () => {
                           {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
                         </Box>
                         {application.rejection_reason && (
-                          <Typography variant="body2" sx={{ color: '#1565C0', mt: 1, fontWeight: 'bold' }}>
+                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
                             {application.rejection_reason}
                           </Typography>
                         )}
