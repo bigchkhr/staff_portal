@@ -53,6 +53,10 @@
     "appTitle": "Big C HK Staff Portal",
     "dashboard": "Dashboard",
     "announcements": "Announcements",
+    "myApplications": "My Applications",
+    "myApprovals": "My Approvals",
+    "systemMaintenance": "System Maintenance",
+    "manualApproval": "Manual Approval",
     "applyLeave": "Apply Leave",
     "leaveHistory": "Leave History",
     "leaveBalance": "Leave Balance",
@@ -81,6 +85,11 @@
   },
   "dashboard": {
     "welcome": "Welcome, {{name}}",
+    "greeting": {
+      "morning": "Good Morning, {{name}}",
+      "afternoon": "Good Afternoon, {{name}}",
+      "evening": "Good Evening, {{name}}"
+    },
     "pendingApplications": "Pending Applications",
     "pendingApprovals": "Pending Approvals",
     "totalBalance": "Total Leave Balance",

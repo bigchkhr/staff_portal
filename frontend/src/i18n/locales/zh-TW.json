@@ -53,6 +53,10 @@
     "appTitle": "Big C HK Staff Portal",
     "dashboard": "儀表板",
     "announcements": "公告欄",
+    "myApplications": "我的申請",
+    "myApprovals": "我的批核",
+    "systemMaintenance": "系統維護",
+    "manualApproval": "人手批核",
     "applyLeave": "申請假期",
     "leaveHistory": "申請歷史",
     "leaveBalance": "假期餘額",
@@ -81,6 +85,11 @@
   },
   "dashboard": {
     "welcome": "歡迎，{{name}}",
+    "greeting": {
+      "morning": "早安，{{name}}",
+      "afternoon": "午安，{{name}}",
+      "evening": "晚安，{{name}}"
+    },
     "pendingApplications": "待批核申請",
     "pendingApprovals": "待批核項目",
     "totalBalance": "總假期餘額",

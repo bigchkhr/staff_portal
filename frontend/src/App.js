@@ -34,10 +34,14 @@ import EmployeeDocuments from './pages/EmployeeDocuments';
 import FormLibrary from './pages/FormLibrary';
 import DepartmentGroupBalances from './pages/DepartmentGroupBalances';
 import Announcements from './pages/Announcements';
+import MyApplications from './pages/MyApplications';
+import MyApprovals from './pages/MyApprovals';
+import SystemMaintenance from './pages/SystemMaintenance';
+import ManualApproval from './pages/ManualApproval';
 
 // 設定後端 API 地址
-axios.defaults.baseURL = 'http://3.1.139.29:1689';
-// axios.defaults.baseURL = 'http://172.31.132.13:1689';
+// axios.defaults.baseURL = 'http://3.1.139.29:1689';
+axios.defaults.baseURL = 'http://172.31.132.13:1689';
 
 const theme = createTheme({
   palette: {
@@ -59,6 +63,10 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/my-applications" element={<PrivateRoute><MyApplications /></PrivateRoute>} />
+            <Route path="/my-approvals" element={<PrivateRoute><MyApprovals /></PrivateRoute>} />
+            <Route path="/system-maintenance" element={<PrivateRoute><SystemMaintenance /></PrivateRoute>} />
+            <Route path="/manual-approval" element={<PrivateRoute><ManualApproval /></PrivateRoute>} />
             <Route path="/leave/apply" element={<PrivateRoute><LeaveApplication /></PrivateRoute>} />
             <Route path="/leave/history" element={<PrivateRoute><LeaveHistory /></PrivateRoute>} />
             <Route path="/leave/balance" element={<PrivateRoute><LeaveBalance /></PrivateRoute>} />

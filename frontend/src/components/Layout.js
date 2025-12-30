@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -17,7 +17,8 @@ import {
   Menu,
   MenuItem,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Badge
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -41,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import axios from 'axios';
 
 const drawerWidth = 260;
 
@@ -54,32 +56,52 @@ const Layout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    fetchPendingCount();
+    // 設置定時刷新，每30秒更新一次
+    const interval = setInterval(fetchPendingCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 當路由變化到批核相關頁面時，刷新待批核數量
+  useEffect(() => {
+    if (location.pathname.startsWith('/approval') || location.pathname === '/my-approvals') {
+      fetchPendingCount();
+    }
+  }, [location.pathname]);
+
+  const fetchPendingCount = async () => {
+    try {
+      const response = await axios.get('/api/approvals/pending');
+      const count = response.data.applications?.length || 0;
+      setPendingCount(count);
+    } catch (error) {
+      console.error('獲取待批核數量錯誤:', error);
+      setPendingCount(0);
+    }
+  };
 
   const menuItems = [
     { key: 'dashboard', icon: <DashboardIcon />, path: '/', show: true },
     { key: 'announcements', icon: <NotificationsIcon />, path: '/announcements', show: true },
-    { key: 'applyLeave', icon: <AssignmentIcon />, path: '/leave/apply', show: true },
-    { key: 'leaveHistory', icon: <HistoryIcon />, path: '/leave/history', show: true },
-    { key: 'leaveBalance', icon: <AccountBalanceIcon />, path: '/leave/balance', show: true },
-    { key: 'applyExtraWorkingHours', icon: <WorkIcon />, path: '/extra-working-hours/apply', show: true },
-    { key: 'extraWorkingHoursHistory', icon: <HistoryIcon />, path: '/extra-working-hours/history', show: true },
-    { key: 'applyOutdoorWork', icon: <WorkIcon />, path: '/outdoor-work/apply', show: true },
-    { key: 'outdoorWorkHistory', icon: <HistoryIcon />, path: '/outdoor-work/history', show: true },
+    { key: 'myApplications', icon: <AssignmentIcon />, path: '/my-applications', show: true },
+    { 
+      key: 'myApprovals', 
+      icon: (
+        <Badge badgeContent={pendingCount} color="error" max={99}>
+          <CheckCircleIcon />
+        </Badge>
+      ), 
+      path: '/my-approvals', 
+      show: true 
+    },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'formLibrary', icon: <DescriptionIcon />, path: '/form-library', show: true },
-    { key: 'pendingApproval', icon: <CheckCircleIcon />, path: '/approval/list', show: true },
-    { key: 'approvalHistory', icon: <HistoryIcon />, path: '/approval/history', show: true },
-    { key: 'departmentGroupBalances', icon: <AccountBalanceIcon />, path: '/department-group-balances', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },
-    { key: 'paperFlow', icon: <DescriptionIcon />, path: '/admin/paper-flow', show: isSystemAdmin },
-    { key: 'extraWorkingHoursPaperFlow', icon: <DescriptionIcon />, path: '/admin/extra-working-hours-paper-flow', show: isSystemAdmin },
-    { key: 'outdoorWorkPaperFlow', icon: <DescriptionIcon />, path: '/admin/outdoor-work-paper-flow', show: isSystemAdmin },
-    { key: 'userManagement', icon: <PeopleIcon />, path: '/admin/users', show: isSystemAdmin },
-    { key: 'leaveTypeManagement', icon: <EventNoteIcon />, path: '/admin/leave-types', show: isSystemAdmin },
-    { key: 'balanceManagement', icon: <AccountBalanceWalletIcon />, path: '/admin/balances', show: isSystemAdmin },
-    { key: 'departmentManagement', icon: <BusinessIcon />, path: '/admin/departments', show: isSystemAdmin },
-    { key: 'positionManagement', icon: <WorkIcon />, path: '/admin/positions', show: isSystemAdmin },
-    { key: 'groupManagement', icon: <GroupIcon />, path: '/admin/groups', show: isSystemAdmin }
+    { key: 'manualApproval', icon: <AssignmentIcon />, path: '/manual-approval', show: isSystemAdmin },
+    { key: 'systemMaintenance', icon: <SettingsIcon />, path: '/system-maintenance', show: isSystemAdmin }
   ];
 
   const handleLanguageChange = (lang) => {

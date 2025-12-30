@@ -556,6 +556,22 @@ const Dashboard = () => {
     }
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    const name = user?.display_name || `${user?.surname} ${user?.given_name}`;
+    
+    let greetingKey;
+    if (hour >= 5 && hour < 12) {
+      greetingKey = 'dashboard.greeting.morning';
+    } else if (hour >= 12 && hour < 18) {
+      greetingKey = 'dashboard.greeting.afternoon';
+    } else {
+      greetingKey = 'dashboard.greeting.evening';
+    }
+    
+    return t(greetingKey, { name });
+  };
+
   return (
     <Box>
       <Typography 
@@ -563,7 +579,7 @@ const Dashboard = () => {
         gutterBottom
         sx={{ wordBreak: 'break-word' }}
       >
-        {t('dashboard.welcome', { name: user?.display_name || `${user?.surname} ${user?.given_name}` })}
+        {getGreeting()}
       </Typography>
       <Typography 
         variant="body1" 
