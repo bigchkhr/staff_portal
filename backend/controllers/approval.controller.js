@@ -217,6 +217,83 @@ class ApprovalController {
         // 額外工作時數申報和外勤工作申請不需要處理餘額
         if (updatedApplication.status === 'approved' && application_type !== 'extra_working_hours' && application_type !== 'outdoor_work') {
           try {
+            // 檢查日期範圍重疊：查詢該用戶在該日期範圍內是否有其他已批核或正在申請的假期
+            // 排除當前申請本身、已 reverse 的假期和銷假交易
+            const overlappingApplications = await knex('leave_applications')
+              .where('user_id', updatedApplication.user_id)
+              .where('id', '!=', id) // 排除當前申請本身
+              .where(function() {
+                // 日期範圍重疊的條件：申請的開始日期 <= 新申請的結束日期 且 申請的結束日期 >= 新申請的開始日期
+                this.where('start_date', '<=', updatedApplication.end_date)
+                    .andWhere('end_date', '>=', updatedApplication.start_date);
+              })
+              .where(function() {
+                // 只檢查已批核或待批核的申請
+                this.where('status', 'approved')
+                    .orWhere('status', 'pending');
+              })
+              .where(function() {
+                // 排除已 reverse 的假期（is_reversed = true）
+                this.where('is_reversed', false)
+                    .orWhereNull('is_reversed');
+              })
+              .where(function() {
+                // 排除銷假交易本身
+                this.where('is_reversal_transaction', false)
+                    .orWhereNull('is_reversal_transaction');
+              })
+              .select('id', 'start_date', 'end_date', 'status', 'leave_type_id')
+              .orderBy('created_at', 'desc');
+
+            if (overlappingApplications && overlappingApplications.length > 0) {
+              // 格式化重疊的申請信息
+              const LeaveType = require('../database/models/LeaveType');
+              const overlappingDetails = await Promise.all(
+                overlappingApplications.map(async (app) => {
+                  const type = await LeaveType.findById(app.leave_type_id);
+                  return {
+                    transaction_id: `LA-${String(app.id).padStart(6, '0')}`,
+                    start_date: app.start_date,
+                    end_date: app.end_date,
+                    status: app.status === 'approved' ? '已批核' : '待批核',
+                    leave_type_name: type ? (type.name_zh || type.name) : '未知類型'
+                  };
+                })
+              );
+
+              // 回滾批核操作：將申請狀態改回 pending，並清除當前批核階段的記錄
+              // 因為 updatedApplication.status === 'approved' 表示這是最後一個批核階段
+              // 所以我們需要清除當前階段的批核記錄
+              const rollbackData = {
+                status: 'pending',
+                [`${currentLevel}_at`]: null,
+                [`${currentLevel}_id`]: null,
+                [`${currentLevel}_remarks`]: null
+              };
+
+              // 重新計算 current_approval_stage
+              // 如果當前階段不是 checker，則回到當前階段（因為前一階段已完成）
+              // 如果當前階段是 checker，則保持為 checker
+              if (currentLevel === 'approver_3') {
+                rollbackData.current_approval_stage = 'approver_3';
+              } else if (currentLevel === 'approver_2') {
+                rollbackData.current_approval_stage = 'approver_2';
+              } else if (currentLevel === 'approver_1') {
+                rollbackData.current_approval_stage = 'approver_1';
+              } else {
+                rollbackData.current_approval_stage = 'checker';
+              }
+
+              await knex('leave_applications')
+                .where('id', id)
+                .update(rollbackData);
+
+              return res.status(400).json({ 
+                message: '該日期範圍內已有已批核或正在申請的假期，無法批准此申請',
+                overlapping_applications: overlappingDetails
+              });
+            }
+
             const LeaveType = require('../database/models/LeaveType');
             const leaveType = await LeaveType.findById(updatedApplication.leave_type_id);
             

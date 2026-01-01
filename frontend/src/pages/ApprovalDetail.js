@@ -246,6 +246,41 @@ const ApprovalDetail = () => {
   const handleSubmit = async () => {
     if (!application) return;
 
+    // 如果是批核操作且是假期申請，檢查假期餘額
+    if (action === 'approve' && applicationType === 'leave') {
+      // 檢查是否有假期餘額限制
+      if (application.leave_type_requires_balance && application.leave_balance) {
+        const appliedDays = parseFloat(application.days || 0);
+        const availableBalance = parseFloat(application.leave_balance.balance || 0);
+        
+        // 如果申請的假期日數多於假期餘額，彈出警告框
+        if (appliedDays > availableBalance) {
+          const result = await Swal.fire({
+            icon: 'warning',
+            title: '假期餘額不足',
+            html: `
+              <div style="text-align: left;">
+                <p>申請的假期日數：<strong>${appliedDays}</strong> 天</p>
+                <p>可用假期餘額：<strong>${availableBalance.toFixed(2)}</strong> 天</p>
+                <p style="color: #d32f2f; margin-top: 10px;">申請的假期日數多於可用餘額，是否依然批核？</p>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '依然批核',
+            cancelButtonText: '取消',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            reverseButtons: true
+          });
+
+          // 如果用戶取消，不進行批核
+          if (!result.isConfirmed) {
+            return;
+          }
+        }
+      }
+    }
+
     setApproving(true);
 
     try {
@@ -265,14 +300,49 @@ const ApprovalDetail = () => {
       
       navigate('/approval/list');
     } catch (error) {
-      // 使用 Sweet Alert 顯示錯誤訊息
-      await Swal.fire({
-        icon: 'error',
-        title: '操作失敗',
-        text: error.response?.data?.message || t('approvalDetail.operationFailed'),
-        confirmButtonText: '確定',
-        confirmButtonColor: '#d33'
-      });
+      // 檢查是否為日期範圍重疊錯誤
+      if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {
+        const overlappingApps = error.response.data.overlapping_applications;
+        const formatDate = (dateStr) => {
+          const date = new Date(dateStr);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        };
+        
+        const overlappingList = overlappingApps.map(app => 
+          `<div style="text-align: left; margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
+            <strong>交易編號：</strong>${app.transaction_id}<br/>
+            <strong>假期類型：</strong>${app.leave_type_name}<br/>
+            <strong>日期範圍：</strong>${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}<br/>
+            <strong>狀態：</strong>${app.status}
+          </div>`
+        ).join('');
+        
+        await Swal.fire({
+          icon: 'warning',
+          title: '日期範圍重疊',
+          html: `
+            <div style="text-align: left;">
+              <p style="color: #d32f2f; font-weight: bold; margin-bottom: 15px;">該日期範圍內已有已批核或正在申請的假期，無法批准此申請：</p>
+              ${overlappingList}
+            </div>
+          `,
+          confirmButtonText: '確定',
+          confirmButtonColor: '#d33',
+          width: '600px'
+        });
+        
+        // 重新載入申請詳情以更新狀態
+        await fetchApplication(applicationType);
+      } else {
+        // 使用 Sweet Alert 顯示錯誤訊息
+        await Swal.fire({
+          icon: 'error',
+          title: '操作失敗',
+          text: error.response?.data?.message || t('approvalDetail.operationFailed'),
+          confirmButtonText: '確定',
+          confirmButtonColor: '#d33'
+        });
+      }
     } finally {
       setApproving(false);
     }
@@ -614,6 +684,32 @@ const ApprovalDetail = () => {
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
                   </ListItem>
+                  {application.leave_type_requires_balance && application.leave_balance && (
+                    <ListItem>
+                      <ListItemText 
+                        primary={t('approvalDetail.leaveBalance')}
+                        secondary={
+                          <Box>
+                            <Typography 
+                              variant="body1" 
+                              component="span" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                color: parseFloat(application.leave_balance.balance || 0) < 0 ? 'error.main' : 'inherit'
+                              }}
+                            >
+                              {parseFloat(application.leave_balance.balance || 0).toFixed(2)} {t('approvalDetail.days')}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                              ({t('approvalDetail.totalBalance')}: {parseFloat(application.leave_balance.total || 0).toFixed(2)}, {t('approvalDetail.usedBalance')}: {parseFloat(application.leave_balance.taken || 0).toFixed(2)})
+                            </Typography>
+                          </Box>
+                        }
+                        primaryTypographyProps={{ variant: 'caption' }}
+                        secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                      />
+                    </ListItem>
+                  )}
                   <ListItem>
                     <ListItemText 
                       primary={t('approvalDetail.applicationDate')}
@@ -646,6 +742,7 @@ const ApprovalDetail = () => {
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
                   </ListItem>
+
                 </>
               )}
               <ListItem>

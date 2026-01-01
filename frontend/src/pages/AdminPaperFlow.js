@@ -249,14 +249,46 @@ const AdminPaperFlow = () => {
       setYearManuallySet(false); // 重置年份手動設置標記
       setSelectedUser(null);
     } catch (error) {
-      // 使用 Sweet Alert 顯示錯誤訊息
-      await Swal.fire({
-        icon: 'error',
-        title: t('adminPaperFlow.submitFailed'),
-        text: error.response?.data?.message || t('adminPaperFlow.submitError'),
-        confirmButtonText: t('common.confirm'),
-        confirmButtonColor: '#d33'
-      });
+      // 檢查是否為日期範圍重疊錯誤
+      if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {
+        const overlappingApps = error.response.data.overlapping_applications;
+        const formatDate = (dateStr) => {
+          const date = new Date(dateStr);
+          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        };
+        
+        const overlappingList = overlappingApps.map(app => 
+          `<div style="text-align: left; margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
+            <strong>交易編號：</strong>${app.transaction_id}<br/>
+            <strong>假期類型：</strong>${app.leave_type_name}<br/>
+            <strong>日期範圍：</strong>${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}<br/>
+            <strong>狀態：</strong>${app.status}
+          </div>`
+        ).join('');
+        
+        await Swal.fire({
+          icon: 'warning',
+          title: '日期範圍重疊',
+          html: `
+            <div style="text-align: left;">
+              <p style="color: #d32f2f; font-weight: bold; margin-bottom: 15px;">該日期範圍內已有已批核或正在申請的假期，無法重複申請：</p>
+              ${overlappingList}
+            </div>
+          `,
+          confirmButtonText: '確定',
+          confirmButtonColor: '#d33',
+          width: '600px'
+        });
+      } else {
+        // 使用 Sweet Alert 顯示錯誤訊息
+        await Swal.fire({
+          icon: 'error',
+          title: t('adminPaperFlow.submitFailed'),
+          text: error.response?.data?.message || t('adminPaperFlow.submitError'),
+          confirmButtonText: t('common.confirm'),
+          confirmButtonColor: '#d33'
+        });
+      }
     } finally {
       setLoading(false);
     }

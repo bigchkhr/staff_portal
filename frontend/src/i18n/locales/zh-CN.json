@@ -379,7 +379,10 @@
     "pending": "待批核",
     "approved": "已批准",
     "rejected": "已拒绝",
-    "reason": "原因"
+    "reason": "原因",
+    "leaveBalance": "假期余额",
+    "totalBalance": "总额",
+    "usedBalance": "已使用"
   },
   "employeeDocuments": {
     "title": "我的文件",

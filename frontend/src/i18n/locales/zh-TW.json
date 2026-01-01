@@ -384,7 +384,10 @@
     "stageApprover1": "第一批核",
     "stageApprover2": "第二批核",
     "stageApprover3": "第三批核",
-    "stageCompleted": "已完成"
+    "stageCompleted": "已完成",
+    "leaveBalance": "假期餘額",
+    "totalBalance": "總額",
+    "usedBalance": "已使用"
   },
   "employeeDocuments": {
     "title": "我的文件",

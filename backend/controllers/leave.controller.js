@@ -90,6 +90,54 @@ class LeaveController {
         }
       }
 
+      // 檢查日期範圍重疊：查詢該用戶在該日期範圍內是否有已批核或正在申請的假期
+      const knex = require('../config/database');
+      const overlappingApplications = await knex('leave_applications')
+        .where('user_id', applicantId)
+        .where(function() {
+          // 日期範圍重疊的條件：申請的開始日期 <= 新申請的結束日期 且 申請的結束日期 >= 新申請的開始日期
+          this.where('start_date', '<=', end_date)
+              .andWhere('end_date', '>=', start_date);
+        })
+        .where(function() {
+          // 只檢查已批核或待批核的申請
+          this.where('status', 'approved')
+              .orWhere('status', 'pending');
+        })
+        .where(function() {
+          // 排除已 reverse 的假期（is_reversed = true）
+          this.where('is_reversed', false)
+              .orWhereNull('is_reversed');
+        })
+        .where(function() {
+          // 排除銷假交易本身
+          this.where('is_reversal_transaction', false)
+              .orWhereNull('is_reversal_transaction');
+        })
+        .select('id', 'start_date', 'end_date', 'status', 'leave_type_id')
+        .orderBy('created_at', 'desc');
+
+      if (overlappingApplications && overlappingApplications.length > 0) {
+        // 格式化重疊的申請信息
+        const overlappingDetails = await Promise.all(
+          overlappingApplications.map(async (app) => {
+            const type = await LeaveType.findById(app.leave_type_id);
+            return {
+              transaction_id: app.transaction_id || `LA-${String(app.id).padStart(6, '0')}`,
+              start_date: app.start_date,
+              end_date: app.end_date,
+              status: app.status === 'approved' ? '已批核' : '待批核',
+              leave_type_name: type ? (type.name_zh || type.name) : '未知類型'
+            };
+          })
+        );
+
+        return res.status(400).json({ 
+          message: '該日期範圍內已有已批核或正在申請的假期，無法重複申請',
+          overlapping_applications: overlappingDetails
+        });
+      }
+
       const applicationData = {
         user_id: applicantId,
         leave_type_id,
@@ -302,6 +350,22 @@ class LeaveController {
       if (!canView) {
         console.log(`[getApplicationById] 返回 403: 無權限查看此申請`);
         return res.status(403).json({ message: '無權限查看此申請' });
+      }
+
+      // 如果該假期類型需要餘額，計算並返回實時餘額
+      if (application.leave_type_requires_balance && application.user_id && application.leave_type_id && application.year) {
+        try {
+          const LeaveBalance = require('../database/models/LeaveBalance');
+          const balanceInfo = await LeaveBalance.findByUserAndType(
+            application.user_id,
+            application.leave_type_id,
+            application.year
+          );
+          application.leave_balance = balanceInfo;
+        } catch (error) {
+          console.error('Error calculating leave balance:', error);
+          // 如果計算餘額出錯，不影響返回申請數據，只是不包含餘額信息
+        }
       }
 
       console.log(`[getApplicationById] 通過權限檢查，返回申請`);
