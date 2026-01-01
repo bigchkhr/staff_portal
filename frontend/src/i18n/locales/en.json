@@ -86,9 +86,9 @@
   "dashboard": {
     "welcome": "Welcome, {{name}}",
     "greeting": {
-      "morning": "Good Morning, {{name}}",
-      "afternoon": "Good Afternoon, {{name}}",
-      "evening": "Good Evening, {{name}}"
+      "morning": "Morning, {{name}}",
+      "afternoon": "Afternoon, {{name}}",
+      "evening": "Evening, {{name}}"
     },
     "pendingApplications": "Pending Applications",
     "pendingApprovals": "Pending Approvals",
@@ -401,7 +401,7 @@
     "noDocuments": "No documents",
     "fetchError": "Error fetching document list",
     "downloadError": "Error downloading file",
-    "disclaimer": "Documents might accompanied by a password encryption comprising the first 5 alphanumeric characters of your Hong Kong ID, your complete English surname, and last 2 digits of your year of birth. For example, if your Hong Kong identity card number is A123456(7), your English surname is CHAO, and your date of birth is 1998-05-09, then your password would be A12345CHAO98. Please keep your personal information confidential and never provide it to any party."
+    "disclaimer": "Documents might accompanied by a password encryption comprising the first 5 alphanumeric characters of your Hong Kong ID, your complete English surname, and last 2 digits of your year of birth. For example, if your Hong Kong identity card number is A123456(7), your English surname is CHAO, and your date of birth is 1998-05-09, then your password would be A1234CHAO98. Please keep your personal information confidential and never provide it to any party."
   },
   "approvalHistory": {
     "title": "Approval History",
@@ -883,7 +883,19 @@
     "active": "Active",
     "deactivated": "Deactivated",
     "edit": "Edit",
-    "noUsers": "No users"
+    "noUsers": "No users",
+    "editUser": "Edit User",
+    "surname": "Surname",
+    "givenName": "Given Name",
+    "alias": "Alias",
+    "chineseName": "Chinese Name",
+    "displayName": "Display Name",
+    "newPassword": "New Password (leave blank to keep unchanged)",
+    "password": "Password",
+    "accountDeactivated": "Account Deactivated (Cannot Login)",
+    "accountActive": "Account Active",
+    "enterPassword": "Please enter password",
+    "operationFailed": "Operation failed"
   },
   "adminLeaveTypes": {
     "title": "Leave Type Management",
@@ -1011,7 +1023,8 @@
     "close": "Close",
     "addMemberFailed": "Failed to add member",
     "removeMemberFailed": "Failed to remove member",
-    "cannotLoadMembers": "Cannot load member list"
+    "cannotLoadMembers": "Cannot load member list",
+    "noUsersAvailable": "No users available to add"
   },
   "language": {
     "zhTW": "繁體中文",

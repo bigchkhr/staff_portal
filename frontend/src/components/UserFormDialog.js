@@ -15,8 +15,10 @@ import {
   Box
 } from '@mui/material';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 
 const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null }) => {
+  const { t, i18n } = useTranslation();
   const [formData, setFormData] = useState({
     employee_number: '',
     surname: '',
@@ -96,7 +98,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
       const submitData = { ...formData };
       
       if (!editing && !submitData.password) {
-        alert('請輸入密碼');
+        alert(t('adminUsers.enterPassword'));
         return;
       }
       if (!submitData.password) {
@@ -114,7 +116,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
         onSuccess();
       }
     } catch (error) {
-      alert(error.response?.data?.message || '操作失敗');
+      alert(error.response?.data?.message || t('adminUsers.operationFailed'));
     }
   };
 
@@ -125,87 +127,91 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{editing ? '編輯用戶' : '新增用戶'}</DialogTitle>
+      <DialogTitle>{editing ? t('adminUsers.editUser') : t('adminUsers.addUser')}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <TextField
-            label="員工編號"
+            label={t('adminUsers.employeeNumber')}
             value={formData.employee_number}
             onChange={handleChange('employee_number')}
             required
             disabled={!!editing}
           />
           <TextField
-            label="姓氏"
+            label={t('adminUsers.surname')}
             value={formData.surname}
             onChange={handleChange('surname')}
             required
           />
           <TextField
-            label="名字"
+            label={t('adminUsers.givenName')}
             value={formData.given_name}
             onChange={handleChange('given_name')}
             required
           />
           <TextField
-            label="別名"
+            label={t('adminUsers.alias')}
             value={formData.alias}
             onChange={handleChange('alias')}
           />
           <TextField
-            label="中文姓名"
+            label={t('adminUsers.chineseName')}
             value={formData.name_zh}
             onChange={handleChange('name_zh')}
             required
           />
           <TextField
-            label="Display Name"
+            label={t('adminUsers.displayName')}
             value={formData.display_name}
             onChange={handleChange('display_name')}
           />
           <TextField
-            label="電子郵件"
+            label={t('adminUsers.email')}
             type="email"
             value={formData.email}
             onChange={handleChange('email')}
           />
           <TextField
-            label={editing ? '新密碼（留空則不更改）' : '密碼'}
+            label={editing ? t('adminUsers.newPassword') : t('adminUsers.password')}
             type="password"
             value={formData.password}
             onChange={handleChange('password')}
             required={!editing}
           />
           <FormControl>
-            <InputLabel>部門</InputLabel>
+            <InputLabel>{t('adminUsers.department')}</InputLabel>
             <Select
               value={formData.department_id}
-              label="部門"
+              label={t('adminUsers.department')}
               onChange={handleChange('department_id')}
             >
               {departments.map((dept) => (
                 <MenuItem key={dept.id} value={dept.id}>
-                  {dept.name_zh}
+                  {i18n.language === 'en' 
+                    ? (dept.name || dept.name_zh || '-')
+                    : (dept.name_zh || dept.name || '-')}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
           <FormControl>
-            <InputLabel>職位</InputLabel>
+            <InputLabel>{t('adminUsers.position')}</InputLabel>
             <Select
               value={formData.position_id}
-              label="職位"
+              label={t('adminUsers.position')}
               onChange={handleChange('position_id')}
             >
               {positions.map((pos) => (
                 <MenuItem key={pos.id} value={pos.id}>
-                  {pos.name_zh}
+                  {i18n.language === 'en' 
+                    ? (pos.name || pos.name_zh || '-')
+                    : (pos.name_zh || pos.name || '-')}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
           <TextField
-            label="入職日期"
+            label={t('adminUsers.hireDate')}
             type="date"
             value={formData.hire_date}
             onChange={handleChange('hire_date')}
@@ -221,13 +227,13 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
                 color="error"
               />
             )}
-            label={formData.deactivated ? '帳戶已停用（無法登入）' : '帳戶啟用中'}
+            label={formData.deactivated ? t('adminUsers.accountDeactivated') : t('adminUsers.accountActive')}
           />
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>取消</Button>
-        <Button onClick={handleSubmit} variant="contained">儲存</Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button onClick={handleSubmit} variant="contained">{t('common.save')}</Button>
       </DialogActions>
     </Dialog>
   );

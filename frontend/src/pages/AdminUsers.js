@@ -32,7 +32,9 @@ const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
     ? (user.department_name || user.department_name_zh || '-')
     : (user.department_name_zh || user.department_name || '-');
   const displayName = user.display_name || user.name_zh || '-';
-  const positionName = user.position_name_zh || '-';
+  const positionName = i18n.language === 'en' 
+    ? (user.position_name || user.position_name_zh || '-')
+    : (user.position_name_zh || user.position_name || '-');
   const hireDate = formatDate(user.hire_date);
   const statusText = user.deactivated ? t('adminUsers.deactivated') : t('adminUsers.active');
   

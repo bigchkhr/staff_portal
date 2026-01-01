@@ -6,7 +6,8 @@ class GroupController {
   
   async getDepartmentGroups(req, res) {
     try {
-      const groups = await DepartmentGroup.findAll();
+      const { closed } = req.query; // 支援 closed 參數篩選：'true', 'false', 或 undefined (全部)
+      const groups = await DepartmentGroup.findAll(closed);
       res.json({ groups });
     } catch (error) {
       console.error('Get department groups error:', error);
@@ -40,7 +41,7 @@ class GroupController {
       }
       
       // 過濾和處理資料，將空字串轉換為 null（對於 ID 欄位）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
@@ -86,7 +87,7 @@ class GroupController {
       console.log('[updateDepartmentGroup] 更新數據:', JSON.stringify(groupData, null, 2));
       
       // 過濾掉不需要更新的字段（如果有的話）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
@@ -96,6 +97,9 @@ class GroupController {
             filteredData[key] = groupData[key] === '' || groupData[key] === null || groupData[key] === undefined 
               ? null 
               : Number(groupData[key]);
+          } else if (key === 'closed') {
+            // 確保 closed 是 boolean
+            filteredData[key] = Boolean(groupData[key]);
           } else {
             filteredData[key] = groupData[key];
           }
@@ -132,12 +136,11 @@ class GroupController {
 
   async deleteDepartmentGroup(req, res) {
     try {
-      const { id } = req.params;
-      await DepartmentGroup.delete(id);
-      res.json({ message: '部門群組刪除成功' });
+      // 部門群組不可刪除，只能關閉
+      return res.status(403).json({ message: '部門群組不可刪除，請使用關閉功能' });
     } catch (error) {
       console.error('Delete department group error:', error);
-      res.status(500).json({ message: '刪除部門群組時發生錯誤' });
+      res.status(500).json({ message: '操作時發生錯誤' });
     }
   }
 
@@ -207,7 +210,8 @@ class GroupController {
   
   async getDelegationGroups(req, res) {
     try {
-      const groups = await DelegationGroup.findAll();
+      const { closed } = req.query; // 支援 closed 參數篩選：'true', 'false', 或 undefined (全部)
+      const groups = await DelegationGroup.findAll(closed);
       res.json({ groups });
     } catch (error) {
       console.error('Get delegation groups error:', error);
@@ -241,7 +245,7 @@ class GroupController {
       }
       
       // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'description', 'user_ids'];
+      const allowedFields = ['name', 'name_zh', 'description', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
@@ -249,6 +253,9 @@ class GroupController {
           // 對於 description，空字串轉換為 null
           if (key === 'description') {
             filteredData[key] = groupData[key] === '' ? null : groupData[key];
+          } else if (key === 'closed') {
+            // 確保 closed 是 boolean
+            filteredData[key] = Boolean(groupData[key]);
           } else {
             filteredData[key] = groupData[key];
           }
@@ -282,7 +289,7 @@ class GroupController {
       const groupData = req.body;
       
       // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'description', 'user_ids'];
+      const allowedFields = ['name', 'name_zh', 'description', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
@@ -290,6 +297,9 @@ class GroupController {
           // 對於 description，空字串轉換為 null
           if (key === 'description') {
             filteredData[key] = groupData[key] === '' ? null : groupData[key];
+          } else if (key === 'closed') {
+            // 確保 closed 是 boolean
+            filteredData[key] = Boolean(groupData[key]);
           } else {
             filteredData[key] = groupData[key];
           }
@@ -324,12 +334,11 @@ class GroupController {
 
   async deleteDelegationGroup(req, res) {
     try {
-      const { id } = req.params;
-      await DelegationGroup.delete(id);
-      res.json({ message: '授權群組刪除成功' });
+      // 授權群組不可刪除，只能關閉
+      return res.status(403).json({ message: '授權群組不可刪除，請使用關閉功能' });
     } catch (error) {
       console.error('Delete delegation group error:', error);
-      res.status(500).json({ message: '刪除授權群組時發生錯誤' });
+      res.status(500).json({ message: '操作時發生錯誤' });
     }
   }
 

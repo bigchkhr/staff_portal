@@ -7,6 +7,7 @@ exports.up = function(knex) {
       table.string('name_zh', 100);
       table.text('description');
       table.specificType('user_ids', 'integer[]').defaultTo('{}');
+      table.boolean('closed').defaultTo(false);
       table.timestamps(true, true);
     })
     // 建立部門群組表 (Department Groups)
@@ -20,6 +21,7 @@ exports.up = function(knex) {
       table.integer('approver_1_id').unsigned().references('id').inTable('delegation_groups').onDelete('SET NULL');
       table.integer('approver_2_id').unsigned().references('id').inTable('delegation_groups').onDelete('SET NULL');
       table.integer('approver_3_id').unsigned().references('id').inTable('delegation_groups').onDelete('SET NULL');
+      table.boolean('closed').defaultTo(false);
       table.timestamps(true, true);
     });
 };

@@ -106,127 +106,127 @@ exports.seed = async function (knex) {
   // 建立職位
   await knex('positions').insert([
     { name: 'System', name_zh: '系統', description: '系統' },
-    { name: 'Managing Director', name_zh: 'Managing Director', description: 'Managing Director' },
-    { name: 'Financial Controller', name_zh: 'Financial Controller', description: ' Financial Controller' },
-    { name: 'Assistant Accounting Manager ', name_zh: 'Assistant Accounting Manager  ', description: 'Assistant Accounting Manager ' },
-    { name: 'Assistant Category Manager', name_zh: 'Assistant Category Manager ', description: 'Assistant Category Manager' },
-    { name: 'Project Executive', name_zh: 'Project Executive', description: 'Project Executive' },
-    { name: 'Senior Accounting Manager', name_zh: 'Senior Accounting Manager', description: 'Senior Accounting Manager' },
-    { name: 'Category Manager', name_zh: 'Category Manager', description: 'Category Manager' },
+    { name: 'Managing Director', name_zh: 'Managing Director', description: '' },
+    { name: 'Financial Controller', name_zh: 'Financial Controller', description: '' },
+    { name: 'Assistant Accounting Manager ', name_zh: 'Assistant Accounting Manager', description: '' },
+    { name: 'Assistant Category Manager', name_zh: 'Assistant Category Manager ', description: '' },
+    { name: 'Project Executive', name_zh: 'Project Executive', description: '' },
+    { name: 'Senior Accounting Manager', name_zh: 'Senior Accounting Manager', description: '' },
+    { name: 'Category Manager', name_zh: 'Category Manager', description: '' },
     { name: 'Accounting Officer', name_zh: 'Accounting Officer', description: 'Accounting Officer' },
-    { name: 'Part-Time Accounting Clerk', name_zh: 'Part-Time Accounting Clerk', description: 'Part-Time Accounting Clerk' },
-    { name: 'Accountant', name_zh: 'Accountant', description: 'Accountant' },
-    { name: 'Senior Category Manager', name_zh: 'Senior Category Manager', description: 'Senior Category Manager' },
-    { name: 'Project Supervisor', name_zh: 'Project Supervisor', description: 'Project Supervisor' },
-    { name: 'Senior Merchandiser', name_zh: 'Senior Merchandiser', description: 'Senior Merchandiser' },
-    { name: 'Business Analyst', name_zh: 'Business Analyst', description: 'Business Analyst' },
-    { name: 'Technician', name_zh: 'Technician', description: 'Technician' },
-    { name: 'Product Development Manager', name_zh: 'Product Development Manager', description: 'Product Development Manager' },
-    { name: 'Senior Accounts Clerk', name_zh: 'Senior Accounts Clerk', description: 'Senior Accounts Clerk' },
-    { name: 'Commercial Manager', name_zh: 'Commercial Manager', description: 'Commercial Manager' },
-    { name: 'Assistant Merchandising Admin Manager', name_zh: 'Assistant Merchandising Admin Manager', description: 'Assistant Merchandising Admin Manager' },
-    { name: 'Senior Merchandising Manager', name_zh: 'Senior Merchandising Manager', description: 'Senior Merchandising Manager' },
-    { name: 'Senior Buyer', name_zh: 'Senior Buyer', description: 'Senior Buyer' },
-    { name: 'Head of Merchandising', name_zh: 'Head of Merchandising', description: 'Head of Merchandising' },
-    { name: 'Office Assistant', name_zh: 'Office Assistant', description: 'Office Assistant' },
-    { name: 'General Administration Manager', name_zh: 'General Administration Manager', description: 'General Administration Manager' },
-    { name: 'Administration Officer', name_zh: 'Administration Officer', description: 'Administration Officer' },
-    { name: 'Assistant Business Development Manager', name_zh: 'Assistant Business Development Manager', description: 'Assistant Business Development Manager' },
-    { name: 'Human Resources Manager', name_zh: 'Human Resources Manager', description: 'Human Resources Manager' },
-    { name: 'Assistant Merchandiser', name_zh: 'Assistant Merchandiser', description: 'Assistant Merchandiser' },
-    { name: 'Senior HR Officer', name_zh: 'Senior HR Officer', description: 'Senior HR Officer' },
-    { name: 'Assistant Manager (E-Business & IT)', name_zh: 'Assistant Manager (E-Business & IT)', description: 'Assistant Manager (E-Business & IT)' },
+    { name: 'Part-Time Accounting Clerk', name_zh: 'Part-Time Accounting Clerk', description: '' },
+    { name: 'Accountant', name_zh: 'Accountant', description: '' },
+    { name: 'Senior Category Manager', name_zh: 'Senior Category Manager', description: '' },
+    { name: 'Project Supervisor', name_zh: 'Project Supervisor', description: '' },
+    { name: 'Senior Merchandiser', name_zh: 'Senior Merchandiser', description: '' },
+    { name: 'Business Analyst', name_zh: 'Business Analyst', description: '' },
+    { name: 'Technician', name_zh: 'Technician', description: '' },
+    { name: 'Product Development Manager', name_zh: 'Product Development Manager', description: '' },
+    { name: 'Senior Accounts Clerk', name_zh: 'Senior Accounts Clerk', description: '' },
+    { name: 'Commercial Manager', name_zh: 'Commercial Manager', description: '' },
+    { name: 'Assistant Merchandising Admin Manager', name_zh: 'Assistant Merchandising Admin Manager', description: '' },
+    { name: 'Senior Merchandising Manager', name_zh: 'Senior Merchandising Manager', description: '' },
+    { name: 'Senior Buyer', name_zh: 'Senior Buyer', description: '' },
+    { name: 'Head of Merchandising', name_zh: 'Head of Merchandising', description: '' },
+    { name: 'Office Assistant', name_zh: 'Office Assistant', description: '' },
+    { name: 'General Administration Manager', name_zh: 'General Administration Manager', description: '' },
+    { name: 'Administration Officer', name_zh: 'Administration Officer', description: '' },
+    { name: 'Assistant Business Development Manager', name_zh: 'Assistant Business Development Manager', description: '' },
+    { name: 'Human Resources Manager', name_zh: 'Human Resources Manager', description: '' },
+    { name: 'Assistant Merchandiser', name_zh: 'Assistant Merchandiser', description: '' },
+    { name: 'Senior HR Officer', name_zh: 'Senior HR Officer', description: '' },
+    { name: 'Assistant Manager (E-Business & IT)', name_zh: 'Assistant Manager (E-Business & IT)', description: '' },
     { name: 'Promoter', name_zh: 'Promoter', description: 'Promoter' },
-    { name: 'Store Manager', name_zh: 'Store Manager', description: 'Store Manager' },
-    { name: 'Senior Customer Service Associate', name_zh: 'Senior Customer Service Associate', description: 'Senior Customer Service Associate' },
-    { name: 'Assistant Area Manager', name_zh: 'Assistant Area Manager', description: 'Assistant Area Manager' },
-    { name: 'Store Supervisor', name_zh: 'Store Supervisor', description: 'Store Supervisor' },
-    { name: 'Senior Store Manager', name_zh: 'Senior Store Manager', description: 'Senior Store Manager' },
-    { name: 'Customer Service Associate', name_zh: 'Customer Service Associate', description: 'Customer Service Associate' },
-    { name: 'COO - International Business North Asia & Managing Director of BigC (HK)', name_zh: 'COO - International Business North Asia & Managing Director of BigC (HK) ', description: ' COO - International Business North Asia & Managing Director of BigC (HK)' },
+    { name: 'Store Manager', name_zh: 'Store Manager', description: '' },
+    { name: 'Senior Customer Service Associate', name_zh: 'Senior Customer Service Associate', description: '' },
+    { name: 'Assistant Area Manager', name_zh: 'Assistant Area Manager', description: '' },
+    { name: 'Store Supervisor', name_zh: 'Store Supervisor', description: '' },
+    { name: 'Senior Store Manager', name_zh: 'Senior Store Manager', description: '' },
+    { name: 'Customer Service Associate', name_zh: 'Customer Service Associate', description: '' },
+    { name: 'COO - International Business North Asia & Managing Director of BigC (HK)', name_zh: 'COO - International Business North Asia & Managing Director of BigC (HK) ', description: '' },
     { name: 'Store Keeper', name_zh: 'Store Keeper', description: 'Store Keeper' },
-    { name: 'Part Time Promoter', name_zh: 'Part Time Promoter', description: 'Part Time Promoter' },
-    { name: 'Part Time Store Supervisor', name_zh: 'Part Time Store Supervisor', description: 'Part Time Store Supervisor' },
-    { name: 'Part Time Customer Service Associate', name_zh: 'Part Time Customer Service Associate', description: 'Part Time Customer Service Associate' },
-    { name: 'Part Time Store Keeper', name_zh: 'Part Time Store Keeper', description: 'Part Time Store Keeper' },
-    { name: 'Creative Manager', name_zh: 'Creative Manager', description: 'Creative Manager' },
-    { name: 'Retail Operation Executive', name_zh: 'Retail Operation Executive', description: 'Retail Operation Executive' },
-    { name: 'Merchandising Assistant', name_zh: 'Merchandising Assistant ', description: 'Merchandising Assistant' },
-    { name: 'Project Manager ', name_zh: 'Project Manager', description: 'Project Manager' },
-    { name: 'Accounts Clerk', name_zh: 'Accounts Clerk', description: 'Accounts Clerk' },
-    { name: 'IT Manager', name_zh: 'IT Manager', description: 'IT Manager' },
-    { name: 'Sales Admin Assistant', name_zh: 'Sales Admin Assistant', description: 'Sales Admin Assistant' },
-    { name: 'Training Manager', name_zh: 'Training Manager', description: 'Training Manager' },
-    { name: 'Senior Retail Operation Executive', name_zh: 'Senior Retail Operation Executive', description: 'Senior Retail Operation Executive' },
+    { name: 'Part Time Promoter', name_zh: 'Part Time Promoter', description: '' },
+    { name: 'Part Time Store Supervisor', name_zh: 'Part Time Store Supervisor', description: '' },
+    { name: 'Part Time Customer Service Associate', name_zh: 'Part Time Customer Service Associate', description: '' },
+    { name: 'Part Time Store Keeper', name_zh: 'Part Time Store Keeper', description: '' },
+    { name: 'Creative Manager', name_zh: 'Creative Manager', description: '' },
+    { name: 'Retail Operation Executive', name_zh: 'Retail Operation Executive', description: '' },
+    { name: 'Merchandising Assistant', name_zh: 'Merchandising Assistant ', description: '' },
+    { name: 'Project Manager ', name_zh: 'Project Manager', description: '' },
+    { name: 'Accounts Clerk', name_zh: 'Accounts Clerk', description: '' },
+    { name: 'IT Manager', name_zh: 'IT Manager', description: '' },
+    { name: 'Sales Admin Assistant', name_zh: 'Sales Admin Assistant', description: '' },
+    { name: 'Training Manager', name_zh: 'Training Manager', description: '' },
+    { name: 'Senior Retail Operation Executive', name_zh: 'Senior Retail Operation Executive', description: '' },
     { name: 'Senior IT Officer', name_zh: 'Senior IT Officer', description: 'Senior IT Officer' },
-    { name: 'Assistant Head of Operation', name_zh: 'Assistant Head of Operation', description: 'Assistant Head of Operation' },
-    { name: 'Retail Operation Manager', name_zh: 'Retail Operation Manager', description: 'Retail Operation Manager' },
-    { name: 'Assistant Vice President of Retail Operation', name_zh: 'Assistant Vice President of Retail Operation', description: 'Assistant Vice President of Retail Operation' },
-    { name: 'Inventory Planning Manager', name_zh: 'Inventory Planning Manager', description: 'Inventory Planning Manager' },
-    { name: 'Assistant Inventory Control Manager', name_zh: 'Assistant Inventory Control Manager', description: 'Assistant Inventory Control Manager' },
-    { name: 'IT Officer', name_zh: 'IT Officer', description: ' IT Officer' },
-    { name: 'Inventory Planning Manager ', name_zh: 'Inventory Planning Manager  ', description: 'Inventory Planning Manager ' },
-    { name: 'Assistant Inventory Management Manager', name_zh: 'Assistant Inventory Management Manager', description: 'Assistant Inventory Management Manager ' },
-    { name: 'Assistant Inventory Management Manager', name_zh: 'Assistant Inventory Management Manager', description: 'Assistant Inventory Management Manager' },
-    { name: 'IT Support Officer', name_zh: 'IT Support Officer', description: 'IT Support Officer' },
-    { name: 'Assistant Property Manager', name_zh: 'Assistant Property Manager', description: 'Assistant Property Manager' },
-    { name: 'E-Commerce & Business Development Manager', name_zh: 'E-Commerce & Business Development Manager', description: 'E-Commerce & Business Development Manager' },
-    { name: 'Assistant Finance Manager', name_zh: 'Assistant Finance Manager', description: 'Assistant Finance Manager' },
-    { name: 'Driver', name_zh: 'Driver', description: 'Driver' },
-    { name: 'Assistant Project Manager', name_zh: 'Assistant Project Manager', description: 'Assistant Project Manager' },
-    { name: 'Part Time Retail Operation Assistant', name_zh: 'Part Time Retail Operation Assistant', description: 'Part Time Retail Operation Assistant' },
-    { name: 'Senior Supply Chain Manager', name_zh: 'Senior Supply Chain Manager', description: 'Senior Supply Chain Manager' },
-    { name: 'Intern Part Time Customer Service Associate', name_zh: 'Intern Part Time Customer Service Associate', description: 'Intern Part Time Customer Service Associate' },
-    { name: 'Intern Customer Service Associate', name_zh: 'Intern Customer Service Associate', description: 'Intern Customer Service Associate' },
-    { name: 'Sales Manager', name_zh: 'Sales Manager', description: 'Sales Manager' },
-    { name: 'Marketing Specialist', name_zh: 'Marketing Specialist', description: 'Marketing Specialist' },
-    { name: 'Assistant Accountant', name_zh: 'Assistant Accountant', description: 'Assistant Accountant' },
-    { name: 'Sales Executive', name_zh: 'Sales Executive', description: 'Sales Executive' },
-    { name: 'Area Supervisor', name_zh: 'Area Supervisor', description: 'Area Supervisor' },
-    { name: 'Office Intern', name_zh: 'Office Intern', description: 'Office Intern' },
-    { name: 'Part Time E-Commerce Assistant', name_zh: 'Part Time E-Commerce Assistant', description: 'Part Time E-Commerce Assistant' }
+    { name: 'Assistant Head of Operation', name_zh: 'Assistant Head of Operation', description: '' },
+    { name: 'Retail Operation Manager', name_zh: 'Retail Operation Manager', description: '' },
+    { name: 'Assistant Vice President of Retail Operation', name_zh: 'Assistant Vice President of Retail Operation', description: '' },
+    { name: 'Inventory Planning Manager', name_zh: 'Inventory Planning Manager', description: '' },
+    { name: 'Assistant Inventory Control Manager', name_zh: 'Assistant Inventory Control Manager', description: '' },
+    { name: 'IT Officer', name_zh: 'IT Officer', description: '' },
+    { name: 'Inventory Planning Manager ', name_zh: 'Inventory Planning Manager  ', description: '' },
+    { name: 'Assistant Inventory Management Manager', name_zh: 'Assistant Inventory Management Manager', description: '' },
+    { name: 'Assistant Inventory Management Manager', name_zh: 'Assistant Inventory Management Manager', description: '' },
+    { name: 'IT Support Officer', name_zh: 'IT Support Officer', description: '' },
+    { name: 'Assistant Property Manager', name_zh: 'Assistant Property Manager', description: '' },
+    { name: 'E-Commerce & Business Development Manager', name_zh: 'E-Commerce & Business Development Manager', description: '' },
+    { name: 'Assistant Finance Manager', name_zh: 'Assistant Finance Manager', description: '' },
+    { name: 'Driver', name_zh: 'Driver', description: '' },
+    { name: 'Assistant Project Manager', name_zh: 'Assistant Project Manager', description: '' },
+    { name: 'Part Time Retail Operation Assistant', name_zh: 'Part Time Retail Operation Assistant', description: '' },
+    { name: 'Senior Supply Chain Manager', name_zh: 'Senior Supply Chain Manager', description: '' },
+    { name: 'Intern Part Time Customer Service Associate', name_zh: 'Intern Part Time Customer Service Associate', description: '' },
+    { name: 'Intern Customer Service Associate', name_zh: 'Intern Customer Service Associate', description: '' },
+    { name: 'Sales Manager', name_zh: 'Sales Manager', description: '' },
+    { name: 'Marketing Specialist', name_zh: 'Marketing Specialist', description: '' },
+    { name: 'Assistant Accountant', name_zh: 'Assistant Accountant', description: '' },
+    { name: 'Sales Executive', name_zh: 'Sales Executive', description: '' },
+    { name: 'Area Supervisor', name_zh: 'Area Supervisor', description: '' },
+    { name: 'Office Intern', name_zh: 'Office Intern', description: '' },
+    { name: 'Part Time E-Commerce Assistant', name_zh: 'Part Time E-Commerce Assistant', description: '' }
   ]);
 
   // 建立授權群組 (Delegation Groups)
   const delegationGroups = await knex('delegation_groups').insert([
-    { name: 'HR Group', name_zh: 'HR群組', description: '人力資源授權群組', user_ids: [1, 29, 31] },
-    { name: 'Accounting', name_zh: '會計授權群組', description: '會計部授權群組', user_ids: [3] },
-    { name: 'B2B', name_zh: '企客業務授權群組', description: '企客業務部授權群組', user_ids: [450,451] },
-    { name: 'Business Development', name_zh: '業務拓展授權群組', description: '業務拓展部授權群組', user_ids: [] },
-    { name: 'Category', name_zh: '品類授權群組', description: '品類部授權群組', user_ids: [] },
-    { name: 'General Administration', name_zh: '行政授權群組', description: '行政部授權群組', user_ids: [26] },
-    { name: 'Human Resources', name_zh: '人力資源授權群組', description: '人力資源部授權群組', user_ids: [29] },
-    { name: 'IT', name_zh: '資訊科技授權群組', description: '資訊科技部授權群組', user_ids: [32] },
-    { name: 'Marketing', name_zh: '市場推廣授權群組', description: '市場推廣部授權群組', user_ids: [] },
-    { name: 'Merchandising', name_zh: '採購授權群組', description: '採購部授權群組', user_ids: [23] },
-    { name: 'Project', name_zh: '專案授權群組', description: '專案部授權群組', user_ids: [] },
-    { name: 'Retail Heads', name_zh: '零售主管授權群組', description: '零售部主管授權群組', user_ids: [284, 265] },
-    { name: 'Retail Checker', name_zh: '零售檢查授權群組', description: '零售部檢查授權群組', user_ids: [] },
-    { name: 'Supply Chain and Logistics', name_zh: '供應鏈及物流授權群組', description: '供應鏈及物流部授權群組', user_ids: [312] },
-    { name: 'Retail Checker - ADM', name_zh: 'ADM零售店舖檢查授權群組', description: 'ADM零售檢查授權群組', user_ids: [38, 234, 44] },
-    { name: 'Retail Checker - TWS', name_zh: 'TWS零售店舖檢查授權群組', description: 'TWS零售檢查授權群組', user_ids: [38, 234, 243] },
-    { name: 'Retail Checker - WTS', name_zh: 'WTS零售店舖檢查授權群組', description: 'WTS零售檢查授權群組', user_ids: [38, 234, 65] },
-    { name: 'Retail Checker - LF1', name_zh: 'LF1零售店舖檢查授權群組', description: 'LF1零售檢查授權群組', user_ids: [38, 234, 236] },
-    { name: 'Retail Checker - TK3', name_zh: 'TK3零售店舖檢查授權群組', description: 'TK3零售檢查授權群組', user_ids: [38, 234, 54] },
-    { name: 'Retail Checker - TK4', name_zh: 'TK4零售店舖檢查授權群組', description: 'TK4零售檢查授權群組', user_ids: [38, 234, 326] },
-    { name: 'Retail Checker - OC', name_zh: 'OC零售店舖檢查授權群組', description: 'OC零售檢查授權群組', user_ids: [38, 234, 241] },
-    { name: 'Retail Checker - SP1', name_zh: 'SP1零售店舖檢查授權群組', description: 'SP1零售檢查授權群組', user_ids: [38, 234, 303] },
-    { name: 'Retail Checker - WPG', name_zh: 'WPG零售店舖檢查授權群組', description: 'WPG零售檢查授權群組', user_ids: [38, 234, 202] },
-    { name: 'Retail Checker - MK2', name_zh: 'MK2零售店舖檢查授權群組', description: 'MK2零售檢查授權群組', user_ids: [38, 234, 140] },
-    { name: 'Retail Checker - TT2', name_zh: 'TT2零售店舖檢查授權群組', description: 'TT2零售檢查授權群組', user_ids: [38, 234, 239] },
-    { name: 'Retail Checker - CDW', name_zh: 'CDW零售店舖檢查授權群組', description: 'CDW零售檢查授權群組', user_ids: [38, 234, 46] },
-    { name: 'Retail Checker - TW2', name_zh: 'TW2零售店舖檢查授權群組', description: 'TW2零售檢查授權群組', user_ids: [38, 234, 46] },
-    { name: 'Retail Checker - TY4', name_zh: 'TY4零售店舖檢查授權群組', description: 'TY4零售檢查授權群組', user_ids: [38, 234, 141] },
-    { name: 'Retail Checker - TW3', name_zh: 'TW3零售店舖檢查授權群組', description: 'TW3零售檢查授權群組', user_ids: [38, 234, 46] },
-    { name: 'Retail Checker - FAN', name_zh: 'FAN零售店舖檢查授權群組', description: 'FAN零售檢查授權群組', user_ids: [38, 234, 328] },
-    { name: 'Retail Checker - TPU', name_zh: 'TPU零售店舖檢查授權群組', description: 'TPU零售檢查授權群組', user_ids: [38, 234, 88] },
-    { name: 'Retail Checker - TP2', name_zh: 'TP2零售店舖檢查授權群組', description: 'TP2零售檢查授權群組', user_ids: [38, 234, 34] },
-    { name: 'Retail Checker - MO2', name_zh: 'MO2零售店舖檢查授權群組', description: 'MO2零售檢查授權群組', user_ids: [38, 234, 67] },
-    { name: 'Retail Checker - ST1', name_zh: 'ST1零售店舖檢查授權群組', description: 'ST1零售檢查授權群組', user_ids: [38, 234, 52] },
-    { name: 'Retail Checker - TM1', name_zh: 'TM1零售店舖檢查授權群組', description: 'TM1零售檢查授權群組', user_ids: [38, 234, 43] },
-    { name: 'Retail Checker - YL3', name_zh: 'YL3零售店舖檢查授權群組', description: 'YL3零售檢查授權群組', user_ids: [38, 234, 42] },
-    { name: 'Retail Checker - YL4', name_zh: 'YL4零售店舖檢查授權群組', description: 'YL4零售檢查授權群組', user_ids: [38, 234, 316] },
-    { name: 'Direct Reporting to MD', name_zh: '管理層授權群組', description: '管理層授權群組', user_ids: [68] },
+    { name: 'HR Group', name_zh: 'HR群組', description: '', user_ids: [1, 29, 31], closed: false },
+    { name: 'Accounting', name_zh: '會計授權群組', description: '', user_ids: [3], closed: false },
+    { name: 'B2B', name_zh: '企客業務授權群組', description: '', user_ids: [450,451], closed: false },
+    { name: 'Business Development', name_zh: '業務拓展授權群組', description: '', user_ids: [], closed: false },
+    { name: 'Category', name_zh: '品類授權群組', description: '', user_ids: [], closed: false },
+    { name: 'General Administration', name_zh: '行政授權群組', description: '', user_ids: [26], closed: false },
+    { name: 'Human Resources', name_zh: '人力資源授權群組', description: '', user_ids: [29], closed: false },
+    { name: 'IT', name_zh: '資訊科技授權群組', description: '', user_ids: [32], closed: false },
+    { name: 'Marketing', name_zh: '市場推廣授權群組', description: '', user_ids: [], closed: false },
+    { name: 'Merchandising', name_zh: '採購授權群組', description: '', user_ids: [23], closed: false },
+    { name: 'Project', name_zh: '專案授權群組', description: '', user_ids: [], closed: false },
+    { name: 'Retail Heads', name_zh: '零售主管授權群組', description: '', user_ids: [284, 265], closed: false },
+    { name: 'Retail Checker', name_zh: '零售檢查授權群組', description: '', user_ids: [], closed: false },
+    { name: 'Supply Chain and Logistics', name_zh: '供應鏈及物流授權群組', description: '', user_ids: [312], closed: false },
+    { name: 'Retail Checker - ADM', name_zh: 'ADM零售店舖檢查授權群組', description: '', user_ids: [38, 234, 44], closed: false },
+    { name: 'Retail Checker - TWS', name_zh: 'TWS零售店舖檢查授權群組', description: '', user_ids: [38, 234, 243], closed: false },
+    { name: 'Retail Checker - WTS', name_zh: 'WTS零售店舖檢查授權群組', description: '', user_ids: [38, 234, 65], closed: false },
+    { name: 'Retail Checker - LF1', name_zh: 'LF1零售店舖檢查授權群組', description: '', user_ids: [38, 234, 236], closed: false },
+    { name: 'Retail Checker - TK3', name_zh: 'TK3零售店舖檢查授權群組', description: '', user_ids: [38, 234, 54], closed: false },
+    { name: 'Retail Checker - TK4', name_zh: 'TK4零售店舖檢查授權群組', description: '', user_ids: [38, 234, 326], closed: false },
+    { name: 'Retail Checker - OC', name_zh: 'OC零售店舖檢查授權群組', description: '', user_ids: [38, 234, 241], closed: false },
+    { name: 'Retail Checker - SP1', name_zh: 'SP1零售店舖檢查授權群組', description: '', user_ids: [38, 234, 303], closed: false },
+    { name: 'Retail Checker - WPG', name_zh: 'WPG零售店舖檢查授權群組', description: '', user_ids: [38, 234, 202], closed: false },
+    { name: 'Retail Checker - MK2', name_zh: 'MK2零售店舖檢查授權群組', description: '', user_ids: [38, 234, 140], closed: false },
+    { name: 'Retail Checker - TT2', name_zh: 'TT2零售店舖檢查授權群組', description: '', user_ids: [38, 234, 239], closed: false },
+    { name: 'Retail Checker - CDW', name_zh: 'CDW零售店舖檢查授權群組', description: '', user_ids: [38, 234, 46], closed: false },
+    { name: 'Retail Checker - TW2', name_zh: 'TW2零售店舖檢查授權群組', description: '', user_ids: [38, 234, 46], closed: false },
+    { name: 'Retail Checker - TY4', name_zh: 'TY4零售店舖檢查授權群組', description: '', user_ids: [38, 234, 141], closed: false },
+    { name: 'Retail Checker - TW3', name_zh: 'TW3零售店舖檢查授權群組', description: '', user_ids: [38, 234, 46], closed: false },
+    { name: 'Retail Checker - FAN', name_zh: 'FAN零售店舖檢查授權群組', description: '', user_ids: [38, 234, 328], closed: false },
+    { name: 'Retail Checker - TPU', name_zh: 'TPU零售店舖檢查授權群組', description: '', user_ids: [38, 234, 88], closed: false },
+    { name: 'Retail Checker - TP2', name_zh: 'TP2零售店舖檢查授權群組', description: '', user_ids: [38, 234, 34], closed: false },
+    { name: 'Retail Checker - MO2', name_zh: 'MO2零售店舖檢查授權群組', description: '', user_ids: [38, 234, 67], closed: false },
+    { name: 'Retail Checker - ST1', name_zh: 'ST1零售店舖檢查授權群組', description: '', user_ids: [38, 234, 52], closed: false },
+    { name: 'Retail Checker - TM1', name_zh: 'TM1零售店舖檢查授權群組', description: '', user_ids: [38, 234, 43], closed: false },
+    { name: 'Retail Checker - YL3', name_zh: 'YL3零售店舖檢查授權群組', description: '', user_ids: [38, 234, 42], closed: false },
+    { name: 'Retail Checker - YL4', name_zh: 'YL4零售店舖檢查授權群組', description: '', user_ids: [38, 234, 316], closed: false },
+    { name: 'Direct Reporting to MD', name_zh: '管理層授權群組', description: '', user_ids: [68], closed: false },
   ]).returning('*');
 
   // 取得各授權群組的 ID
@@ -256,7 +256,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: accountingDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'B2B',
@@ -266,7 +267,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: b2bDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Business Development',
@@ -276,7 +278,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: bdDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Category',
@@ -286,7 +289,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: categoryDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'General Administration',
@@ -296,7 +300,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: gaDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Human Resources',
@@ -306,7 +311,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: hrDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'IT',
@@ -316,7 +322,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: itDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Marketing',
@@ -326,7 +333,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: marketingDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Merchandising',
@@ -336,7 +344,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: merchandisingDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Project',
@@ -346,7 +355,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: projectDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Administration',
@@ -356,7 +366,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: retailHeadsDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Supply Chain and Logistics',
@@ -366,7 +377,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: scDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Property',
@@ -376,7 +388,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: scDelegId,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - ADM',
@@ -386,7 +399,8 @@ exports.seed = async function (knex) {
       checker_id: 15,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TWS',
@@ -396,7 +410,8 @@ exports.seed = async function (knex) {
       checker_id: 16,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - WTS',
@@ -406,17 +421,19 @@ exports.seed = async function (knex) {
       checker_id: 17,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - LF1',
       name_zh: '零售店舖群組 - LF1',
       description: '',
-      user_ids: [110, 155, 236, 330, 392, 428, 474],
+      user_ids: [110, 155, 236, 242, 330, 392, 428, 474],
       checker_id: 18,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TK3',
@@ -426,7 +443,8 @@ exports.seed = async function (knex) {
       checker_id: 19,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TK4',
@@ -436,37 +454,41 @@ exports.seed = async function (knex) {
       checker_id: 20,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - OC',
       name_zh: '零售店舖群組 - OC',
       description: '',
-      user_ids: [164, 217, 241, 249],
+      user_ids: [164, 217, 241, 249, 297],
       checker_id: 21,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - SP1',
       name_zh: '零售店舖群組 - SP1',
       description: '',
-      user_ids: [303, 457, 461, 473],
+      user_ids: [138, 303, 457, 461, 473],
       checker_id: 22,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - WPG',
       name_zh: '零售店舖群組 - WPG',
       description: '',
-      user_ids: [99, 202, 306, 411, 448, 472],
+      user_ids: [82, 99, 202, 306, 411, 448, 472],
       checker_id: 23,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - MK2',
@@ -476,7 +498,8 @@ exports.seed = async function (knex) {
       checker_id: 24,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TT2',
@@ -486,77 +509,85 @@ exports.seed = async function (knex) {
       checker_id: 25,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - CDW',
       name_zh: '零售店舖群組 - CDW',
       description: '',
-      user_ids: [122, 169, 175, 378, 402],
+      user_ids: [],
       checker_id: 26,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TW2',
       name_zh: '零售店舖群組 - TW2',
       description: '',
-      user_ids: [46, 58, 120, 242, 272, 339],
+      user_ids: [46, 58, 120, 122, 175, 272, 299, 339],
       checker_id: 27,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TY4',
       name_zh: '零售店舖群組 - TY4',
       description: '',
-      user_ids: [141, 276, 458, 464],
+      user_ids: [141, 169, 276, 378, 458, 464],
       checker_id: 28,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TW3',
       name_zh: '零售店舖群組 - TW3',
       description: '',
-      user_ids: [138, 297, 299],
+      user_ids: [],
       checker_id: 29,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - FAN',
       name_zh: '零售店舖群組 - FAN',
       description: '',
-      user_ids: [87, 328, 467, 468, 480, 481,483],
+      user_ids: [87, 328, 467, 468, 480, 481, 483],
       checker_id: 30,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TPU',
       name_zh: '零售店舖群組 - TPU',
       description: '',
-      user_ids: [88, 92, 422, 462,485],
+      user_ids: [88, 92, 422, 462, 485],
       checker_id: 31,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TP2',
       name_zh: '零售店舖群組 - TP2',
       description: '',
-      user_ids: [34, 354, 423, 439, 443, 453,482],
+      user_ids: [34, 42, 354, 423, 439, 443, 453, 482],
       checker_id: 32,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - MO2',
@@ -566,7 +597,8 @@ exports.seed = async function (knex) {
       checker_id: 33,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - ST1',
@@ -576,37 +608,41 @@ exports.seed = async function (knex) {
       checker_id: 34,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - TM1',
       name_zh: '零售店舖群組 - TM1',
       description: '',
-      user_ids: [43, 75, 78, 389, 444, 465,407],
+      user_ids: [43, 75, 78, 389, 437, 444, 465, 407],
       checker_id: 35,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - YL3',
       name_zh: '零售店舖群組 - YL3',
       description: '',
-      user_ids: [42, 55, 82, 131, 156, 437],
+      user_ids: [],
       checker_id: 36,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Retail Store - YL4',
       name_zh: '零售店舖群組 - YL4',
       description: '',
-      user_ids: [316, 376, 385, 416, 463],
+      user_ids: [131, 156, 316, 376, 385, 416, 463],
       checker_id: 37,
       approver_1_id: 12,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Direct Reporting to MD',
@@ -616,7 +652,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: 38,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
     {
       name: 'Managing Director',
@@ -626,7 +663,8 @@ exports.seed = async function (knex) {
       checker_id: null,
       approver_1_id: null,
       approver_2_id: null,
-      approver_3_id: hrGroupId
+      approver_3_id: hrGroupId,
+      closed: false
     },
   ]);
 
@@ -640,7 +678,7 @@ exports.seed = async function (knex) {
     { code: 'MGL', name: 'Marriage Leave', name_zh: '婚假', requires_balance: false },
     { code: 'MTL', name: 'Maternity Leave', name_zh: '產假', requires_balance: false },
     { code: 'PTL', name: 'Paternity Leave', name_zh: '侍產假', requires_balance: false },
-    { code: 'JSL', name: 'Jury Leave', name_zh: '陪審團假', requires_balance: false },
+    { code: 'JSL', name: 'Jury Service Leave', name_zh: '陪審團假', requires_balance: false },
     { code: 'CPL', name: 'Compassionate Leave', name_zh: '恩恤假', requires_balance: false },
     { code: 'NPSL', name: 'No Pay Sick Leave', name_zh: '無薪病假', requires_balance: false },
     { code: 'NPL', name: 'No Pay Personal Leave', name_zh: '無薪事假', requires_balance: false },

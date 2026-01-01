@@ -35,8 +35,8 @@ const formatGroupRecord = (record) => {
 };
 
 class DepartmentGroup {
-  static async findAll() {
-    const groups = await knex('department_groups')
+  static async findAll(closedFilter) {
+    let query = knex('department_groups')
       .leftJoin('delegation_groups as checker', 'department_groups.checker_id', 'checker.id')
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
@@ -51,9 +51,15 @@ class DepartmentGroup {
         'approver_2.name_zh as approver_2_name_zh',
         'approver_3.name as approver_3_name',
         'approver_3.name_zh as approver_3_name_zh'
-      )
-      .orderBy('department_groups.name');
+      );
 
+    // 根據 closed 參數篩選
+    if (closedFilter !== undefined && closedFilter !== null && closedFilter !== '') {
+      const isClosed = closedFilter === 'true' || closedFilter === true;
+      query = query.where('department_groups.closed', isClosed);
+    }
+
+    const groups = await query.orderBy('department_groups.name');
     return groups.map(formatGroupRecord);
   }
 

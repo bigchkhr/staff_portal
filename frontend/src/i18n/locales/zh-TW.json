@@ -401,7 +401,7 @@
     "noDocuments": "沒有文件",
     "fetchError": "獲取文件列表時發生錯誤",
     "downloadError": "下載文件時發生錯誤",
-    "disclaimer": "文件如附有密碼加密，該密碼由您的香港身分證號碼的前 5 個字母數字字元、您的完整大階英文姓氏以及您出生年份的後兩位數字組成。例如，您的香港身份證號碼是A123456(7)、英文姓氏CHAO及出生日期為1998-05-09，該密碼則是A12345CHAO98。請務必對你的個人資料保密，切勿向任何人士提供保密資料。"
+    "disclaimer": "文件如附有密碼加密，該密碼由您的香港身分證號碼的前 5 個字母數字字元、您的完整大階英文姓氏以及您出生年份的後兩位數字組成。例如，您的香港身份證號碼是A123456(7)、英文姓氏CHAO及出生日期為1998-05-09，該密碼則是A1234CHAO98。請務必對你的個人資料保密，切勿向任何人士提供保密資料。"
   },
   "approvalHistory": {
     "title": "批核記錄",
@@ -882,7 +882,19 @@
     "active": "啟用中",
     "deactivated": "已停用",
     "edit": "編輯",
-    "noUsers": "沒有用戶"
+    "noUsers": "沒有用戶",
+    "editUser": "編輯用戶",
+    "surname": "姓氏",
+    "givenName": "名字",
+    "alias": "別名",
+    "chineseName": "中文姓名",
+    "displayName": "Display Name",
+    "newPassword": "新密碼（留空則不更改）",
+    "password": "密碼",
+    "accountDeactivated": "帳戶已停用（無法登入）",
+    "accountActive": "帳戶啟用中",
+    "enterPassword": "請輸入密碼",
+    "operationFailed": "操作失敗"
   },
   "adminLeaveTypes": {
     "title": "假期類型管理",
@@ -1010,7 +1022,8 @@
     "close": "關閉",
     "addMemberFailed": "新增成員失敗",
     "removeMemberFailed": "移除成員失敗",
-    "cannotLoadMembers": "無法載入成員列表"
+    "cannotLoadMembers": "無法載入成員列表",
+    "noUsersAvailable": "沒有可新增的用戶"
   },
   "language": {
     "zhTW": "繁體中文",

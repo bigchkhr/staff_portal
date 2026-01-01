@@ -35,8 +35,16 @@ const formatGroupRecord = (record) => {
 };
 
 class DelegationGroup {
-  static async findAll() {
-    const groups = await knex('delegation_groups').orderBy('name');
+  static async findAll(closedFilter) {
+    let query = knex('delegation_groups');
+
+    // 根據 closed 參數篩選
+    if (closedFilter !== undefined && closedFilter !== null && closedFilter !== '') {
+      const isClosed = closedFilter === 'true' || closedFilter === true;
+      query = query.where('closed', isClosed);
+    }
+
+    const groups = await query.orderBy('name');
     return groups.map(formatGroupRecord);
   }
 
