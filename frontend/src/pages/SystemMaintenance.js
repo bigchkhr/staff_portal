@@ -16,7 +16,8 @@ import {
   EventNote as EventNoteIcon,
   Business as BusinessIcon,
   Work as WorkIcon,
-  Group as GroupIcon
+  Group as GroupIcon,
+  CalendarToday as CalendarTodayIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -57,6 +58,12 @@ const SystemMaintenance = () => {
       icon: <GroupIcon sx={{ fontSize: 48 }} />,
       path: '/admin/groups',
       translationKey: 'groupManagement'
+    },
+    {
+      key: 'publicHolidayManagement',
+      icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/public-holidays',
+      translationKey: 'publicHolidayManagement'
     }
   ];
 

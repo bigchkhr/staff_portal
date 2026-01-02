@@ -17,15 +17,25 @@ import {
   MenuItem,
   Chip,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
-import { Download as DownloadIcon } from '@mui/icons-material';
+import { Download as DownloadIcon, Visibility as VisibilityIcon, Close as CloseIcon, GetApp as GetAppIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { formatDate } from '../utils/dateFormat';
+import Swal from 'sweetalert2';
 
 const EmployeeDocuments = () => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [documents, setDocuments] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -34,6 +44,10 @@ const EmployeeDocuments = () => {
     search: ''
   });
   const [error, setError] = useState('');
+  const [fileDialogOpen, setFileDialogOpen] = useState(false);
+  const [viewingFile, setViewingFile] = useState(null);
+  const [fileBlobUrl, setFileBlobUrl] = useState(null);
+  const [loadingFile, setLoadingFile] = useState(false);
 
   useEffect(() => {
     fetchDocuments();
@@ -79,10 +93,67 @@ const EmployeeDocuments = () => {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Download error:', error);
       setError(error.response?.data?.message || t('employeeDocuments.downloadError'));
     }
+  };
+
+  const handleOpenFile = async (doc) => {
+    try {
+      setLoadingFile(true);
+      setViewingFile(doc);
+      setFileDialogOpen(true);
+
+      const isImage = doc.file_type && doc.file_type.startsWith('image/');
+      const isPDF = doc.file_type === 'application/pdf' || doc.file_name?.toLowerCase().endsWith('.pdf');
+      const url = `/api/documents/${doc.id}/download${isImage || isPDF ? '?view=true' : ''}`;
+      
+      // 使用 axios 下載文件，確保認證 header 被包含
+      const response = await axios.get(url, {
+        responseType: 'blob',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // 從響應中獲取正確的 MIME 類型
+      const contentType = response.headers['content-type'] || doc.file_type || 'application/octet-stream';
+      
+      // 創建 blob URL（使用正確的 MIME 類型）
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = window.URL.createObjectURL(blob);
+      setFileBlobUrl(blobUrl);
+    } catch (error) {
+      console.error('查看文件錯誤:', error);
+      setFileDialogOpen(false);
+      setViewingFile(null);
+      
+      let errorMessage = t('employeeDocuments.cannotOpenFile') || '無法開啟檔案';
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        errorMessage = t('employeeDocuments.noPermissionFile') || '您沒有權限查看此文件';
+      }
+      
+      await Swal.fire({
+        icon: 'error',
+        title: '無法開啟檔案',
+        text: errorMessage,
+        confirmButtonText: '確定',
+        confirmButtonColor: '#d33'
+      });
+    } finally {
+      setLoadingFile(false);
+    }
+  };
+
+  const handleCloseFileDialog = () => {
+    if (fileBlobUrl) {
+      window.URL.revokeObjectURL(fileBlobUrl);
+      setFileBlobUrl(null);
+    }
+    setFileDialogOpen(false);
+    setViewingFile(null);
   };
 
   const formatFileSize = (bytes) => {
@@ -190,6 +261,14 @@ const EmployeeDocuments = () => {
                   <TableCell align="right">
                     <IconButton
                       size="small"
+                      onClick={() => handleOpenFile(doc)}
+                      title={t('employeeDocuments.view') || '查看'}
+                      sx={{ mr: 1 }}
+                    >
+                      <VisibilityIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
                       onClick={() => handleDownload(doc.id, doc.display_name, doc.file_name)}
                       title={t('employeeDocuments.download')}
                     >
@@ -202,6 +281,92 @@ const EmployeeDocuments = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* 文件查看 Dialog */}
+      <Dialog
+        open={fileDialogOpen}
+        onClose={handleCloseFileDialog}
+        maxWidth="lg"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              {viewingFile?.display_name || viewingFile?.file_name || t('employeeDocuments.viewFile') || '查看文件'}
+            </Typography>
+            <IconButton onClick={handleCloseFileDialog}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {loadingFile ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+              <CircularProgress />
+              <Typography variant="body2" sx={{ ml: 2 }}>
+                {t('common.loading')}
+              </Typography>
+            </Box>
+          ) : fileBlobUrl && viewingFile ? (
+            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              {viewingFile.file_type?.startsWith('image/') ? (
+                <img
+                  src={fileBlobUrl}
+                  alt={viewingFile.display_name || viewingFile.file_name}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '80vh',
+                    objectFit: 'contain'
+                  }}
+                />
+              ) : viewingFile.file_type === 'application/pdf' || viewingFile.file_name?.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={fileBlobUrl}
+                  title={viewingFile.display_name || viewingFile.file_name}
+                  style={{
+                    width: '100%',
+                    height: '80vh',
+                    border: 'none'
+                  }}
+                />
+              ) : (
+                <Box sx={{ textAlign: 'center', p: 4 }}>
+                  <Typography variant="body1" gutterBottom>
+                    {t('employeeDocuments.cannotPreview') || '無法在瀏覽器中預覽此文件類型'}
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    component="a"
+                    href={fileBlobUrl}
+                    download={viewingFile.display_name || viewingFile.file_name}
+                    sx={{ mt: 2 }}
+                    startIcon={<GetAppIcon />}
+                  >
+                    {t('employeeDocuments.download') || '下載文件'}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          {fileBlobUrl && !viewingFile?.file_type?.startsWith('image/') && viewingFile?.file_type !== 'application/pdf' && !viewingFile?.file_name?.toLowerCase().endsWith('.pdf') && (
+            <Button
+              component="a"
+              href={fileBlobUrl}
+              download={viewingFile?.display_name || viewingFile?.file_name}
+              variant="contained"
+              startIcon={<GetAppIcon />}
+            >
+              {t('employeeDocuments.download') || '下載'}
+            </Button>
+          )}
+          <Button onClick={handleCloseFileDialog} variant="outlined">
+            {t('common.close') || '關閉'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

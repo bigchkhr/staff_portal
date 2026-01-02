@@ -153,6 +153,7 @@ class DocumentController {
   async downloadDocument(req, res) {
     try {
       const { id } = req.params;
+      const { view } = req.query; // 如果 view=true，在瀏覽器中查看；否則下載
       const document = await EmployeeDocument.findById(id);
 
       if (!document) {
@@ -184,15 +185,30 @@ class DocumentController {
       const fileExtension = path.extname(document.file_name);
       const downloadFileName = `${document.display_name}${fileExtension}`;
 
-      // 使用 res.download 自動處理文件下載（設置正確的Content-Disposition和Content-Type）
-      res.download(filePath, downloadFileName, (err) => {
-        if (err) {
-          console.error('Download file error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({ message: '下載文件時發生錯誤' });
+      // 如果是圖片或 PDF，在瀏覽器中查看；否則下載
+      const isImage = document.file_type && document.file_type.startsWith('image/');
+      const isPDF = document.file_type === 'application/pdf' || document.file_name?.toLowerCase().endsWith('.pdf');
+      
+      if (view === 'true' || isImage || isPDF) {
+        // 設置適當的 Content-Type
+        const contentType = document.file_type || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(downloadFileName)}"`);
+        
+        // 讀取並發送文件
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+      } else {
+        // 使用 res.download 自動處理文件下載（設置正確的Content-Disposition和Content-Type）
+        res.download(filePath, downloadFileName, (err) => {
+          if (err) {
+            console.error('Download file error:', err);
+            if (!res.headersSent) {
+              res.status(500).json({ message: '下載文件時發生錯誤' });
+            }
           }
-        }
-      });
+        });
+      }
     } catch (error) {
       console.error('Download document error:', error);
       res.status(500).json({ message: '下載文件時發生錯誤' });

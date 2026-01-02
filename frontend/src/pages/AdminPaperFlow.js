@@ -11,7 +11,9 @@ import {
   InputLabel,
   Select,
   FormControl,
-  Chip
+  Chip,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -37,7 +39,8 @@ const AdminPaperFlow = () => {
     end_date: null,
     end_session: 'PM', // 預設為下午
     days: '',
-    reason: ''
+    reason: '',
+    exclude_public_holidays: false // 是否排除法定假期
   });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [users, setUsers] = useState([]);
@@ -47,6 +50,7 @@ const AdminPaperFlow = () => {
   const [yearManuallySet, setYearManuallySet] = useState(false); // 標記年份是否被手動設置
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [includeWeekends, setIncludeWeekends] = useState(true); // 預設包含週末
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -77,67 +81,181 @@ const AdminPaperFlow = () => {
     }
   }, [formData.start_date, yearManuallySet]);
 
+  // 獲取日期範圍內的法定假期，並計算需要減去的天數
+  const getPublicHolidaysCount = async (startDate, endDate, startSession, endSession) => {
+    if (!startDate || !endDate) return 0;
+    
+    try {
+      const response = await axios.get('/api/public-holidays/range', {
+        params: {
+          start_date: startDate.format('YYYY-MM-DD'),
+          end_date: endDate.format('YYYY-MM-DD')
+        }
+      });
+      const holidays = response.data.publicHolidays || [];
+      
+      if (holidays.length === 0) return 0;
+      
+      // 計算需要減去的天數
+      let count = 0;
+      holidays.forEach(holiday => {
+        const holidayDate = dayjs(holiday.date);
+        
+        // 如果法定假期在開始日期
+        if (holidayDate.isSame(startDate, 'day')) {
+          // 如果是同一天
+          if (startDate.isSame(endDate, 'day')) {
+            // 上午 + 下午 = 整天，法定假期也是整天，所以減去1天
+            if (startSession === 'AM' && endSession === 'PM') {
+              count += 1;
+            }
+            // 只請上午或只請下午 = 0.5天，法定假期是整天，所以減去0.5天
+            else {
+              count += 0.5;
+            }
+          }
+          // 如果是多天，開始日期是法定假期
+          else {
+            // 如果開始時段是上午，請了整天，減去1天
+            if (startSession === 'AM') {
+              count += 1;
+            }
+            // 如果開始時段是下午，只請了下午，減去0.5天
+            else {
+              count += 0.5;
+            }
+          }
+        }
+        // 如果法定假期在結束日期
+        else if (holidayDate.isSame(endDate, 'day')) {
+          // 如果結束時段是下午，請了整天，減去1天
+          if (endSession === 'PM') {
+            count += 1;
+          }
+          // 如果結束時段是上午，只請了上午，減去0.5天
+          else {
+            count += 0.5;
+          }
+        }
+        // 如果法定假期在日期範圍中間，減去完整的一天
+        else {
+          count += 1;
+        }
+      });
+      
+      return count;
+    } catch (error) {
+      console.error('Get public holidays error:', error);
+      return 0; // 如果獲取失敗，返回0，不影響計算
+    }
+  };
+
   // 計算天數，考慮半日假期
   // 規則：
   // - 開始上午 + 結束下午 = 整數（如4日或5日）
   // - 開始上午 + 結束上午 = 半日數（如4.5日或5.5日）
   // - 開始下午 + 結束下午 = 半日數（如3.5日或6.5日）
   // - 開始下午 + 結束上午 = 整數 - 1（因為第一天下午+最後一天上午=1日）
-  const calculateDays = (startDate, endDate, startSession, endSession) => {
+  // 計算工作日（排除週末）
+  const calculateWorkingDays = (startDate, endDate) => {
+    if (!startDate || !endDate) return 0;
+    
+    let count = 0;
+    let current = dayjs(startDate);
+    const end = dayjs(endDate);
+    
+    while (current.isBefore(end, 'day') || current.isSame(end, 'day')) {
+      const dayOfWeek = current.day(); // 0 = Sunday, 6 = Saturday
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        count++;
+      }
+      current = current.add(1, 'day');
+    }
+    
+    return count;
+  };
+
+  const calculateDays = async (startDate, endDate, startSession, endSession, excludePublicHolidays, includeWeekends) => {
     if (!startDate || !endDate || !startSession || !endSession) return 0;
 
-    // 計算基礎天數（包含週末）
-    const baseDays = endDate.diff(startDate, 'day') + 1;
+    // 計算基礎天數
+    let baseDays;
+    if (includeWeekends) {
+      // 包含週末：計算總天數
+      baseDays = endDate.diff(startDate, 'day') + 1;
+    } else {
+      // 不包含週末：只計算工作日
+      baseDays = calculateWorkingDays(startDate, endDate);
+    }
+
+    // 如果排除法定假期，需要減去法定假期的天數
+    let publicHolidaysDeduction = 0;
+    if (excludePublicHolidays) {
+      publicHolidaysDeduction = await getPublicHolidaysCount(startDate, endDate, startSession, endSession);
+    }
 
     // 如果是同一天
     if (startDate.isSame(endDate, 'day')) {
+      let days = 0;
       // 上午 + 下午 = 1日
       if (startSession === 'AM' && endSession === 'PM') {
-        return 1;
+        days = 1;
       }
       // 相同時段 = 0.5日
-      if (startSession === endSession) {
-        return 0.5;
+      else if (startSession === endSession) {
+        days = 0.5;
       }
       // 下午 + 上午（同一天不應該出現，但處理為0.5日）
-      return 0.5;
+      else {
+        days = 0.5;
+      }
+      
+      // 減去法定假期
+      return Math.max(0, days - publicHolidaysDeduction);
     }
 
     // 多天的情況
+    let days = 0;
     // 開始上午 + 結束下午 = 整數
     if (startSession === 'AM' && endSession === 'PM') {
-      return baseDays;
+      days = baseDays;
     }
-    
     // 開始上午 + 結束上午 = 整數 - 0.5
-    if (startSession === 'AM' && endSession === 'AM') {
-      return baseDays - 0.5;
+    else if (startSession === 'AM' && endSession === 'AM') {
+      days = baseDays - 0.5;
     }
-    
     // 開始下午 + 結束下午 = 整數 - 0.5
-    if (startSession === 'PM' && endSession === 'PM') {
-      return baseDays - 0.5;
+    else if (startSession === 'PM' && endSession === 'PM') {
+      days = baseDays - 0.5;
     }
-    
     // 開始下午 + 結束上午 = 整數 - 1
-    if (startSession === 'PM' && endSession === 'AM') {
-      return baseDays - 1;
+    else if (startSession === 'PM' && endSession === 'AM') {
+      days = baseDays - 1;
+    }
+    else {
+      days = baseDays;
     }
 
-    return baseDays;
+    // 減去法定假期，確保天數不會為負數
+    return Math.max(0, days - publicHolidaysDeduction);
   };
 
   useEffect(() => {
-    if (formData.start_date && formData.end_date) {
-      const days = calculateDays(
-        formData.start_date,
-        formData.end_date,
-        formData.start_session,
-        formData.end_session
-      );
-      setFormData(prev => ({ ...prev, days: days > 0 ? days.toString() : '' }));
-    }
-  }, [formData.start_date, formData.end_date, formData.start_session, formData.end_session]);
+    const updateDays = async () => {
+      if (formData.start_date && formData.end_date) {
+        const days = await calculateDays(
+          formData.start_date,
+          formData.end_date,
+          formData.start_session,
+          formData.end_session,
+          formData.exclude_public_holidays,
+          includeWeekends
+        );
+        setFormData(prev => ({ ...prev, days: days > 0 ? days.toString() : '' }));
+      }
+    };
+    updateDays();
+  }, [formData.start_date, formData.end_date, formData.start_session, formData.end_session, formData.exclude_public_holidays, includeWeekends]);
 
   const fetchLeaveTypes = async () => {
     try {
@@ -209,6 +327,7 @@ const AdminPaperFlow = () => {
       if (formData.reason) {
         submitData.append('reason', formData.reason);
       }
+      submitData.append('exclude_public_holidays', formData.exclude_public_holidays ? 'true' : 'false');
       submitData.append('flow_type', 'paper-flow');
 
       // 附加檔案（包括拍照取得的圖片）
@@ -242,12 +361,14 @@ const AdminPaperFlow = () => {
         end_date: null,
         end_session: 'PM', // 預設為下午
         days: '',
-        reason: ''
+        reason: '',
+        exclude_public_holidays: false
       });
       setBalance(null);
       setFiles([]);
       setYearManuallySet(false); // 重置年份手動設置標記
       setSelectedUser(null);
+      setIncludeWeekends(true); // 重置為預設值
     } catch (error) {
       // 檢查是否為日期範圍重疊錯誤
       if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {
@@ -422,6 +543,42 @@ const AdminPaperFlow = () => {
               </FormControl>
             </Grid>
           </Grid>
+
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={includeWeekends}
+                  onChange={(e) => setIncludeWeekends(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label={t('adminPaperFlow.includeWeekends')}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              {includeWeekends 
+                ? t('adminPaperFlow.includeWeekendsDescription1')
+                : t('adminPaperFlow.includeWeekendsDescription2')}
+            </Typography>
+          </Box>
+
+          <Box sx={{ mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.exclude_public_holidays}
+                  onChange={(e) => setFormData(prev => ({ ...prev, exclude_public_holidays: e.target.checked }))}
+                  color="primary"
+                />
+              }
+              label={t('adminPaperFlow.excludePublicHolidays')}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              {formData.exclude_public_holidays 
+                ? t('adminPaperFlow.excludePublicHolidaysDescription1')
+                : t('adminPaperFlow.excludePublicHolidaysDescription2')}
+            </Typography>
+          </Box>
 
           <TextField
             fullWidth

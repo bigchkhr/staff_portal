@@ -558,10 +558,10 @@ const Dashboard = () => {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    const name = user?.display_name || `${user?.surname} ${user?.given_name}`;
+    const name = user?.alias || `${user?.surname} ${user?.given_name}`;
     
     let greetingKey;
-    if (hour >= 5 && hour < 12) {
+    if (hour >= 0 && hour < 12) {
       greetingKey = 'dashboard.greeting.morning';
     } else if (hour >= 12 && hour < 18) {
       greetingKey = 'dashboard.greeting.afternoon';

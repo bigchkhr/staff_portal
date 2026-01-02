@@ -38,11 +38,12 @@ import MyApplications from './pages/MyApplications';
 import MyApprovals from './pages/MyApprovals';
 import SystemMaintenance from './pages/SystemMaintenance';
 import ManualApproval from './pages/ManualApproval';
+import PublicHolidayManagement from './pages/PublicHolidayManagement';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
-axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.13:1689';
+// axios.defaults.baseURL = 'http://localhost:1689';
+axios.defaults.baseURL = 'http://172.31.132.13:1689';
 
 const theme = createTheme({
   palette: {
@@ -68,6 +69,7 @@ function App() {
             <Route path="/my-approvals" element={<PrivateRoute><MyApprovals /></PrivateRoute>} />
             <Route path="/system-maintenance" element={<PrivateRoute><SystemMaintenance /></PrivateRoute>} />
             <Route path="/manual-approval" element={<PrivateRoute><ManualApproval /></PrivateRoute>} />
+            <Route path="/admin/public-holidays" element={<PrivateRoute><PublicHolidayManagement /></PrivateRoute>} />
             <Route path="/leave/apply" element={<PrivateRoute><LeaveApplication /></PrivateRoute>} />
             <Route path="/leave/history" element={<PrivateRoute><LeaveHistory /></PrivateRoute>} />
             <Route path="/leave/balance" element={<PrivateRoute><LeaveBalance /></PrivateRoute>} />

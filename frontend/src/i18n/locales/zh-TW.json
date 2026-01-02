@@ -79,6 +79,7 @@
     "departmentManagement": "部門管理",
     "positionManagement": "職位管理",
     "groupManagement": "群組管理",
+    "publicHolidayManagement": "法定假日管理",
     "changePassword": "更改密碼",
     "logout": "登出",
     "systemTitle": "網上職員平台"
@@ -86,7 +87,7 @@
   "dashboard": {
     "welcome": "歡迎，{{name}}",
     "greeting": {
-      "morning": "早安，{{name}}",
+      "morning": "早晨，{{name}}",
       "afternoon": "午安，{{name}}",
       "evening": "晚安，{{name}}"
     },
@@ -181,6 +182,9 @@
     "includeWeekends": "計算星期六及星期日",
     "includeWeekendsDescription1": "將計算開始日期至結束日期之間的所有天數（包括星期六及星期日）",
     "includeWeekendsDescription2": "只計算工作日（星期一至星期五），星期六及星期日將不計入假期天數",
+    "excludePublicHolidays": "排除法定假期",
+    "excludePublicHolidaysDescription1": "計算假期天數時將排除法定假期",
+    "excludePublicHolidaysDescription2": "計算假期天數時將包含法定假期",
     "attachFilesTitle": "附件（可選，支持 PDF、JPEG、JPG、TIFF 及其他圖片格式，每個文件不超過 5MB）",
     "selectFile": "選擇文件",
     "removeFileLabel": "刪除",
@@ -400,10 +404,15 @@
     "fileSize": "文件大小",
     "releaseTime": "發放時間",
     "actions": "操作",
+    "view": "查看",
     "download": "下載",
+    "viewFile": "查看文件",
     "noDocuments": "沒有文件",
     "fetchError": "獲取文件列表時發生錯誤",
     "downloadError": "下載文件時發生錯誤",
+    "cannotOpenFile": "無法開啟檔案",
+    "noPermissionFile": "您沒有權限查看此文件",
+    "cannotPreview": "無法在瀏覽器中預覽此文件類型",
     "disclaimer": "文件如附有密碼加密，該密碼由您的香港身分證號碼的前 5 個字母數字字元、您的完整大階英文姓氏以及您出生年份的後兩位數字組成。例如，您的香港身份證號碼是A123456(7)、英文姓氏CHAO及出生日期為1998-05-09，該密碼則是A1234CHAO98。請務必對你的個人資料保密，切勿向任何人士提供保密資料。"
   },
   "approvalHistory": {
@@ -720,7 +729,13 @@
     "applicationSuccess": "申請成功",
     "applicationSubmitted": "Paper Flow 申請已提交並批准，交易編號：{{transactionId}}",
     "submitError": "提交申請時發生錯誤",
-    "submitFailed": "提交失敗"
+    "submitFailed": "提交失敗",
+    "includeWeekends": "計算星期六及星期日",
+    "includeWeekendsDescription1": "將計算開始日期至結束日期之間的所有天數（包括星期六及星期日）",
+    "includeWeekendsDescription2": "只計算工作日（星期一至星期五），星期六及星期日將不計入假期天數",
+    "excludePublicHolidays": "排除法定假期",
+    "excludePublicHolidaysDescription1": "計算假期天數時將排除法定假期",
+    "excludePublicHolidaysDescription2": "計算假期天數時將包含法定假期"
   },
   "adminExtraWorkingHoursPaperFlow": {
     "title": "額外工作時數申報 - 紙本批核（系統管理員專用）",
@@ -1027,6 +1042,30 @@
     "removeMemberFailed": "移除成員失敗",
     "cannotLoadMembers": "無法載入成員列表",
     "noUsersAvailable": "沒有可新增的用戶"
+  },
+  "publicHolidayManagement": {
+    "title": "法定假期管理",
+    "year": "年份",
+    "addHoliday": "新增法定假期",
+    "editDialogTitle": "編輯法定假期",
+    "addDialogTitle": "新增法定假期",
+    "date": "日期",
+    "name": "名稱（英文）",
+    "chineseName": "名稱（中文）",
+    "actions": "操作",
+    "noHolidays": "暫無法定假期記錄",
+    "confirmDelete": "確認刪除",
+    "deleteConfirmText": "確定要刪除此法定假期嗎？",
+    "deleteSuccess": "刪除成功",
+    "deleteError": "刪除失敗",
+    "updateSuccess": "更新成功",
+    "updateError": "更新失敗",
+    "createSuccess": "新增成功",
+    "createError": "新增失敗",
+    "validationFailed": "驗證失敗",
+    "fillAllFields": "請填寫所有必填欄位",
+    "operationFailed": "操作失敗",
+    "noPermission": "您沒有權限訪問此頁面，只有HR Group成員可以管理法定假期"
   },
   "language": {
     "zhTW": "繁體中文",
