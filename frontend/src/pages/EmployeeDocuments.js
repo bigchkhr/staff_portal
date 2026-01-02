@@ -300,36 +300,69 @@ const EmployeeDocuments = () => {
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ p: { xs: 2, sm: 3 }, overflow: 'auto' }}>
           {loadingFile ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: isMobile ? '50vh' : '400px' }}>
               <CircularProgress />
               <Typography variant="body2" sx={{ ml: 2 }}>
                 {t('common.loading')}
               </Typography>
             </Box>
           ) : fileBlobUrl && viewingFile ? (
-            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: isMobile ? '50vh' : 'auto' }}>
               {viewingFile.file_type?.startsWith('image/') ? (
                 <img
                   src={fileBlobUrl}
                   alt={viewingFile.display_name || viewingFile.file_name}
                   style={{
                     maxWidth: '100%',
-                    maxHeight: '80vh',
+                    maxHeight: isMobile ? '70vh' : '80vh',
                     objectFit: 'contain'
                   }}
                 />
               ) : viewingFile.file_type === 'application/pdf' || viewingFile.file_name?.toLowerCase().endsWith('.pdf') ? (
-                <iframe
-                  src={fileBlobUrl}
-                  title={viewingFile.display_name || viewingFile.file_name}
-                  style={{
-                    width: '100%',
-                    height: '80vh',
-                    border: 'none'
-                  }}
-                />
+                isMobile ? (
+                  // 手機端：直接在新窗口打開或提供下載選項
+                  <Box sx={{ textAlign: 'center', p: 4, width: '100%' }}>
+                    <Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
+                      {t('employeeDocuments.mobilePdfMessage') || 'PDF 文件在手機上無法直接預覽，請選擇下載或在新窗口打開'}
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                      <Button
+                        variant="contained"
+                        component="a"
+                        href={fileBlobUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ minWidth: 200 }}
+                        startIcon={<VisibilityIcon />}
+                      >
+                        {t('employeeDocuments.openInNewWindow') || '在新窗口打開'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        component="a"
+                        href={fileBlobUrl}
+                        download={viewingFile.display_name || viewingFile.file_name}
+                        sx={{ minWidth: 200 }}
+                        startIcon={<GetAppIcon />}
+                      >
+                        {t('employeeDocuments.download') || '下載文件'}
+                      </Button>
+                    </Box>
+                  </Box>
+                ) : (
+                  // 桌面端：使用 iframe 顯示
+                  <iframe
+                    src={fileBlobUrl}
+                    title={viewingFile.display_name || viewingFile.file_name}
+                    style={{
+                      width: '100%',
+                      height: '80vh',
+                      border: 'none'
+                    }}
+                  />
+                )
               ) : (
                 <Box sx={{ textAlign: 'center', p: 4 }}>
                   <Typography variant="body1" gutterBottom>

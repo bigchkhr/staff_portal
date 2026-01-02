@@ -413,6 +413,8 @@
     "cannotOpenFile": "Cannot open file",
     "noPermissionFile": "You do not have permission to view this file",
     "cannotPreview": "Cannot preview this file type in browser",
+    "mobilePdfMessage": "PDF files cannot be previewed directly on mobile devices. Please download or open in a new window.",
+    "openInNewWindow": "Open in New Window",
     "disclaimer": "Documents might accompanied by a password encryption comprising the first 5 alphanumeric characters of your Hong Kong ID, your complete English surname, and last 2 digits of your year of birth. For example, if your Hong Kong identity card number is A123456(7), your English surname is CHAO, and your date of birth is 1998-05-09, then your password would be A1234CHAO98. Please keep your personal information confidential and never provide it to any party."
   },
   "approvalHistory": {
@@ -481,6 +483,8 @@
     "allLeaveTypes": "All Types",
     "flowTypeFilter": "Application Type Filter",
     "allFlowTypes": "All Types",
+    "eFlow": "E-Flow",
+    "paperFlow": "Paper Flow",
     "yearFilter": "Year Filter",
     "allYears": "All Years",
     "dateFrom": "Start Date",
@@ -513,7 +517,9 @@
     "hours": "hours",
     "extraWorkingHoursApplication": "Extra Working Hours Application",
     "outdoorWorkApplication": "Outdoor Work Application",
-    "leaveApplication": "Leave Application"
+    "leaveApplication": "Leave Application",
+    "applicationTypeFilter": "Application Type Filter",
+    "allApplicationTypes": "All Types"
   },
   "departmentGroupBalances": {
     "title": "Department Group Leave Balances",

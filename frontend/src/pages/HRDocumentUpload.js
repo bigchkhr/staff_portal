@@ -489,47 +489,23 @@ const HRDocumentUpload = () => {
             </Select>
           </FormControl>
 
-          <Box sx={{ 
-            display: 'flex',
-            gap: 1,
-            minWidth: { xs: '100%', sm: 300 },
-            flex: { xs: '1 1 100%', sm: '1 1 auto' },
-            alignItems: 'flex-end',
-            flexDirection: { xs: 'column', sm: 'row' }
-          }}>
-            <TextField
-              label={t('hrDocumentUpload.search')}
-              value={searchInput}
-              onChange={handleSearchInputChange}
-              onKeyPress={handleSearchKeyPress}
-              placeholder={t('hrDocumentUpload.searchPlaceholder')}
-              sx={{ 
-                flex: 1,
-                width: { xs: '100%', sm: 'auto' }
-              }}
-              size="small"
-              InputProps={{
-                sx: { height: { xs: '48px', sm: '56px' } }
-              }}
-            />
-            <Button
-              variant="contained"
-              startIcon={<SearchIcon />}
-              onClick={handleSearch}
-              sx={{
-                height: { xs: '48px', sm: '56px' },
-                minWidth: { xs: '100%', sm: '100px' },
-                borderRadius: 1,
-                fontWeight: 500,
-                boxShadow: 2,
-                '&:hover': {
-                  boxShadow: 4
-                }
-              }}
-            >
-              {isMobile ? <SearchIcon /> : t('common.search')}
-            </Button>
-          </Box>
+          <Button
+            variant="contained"
+            startIcon={<SearchIcon />}
+            onClick={handleSearch}
+            sx={{
+              height: { xs: '48px', sm: '56px' },
+              minWidth: { xs: '100%', sm: '100px' },
+              borderRadius: 1,
+              fontWeight: 500,
+              boxShadow: 2,
+              '&:hover': {
+                boxShadow: 4
+              }
+            }}
+          >
+            {isMobile ? <SearchIcon /> : t('common.search')}
+          </Button>
         </Box>
       </Paper>
 

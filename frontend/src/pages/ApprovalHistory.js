@@ -282,6 +282,7 @@ const ApprovalHistory = () => {
   const [advancedSearchExpanded, setAdvancedSearchExpanded] = useState(false);
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterFlowType, setFilterFlowType] = useState('');
+  const [filterApplicationType, setFilterApplicationType] = useState('');
   const [filterYear, setFilterYear] = useState(currentYear.toString());
   const [filterMonth, setFilterMonth] = useState(currentMonth.toString());
   const [filterDepartmentGroup, setFilterDepartmentGroup] = useState('');
@@ -301,12 +302,6 @@ const ApprovalHistory = () => {
   const [reversing, setReversing] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  useEffect(() => {
-    fetchLeaveTypes();
-    fetchDepartmentGroups();
-    fetchApprovalHistory();
-  }, []);
-
   const fetchLeaveTypes = async () => {
     try {
       const response = await axios.get('/api/leave-types');
@@ -325,7 +320,7 @@ const ApprovalHistory = () => {
     }
   };
 
-  const fetchApprovalHistory = async () => {
+  const fetchApprovalHistory = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
@@ -338,6 +333,7 @@ const ApprovalHistory = () => {
       // 進階搜尋參數
       if (filterLeaveType) params.leave_type_id = filterLeaveType;
       if (filterFlowType) params.flow_type = filterFlowType;
+      if (filterApplicationType) params.application_type = filterApplicationType;
       if (filterDepartmentGroup) params.department_group_id = filterDepartmentGroup;
       if (filterYear) {
         const yearStr = String(filterYear).trim();
@@ -367,23 +363,14 @@ const ApprovalHistory = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterDepartmentGroup, filterYear, filterMonth, dateFrom, dateTo]);
 
-  const handleApplyFilter = () => {
+  useEffect(() => {
+    fetchLeaveTypes();
+    fetchDepartmentGroups();
     fetchApprovalHistory();
-  };
-
-  const handleClearFilter = () => {
-    setStatusFilter('all');
-    setFilterLeaveType('');
-    setFilterFlowType('');
-    setFilterYear(currentYear.toString());
-    setFilterMonth(currentMonth.toString());
-    setFilterDepartmentGroup('');
-    setDateFrom('');
-    setDateTo('');
-    fetchApprovalHistory();
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getStatusColor = useCallback((application) => {
     // 如果已被銷假，顯示特殊顏色
@@ -559,13 +546,15 @@ const ApprovalHistory = () => {
 
   const handleSearch = useCallback(() => {
     setSearchKeyword(search);
-  }, [search]);
+    fetchApprovalHistory();
+  }, [search, fetchApprovalHistory]);
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
       setSearchKeyword(search);
+      fetchApprovalHistory();
     }
-  }, [search]);
+  }, [search, fetchApprovalHistory]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter(app => {
@@ -896,8 +885,6 @@ const ApprovalHistory = () => {
                     value={statusFilter}
                     onChange={(e) => {
                       setStatusFilter(e.target.value);
-                      // 狀態改變時立即觸發搜尋
-                      setTimeout(() => fetchApprovalHistory(), 0);
                     }}
                     label={t('approvalHistory.statusFilter')}
                   >
@@ -939,6 +926,22 @@ const ApprovalHistory = () => {
                     <MenuItem value="">{t('approvalHistory.allFlowTypes') || t('leaveHistory.allFlowTypes')}</MenuItem>
                     <MenuItem value="e-flow">{t('approvalHistory.eFlow') || t('leaveHistory.eFlow')}</MenuItem>
                     <MenuItem value="paper-flow">{t('approvalHistory.paperFlow') || t('leaveHistory.paperFlow')}</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('approvalHistory.applicationTypeFilter')}</InputLabel>
+                  <Select
+                    value={filterApplicationType}
+                    onChange={(e) => setFilterApplicationType(e.target.value)}
+                    label={t('approvalHistory.applicationTypeFilter')}
+                  >
+                    <MenuItem value="">{t('approvalHistory.allApplicationTypes')}</MenuItem>
+                    <MenuItem value="leave">{t('approvalHistory.leaveApplication')}</MenuItem>
+                    <MenuItem value="extra_working_hours">{t('approvalHistory.extraWorkingHoursApplication')}</MenuItem>
+                    <MenuItem value="outdoor_work">{t('approvalHistory.outdoorWorkApplication')}</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1022,29 +1025,6 @@ const ApprovalHistory = () => {
                 />
               </Grid>
 
-              <Grid item xs={12}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  gap: { xs: 1, sm: 2 }, 
-                  justifyContent: 'flex-end',
-                  flexDirection: { xs: 'column', sm: 'row' }
-                }}>
-                  <Button 
-                    variant="outlined" 
-                    onClick={handleClearFilter}
-                    fullWidth={isMobile}
-                  >
-                    {t('approvalHistory.clearFilter') || t('leaveHistory.clearFilter')}
-                  </Button>
-                  <Button 
-                    variant="contained" 
-                    onClick={handleApplyFilter}
-                    fullWidth={isMobile}
-                  >
-                    {t('approvalHistory.applyFilter') || t('leaveHistory.applyFilter')}
-                  </Button>
-                </Box>
-              </Grid>
             </Grid>
           </AccordionDetails>
         </Accordion>

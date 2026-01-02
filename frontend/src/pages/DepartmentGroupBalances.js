@@ -140,109 +140,229 @@ const DepartmentGroupBalances = () => {
     return chips;
   };
 
-  const renderMobileCard = (member, balance, index) => {
+  const renderMobileMemberCard = (member) => {
+    const memberName = member.display_name || member.name_zh || `${member.surname} ${member.given_name}`;
+    const departmentName = i18n.language === 'en' 
+      ? (member.department_name || member.department_name_zh)
+      : (member.department_name_zh || member.department_name);
+    const positionName = i18n.language === 'en'
+      ? (member.position_name || member.position_name_zh)
+      : (member.position_name_zh || member.position_name);
+
     return (
-      <Card key={`${member.id}-${balance.leave_type_id}-${index}`} sx={{ mb: 2 }}>
-        <CardContent>
-          {index === 0 && (
-            <>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t('departmentGroupBalances.employeeNumber')}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  {member.employee_number}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t('departmentGroupBalances.name')}
-                </Typography>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  {member.display_name || member.name_zh || `${member.surname} ${member.given_name}`}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t('departmentGroupBalances.department')}
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  {i18n.language === 'en' 
-                    ? (member.department_name || member.department_name_zh)
-                    : (member.department_name_zh || member.department_name)}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="caption" color="text.secondary">
-                  {t('departmentGroupBalances.position')}
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  {i18n.language === 'en'
-                    ? (member.position_name || member.position_name_zh)
-                    : (member.position_name_zh || member.position_name)}
-                </Typography>
-              </Box>
-              <Divider sx={{ my: 2 }} />
-            </>
-          )}
-          <Box sx={{ mb: 1.5 }}>
-            <Typography variant="caption" color="text.secondary">
-              {t('departmentGroupBalances.leaveType')}
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-              {i18n.language === 'en'
-                ? `${balance.leave_type_name || balance.leave_type_name_zh} (${balance.leave_type_code})`
-                : `${balance.leave_type_name_zh || balance.leave_type_name} (${balance.leave_type_code})`}
-            </Typography>
-          </Box>
-          <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('departmentGroupBalances.entitlement')}
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                {parseFloat(balance.total).toFixed(1)}
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('departmentGroupBalances.taken')}
-              </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                {parseFloat(balance.taken).toFixed(1)}
-              </Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('departmentGroupBalances.balance')}
-              </Typography>
+      <Card 
+        key={member.id} 
+        sx={{ 
+          mb: 3,
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 2,
+          boxShadow: 2
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+          {/* 成員基本信息 - 突出顯示 */}
+          <Box 
+            sx={{ 
+              mb: 2.5,
+              pb: 2,
+              borderBottom: '2px solid',
+              borderColor: 'primary.main',
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+              borderRadius: 1,
+              p: 1.5,
+              mx: -1.5,
+              mt: -1.5
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
               <Typography 
-                variant="body2" 
+                variant="h6" 
                 sx={{ 
                   fontWeight: 'bold',
-                  color: parseFloat(balance.balance) < 0 ? 'error.main' : 'inherit'
+                  fontSize: { xs: '1rem', sm: '1.1rem' },
+                  color: 'primary.dark'
                 }}
               >
-                {parseFloat(balance.balance).toFixed(1)}
+                {memberName}
               </Typography>
-            </Grid>
-          </Grid>
-          {balance.start_date || balance.end_date ? (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('departmentGroupBalances.validPeriod')}
-              </Typography>
-              <Typography variant="body2">
-                {balance.start_date && balance.end_date ? (
-                  `${dayjs(balance.start_date).format('YYYY-MM-DD')} ${t('departmentGroupBalances.to')} ${dayjs(balance.end_date).format('YYYY-MM-DD')}`
-                ) : balance.start_date ? (
-                  `${t('departmentGroupBalances.since')} ${dayjs(balance.start_date).format('YYYY-MM-DD')}`
-                ) : balance.end_date ? (
-                  `${t('departmentGroupBalances.until')} ${dayjs(balance.end_date).format('YYYY-MM-DD')}`
-                ) : '-'}
+              <Chip 
+                label={member.employee_number}
+                size="small"
+                color="primary"
+                sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}
+              />
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
+                {departmentName} · {positionName}
               </Typography>
             </Box>
-          ) : null}
+          </Box>
+
+          {/* 假期餘額列表 */}
+          {member.balances && member.balances.length > 0 ? (
+            <Box>
+              {member.balances.map((balance, index) => {
+                const leaveTypeName = i18n.language === 'en'
+                  ? `${balance.leave_type_name || balance.leave_type_name_zh} (${balance.leave_type_code})`
+                  : `${balance.leave_type_name_zh || balance.leave_type_name} (${balance.leave_type_code})`;
+                const balanceValue = parseFloat(balance.balance);
+                const isNegative = balanceValue < 0;
+
+                return (
+                  <Box 
+                    key={`${balance.leave_type_id}-${index}`}
+                    sx={{
+                      mb: index < member.balances.length - 1 ? 2.5 : 0,
+                      pb: index < member.balances.length - 1 ? 2.5 : 0,
+                      borderBottom: index < member.balances.length - 1 ? '1px solid' : 'none',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    {/* 假期類型標題 */}
+                    <Typography 
+                      variant="subtitle2" 
+                      sx={{ 
+                        fontWeight: 'bold',
+                        mb: 1.5,
+                        color: 'text.primary',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      {leaveTypeName}
+                    </Typography>
+
+                    {/* 餘額信息 - 使用卡片式布局 */}
+                    <Grid container spacing={1.5}>
+                      <Grid item xs={4}>
+                        <Box 
+                          sx={{ 
+                            textAlign: 'center',
+                            p: 1,
+                            backgroundColor: 'grey.50',
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'grey.200'
+                          }}
+                        >
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary" 
+                            display="block"
+                            sx={{ mb: 0.5, fontSize: '0.7rem' }}
+                          >
+                            {t('departmentGroupBalances.entitlement')}
+                          </Typography>
+                          <Typography 
+                            variant="h6" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              fontSize: '1rem',
+                              color: 'text.primary'
+                            }}
+                          >
+                            {parseFloat(balance.total).toFixed(1)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Box 
+                          sx={{ 
+                            textAlign: 'center',
+                            p: 1,
+                            backgroundColor: 'grey.50',
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'grey.200'
+                          }}
+                        >
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary" 
+                            display="block"
+                            sx={{ mb: 0.5, fontSize: '0.7rem' }}
+                          >
+                            {t('departmentGroupBalances.taken')}
+                          </Typography>
+                          <Typography 
+                            variant="h6" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              fontSize: '1rem',
+                              color: 'text.primary'
+                            }}
+                          >
+                            {parseFloat(balance.taken).toFixed(1)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Box 
+                          sx={{ 
+                            textAlign: 'center',
+                            p: 1,
+                            backgroundColor: isNegative ? 'rgba(211, 47, 47, 0.1)' : 'rgba(46, 125, 50, 0.1)',
+                            borderRadius: 1,
+                            border: '2px solid',
+                            borderColor: isNegative ? 'error.main' : 'success.main'
+                          }}
+                        >
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary" 
+                            display="block"
+                            sx={{ mb: 0.5, fontSize: '0.7rem' }}
+                          >
+                            {t('departmentGroupBalances.balance')}
+                          </Typography>
+                          <Typography 
+                            variant="h6" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              fontSize: '1.1rem',
+                              color: isNegative ? 'error.main' : 'success.dark'
+                            }}
+                          >
+                            {balanceValue.toFixed(1)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+
+                    {/* 有效期（如果有） */}
+                    {balance.start_date || balance.end_date ? (
+                      <Box sx={{ mt: 1.5 }}>
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary" 
+                          display="block"
+                          sx={{ fontSize: '0.75rem' }}
+                        >
+                          {t('departmentGroupBalances.validPeriod')}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                          {balance.start_date && balance.end_date ? (
+                            `${dayjs(balance.start_date).format('YYYY-MM-DD')} ${t('departmentGroupBalances.to')} ${dayjs(balance.end_date).format('YYYY-MM-DD')}`
+                          ) : balance.start_date ? (
+                            `${t('departmentGroupBalances.since')} ${dayjs(balance.start_date).format('YYYY-MM-DD')}`
+                          ) : balance.end_date ? (
+                            `${t('departmentGroupBalances.until')} ${dayjs(balance.end_date).format('YYYY-MM-DD')}`
+                          ) : '-'}
+                        </Typography>
+                      </Box>
+                    ) : null}
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {t('departmentGroupBalances.noBalanceRecords')}
+              </Typography>
+            </Box>
+          )}
         </CardContent>
       </Card>
     );
@@ -333,28 +453,11 @@ const DepartmentGroupBalances = () => {
                 <AccordionDetails sx={{ p: { xs: 1, sm: 2 } }}>
                   {deptGroup.members && deptGroup.members.length > 0 ? (
                     isMobile ? (
-                      // 手機版：卡片式布局
+                      // 手機版：卡片式布局 - 每個成員一個卡片，包含所有假期餘額
                       <Box>
-                        {deptGroup.members.map((member) => (
-                          <React.Fragment key={member.id}>
-                            {member.balances && member.balances.length > 0 ? (
-                              member.balances.map((balance, index) => 
-                                renderMobileCard(member, balance, index)
-                              )
-                            ) : (
-                              <Card sx={{ mb: 2 }}>
-                                <CardContent>
-                                  <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                                    {member.employee_number} - {member.display_name || member.name_zh || `${member.surname} ${member.given_name}`}
-                                  </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    {t('departmentGroupBalances.noBalanceRecords')}
-                                  </Typography>
-                                </CardContent>
-                              </Card>
-                            )}
-                          </React.Fragment>
-                        ))}
+                        {deptGroup.members.map((member) => 
+                          renderMobileMemberCard(member)
+                        )}
                       </Box>
                     ) : (
                       // 桌面版：表格布局（帶橫向滾動）

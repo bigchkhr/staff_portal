@@ -687,67 +687,6 @@ exports.seed = async function (knex) {
     { code: 'SPL', name: 'Special Leave', name_zh: '特別假期', requires_balance: false }
   ]);
 
-  // 建立法定假期（2024年和2025年香港法定假期）
-  const currentYear = new Date().getFullYear();
-  const publicHolidays = [];
-  
-  // 2024年法定假期
-  publicHolidays.push(
-    { date: '2024-01-01', name: 'New Year\'s Day', name_zh: '元旦', year: 2024 },
-    { date: '2024-02-10', name: 'Lunar New Year\'s Day', name_zh: '農曆年初一', year: 2024 },
-    { date: '2024-02-11', name: 'Second Day of Lunar New Year', name_zh: '農曆年初二', year: 2024 },
-    { date: '2024-02-12', name: 'Third Day of Lunar New Year', name_zh: '農曆年初三', year: 2024 },
-    { date: '2024-03-29', name: 'Good Friday', name_zh: '耶穌受難節', year: 2024 },
-    { date: '2024-03-30', name: 'Day Following Good Friday', name_zh: '耶穌受難節翌日', year: 2024 },
-    { date: '2024-04-01', name: 'Easter Monday', name_zh: '復活節星期一', year: 2024 },
-    { date: '2024-04-04', name: 'Ching Ming Festival', name_zh: '清明節', year: 2024 },
-    { date: '2024-05-01', name: 'Labour Day', name_zh: '勞動節', year: 2024 },
-    { date: '2024-05-15', name: 'Buddha\'s Birthday', name_zh: '佛誕', year: 2024 },
-    { date: '2024-06-10', name: 'Dragon Boat Festival', name_zh: '端午節', year: 2024 },
-    { date: '2024-07-01', name: 'Hong Kong Special Administrative Region Establishment Day', name_zh: '香港特別行政區成立紀念日', year: 2024 },
-    { date: '2024-09-18', name: 'Day After Mid-Autumn Festival', name_zh: '中秋節翌日', year: 2024 },
-    { date: '2024-10-01', name: 'National Day', name_zh: '國慶日', year: 2024 },
-    { date: '2024-10-11', name: 'Chung Yeung Festival', name_zh: '重陽節', year: 2024 },
-    { date: '2024-12-25', name: 'Christmas Day', name_zh: '聖誕節', year: 2024 },
-    { date: '2024-12-26', name: 'Boxing Day', name_zh: '聖誕節後第一個周日', year: 2024 }
-  );
-
-  // 2025年法定假期
-  publicHolidays.push(
-    { date: '2025-01-01', name: 'New Year\'s Day', name_zh: '元旦', year: 2025 },
-    { date: '2025-01-29', name: 'Lunar New Year\'s Day', name_zh: '農曆年初一', year: 2025 },
-    { date: '2025-01-30', name: 'Second Day of Lunar New Year', name_zh: '農曆年初二', year: 2025 },
-    { date: '2025-01-31', name: 'Third Day of Lunar New Year', name_zh: '農曆年初三', year: 2025 },
-    { date: '2025-04-04', name: 'Ching Ming Festival', name_zh: '清明節', year: 2025 },
-    { date: '2025-04-18', name: 'Good Friday', name_zh: '耶穌受難節', year: 2025 },
-    { date: '2025-04-19', name: 'Day Following Good Friday', name_zh: '耶穌受難節翌日', year: 2025 },
-    { date: '2025-04-21', name: 'Easter Monday', name_zh: '復活節星期一', year: 2025 },
-    { date: '2025-05-01', name: 'Labour Day', name_zh: '勞動節', year: 2025 },
-    { date: '2025-05-05', name: 'Buddha\'s Birthday', name_zh: '佛誕', year: 2025 },
-    { date: '2025-05-31', name: 'Dragon Boat Festival', name_zh: '端午節', year: 2025 },
-    { date: '2025-07-01', name: 'Hong Kong Special Administrative Region Establishment Day', name_zh: '香港特別行政區成立紀念日', year: 2025 },
-    { date: '2025-10-07', name: 'Day After Mid-Autumn Festival', name_zh: '中秋節翌日', year: 2025 },
-    { date: '2025-10-01', name: 'National Day', name_zh: '國慶日', year: 2025 },
-    { date: '2025-10-30', name: 'Chung Yeung Festival', name_zh: '重陽節', year: 2025 },
-    { date: '2025-12-25', name: 'Christmas Day', name_zh: '聖誕節', year: 2025 },
-    { date: '2025-12-26', name: 'Boxing Day', name_zh: '聖誕節後第一個周日', year: 2025 }
-  );
-
-  // 如果當前年份不在列表中，添加當前年份的示例假期
-  if (currentYear !== 2024 && currentYear !== 2025) {
-    publicHolidays.push(
-      { date: `${currentYear}-01-01`, name: 'New Year\'s Day', name_zh: '元旦', year: currentYear },
-      { date: `${currentYear}-05-01`, name: 'Labour Day', name_zh: '勞動節', year: currentYear },
-      { date: `${currentYear}-07-01`, name: 'Hong Kong Special Administrative Region Establishment Day', name_zh: '香港特別行政區成立紀念日', year: currentYear },
-      { date: `${currentYear}-10-01`, name: 'National Day', name_zh: '國慶日', year: currentYear },
-      { date: `${currentYear}-12-25`, name: 'Christmas Day', name_zh: '聖誕節', year: currentYear },
-      { date: `${currentYear}-12-26`, name: 'Boxing Day', name_zh: '聖誕節後第一個周日', year: currentYear }
-    );
-  }
-
-  if (publicHolidays.length > 0) {
-    await knex('public_holidays').insert(publicHolidays);
-  }
 
   // 取得部門和職位 ID
   const departments = await knex('departments').select('*');

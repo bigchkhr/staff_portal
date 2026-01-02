@@ -421,7 +421,8 @@ class ApprovalController {
         month,
         department_group_id,
         start_date_from, 
-        end_date_to 
+        end_date_to,
+        application_type
       } = req.query;
       const userId = req.user.id;
       
@@ -529,117 +530,126 @@ class ApprovalController {
         }
       }
 
-      const allLeaveApplications = await query.orderBy('leave_applications.created_at', 'desc');
+      // 根據 application_type 參數決定是否查詢假期申請
+      const allLeaveApplications = (!application_type || application_type === 'leave') 
+        ? await query.orderBy('leave_applications.created_at', 'desc')
+        : [];
       
       // 獲取額外工作時數申報
-      let extraWorkingHoursQuery = knex('extra_working_hours_applications')
-        .leftJoin('users', 'extra_working_hours_applications.user_id', 'users.id')
-        .select(
-          'extra_working_hours_applications.*',
-          knex.raw('extra_working_hours_applications.id as transaction_id'),
-          'users.employee_number as user_employee_number',
-          'users.employee_number as applicant_employee_number',
-          'users.surname as user_surname',
-          'users.given_name as user_given_name',
-          'users.display_name as user_display_name',
-          'users.display_name as applicant_display_name'
-        )
-        .where('extra_working_hours_applications.status', '!=', 'pending');
+      let allExtraWorkingHoursApplications = [];
+      if (!application_type || application_type === 'extra_working_hours') {
+        let extraWorkingHoursQuery = knex('extra_working_hours_applications')
+          .leftJoin('users', 'extra_working_hours_applications.user_id', 'users.id')
+          .select(
+            'extra_working_hours_applications.*',
+            knex.raw('extra_working_hours_applications.id as transaction_id'),
+            'users.employee_number as user_employee_number',
+            'users.employee_number as applicant_employee_number',
+            'users.surname as user_surname',
+            'users.given_name as user_given_name',
+            'users.display_name as user_display_name',
+            'users.display_name as applicant_display_name'
+          )
+          .where('extra_working_hours_applications.status', '!=', 'pending');
 
-      // 狀態篩選
-      if (status && status !== 'all' && status !== 'reversed') {
-        extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.status', status);
-      }
+        // 狀態篩選
+        if (status && status !== 'all' && status !== 'reversed') {
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.status', status);
+        }
 
-      // 流程類型篩選
-      if (flow_type) {
-        extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.flow_type', flow_type);
-      }
+        // 流程類型篩選
+        if (flow_type) {
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.flow_type', flow_type);
+        }
 
-      // 部門群組篩選
-      if (department_group_id) {
-        const deptGroupId = parseInt(department_group_id);
-        if (!isNaN(deptGroupId) && deptGroupId > 0) {
-          const DepartmentGroup = require('../database/models/DepartmentGroup');
-          const group = await DepartmentGroup.findById(deptGroupId);
-          if (group && group.user_ids && group.user_ids.length > 0) {
-            extraWorkingHoursQuery = extraWorkingHoursQuery.whereIn('extra_working_hours_applications.user_id', group.user_ids);
-          } else {
-            extraWorkingHoursQuery = extraWorkingHoursQuery.where('1', '=', '0');
+        // 部門群組篩選
+        if (department_group_id) {
+          const deptGroupId = parseInt(department_group_id);
+          if (!isNaN(deptGroupId) && deptGroupId > 0) {
+            const DepartmentGroup = require('../database/models/DepartmentGroup');
+            const group = await DepartmentGroup.findById(deptGroupId);
+            if (group && group.user_ids && group.user_ids.length > 0) {
+              extraWorkingHoursQuery = extraWorkingHoursQuery.whereIn('extra_working_hours_applications.user_id', group.user_ids);
+            } else {
+              extraWorkingHoursQuery = extraWorkingHoursQuery.where('1', '=', '0');
+            }
           }
         }
-      }
 
-      // 日期範圍篩選
-      if (start_date_from || end_date_to) {
-        if (start_date_from && end_date_to) {
-          extraWorkingHoursQuery = extraWorkingHoursQuery.where(function() {
-            this.where('extra_working_hours_applications.start_date', '<=', end_date_to)
-                .andWhere('extra_working_hours_applications.end_date', '>=', start_date_from);
-          });
-        } else if (start_date_from) {
-          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.end_date', '>=', start_date_from);
-        } else if (end_date_to) {
-          extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.start_date', '<=', end_date_to);
+        // 日期範圍篩選
+        if (start_date_from || end_date_to) {
+          if (start_date_from && end_date_to) {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.where(function() {
+              this.where('extra_working_hours_applications.start_date', '<=', end_date_to)
+                  .andWhere('extra_working_hours_applications.end_date', '>=', start_date_from);
+            });
+          } else if (start_date_from) {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.end_date', '>=', start_date_from);
+          } else if (end_date_to) {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.start_date', '<=', end_date_to);
+          }
         }
-      }
 
-      const allExtraWorkingHoursApplications = await extraWorkingHoursQuery.orderBy('extra_working_hours_applications.created_at', 'desc');
+        allExtraWorkingHoursApplications = await extraWorkingHoursQuery.orderBy('extra_working_hours_applications.created_at', 'desc');
+      }
       
       // 獲取外勤工作申請
-      let outdoorWorkQuery = knex('outdoor_work_applications')
-        .leftJoin('users', 'outdoor_work_applications.user_id', 'users.id')
-        .select(
-          'outdoor_work_applications.*',
-          knex.raw('outdoor_work_applications.id as transaction_id'),
-          'users.employee_number as user_employee_number',
-          'users.employee_number as applicant_employee_number',
-          'users.surname as user_surname',
-          'users.given_name as user_given_name',
-          'users.display_name as user_display_name',
-          'users.display_name as applicant_display_name'
-        )
-        .where('outdoor_work_applications.status', '!=', 'pending');
+      let allOutdoorWorkApplications = [];
+      if (!application_type || application_type === 'outdoor_work') {
+        let outdoorWorkQuery = knex('outdoor_work_applications')
+          .leftJoin('users', 'outdoor_work_applications.user_id', 'users.id')
+          .select(
+            'outdoor_work_applications.*',
+            knex.raw('outdoor_work_applications.id as transaction_id'),
+            'users.employee_number as user_employee_number',
+            'users.employee_number as applicant_employee_number',
+            'users.surname as user_surname',
+            'users.given_name as user_given_name',
+            'users.display_name as user_display_name',
+            'users.display_name as applicant_display_name'
+          )
+          .where('outdoor_work_applications.status', '!=', 'pending');
 
-      // 狀態篩選
-      if (status && status !== 'all' && status !== 'reversed') {
-        outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.status', status);
-      }
+        // 狀態篩選
+        if (status && status !== 'all' && status !== 'reversed') {
+          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.status', status);
+        }
 
-      // 流程類型篩選
-      if (flow_type) {
-        outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.flow_type', flow_type);
-      }
+        // 流程類型篩選
+        if (flow_type) {
+          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.flow_type', flow_type);
+        }
 
-      // 部門群組篩選
-      if (department_group_id) {
-        const deptGroupId = parseInt(department_group_id);
-        if (!isNaN(deptGroupId) && deptGroupId > 0) {
-          const DepartmentGroup = require('../database/models/DepartmentGroup');
-          const group = await DepartmentGroup.findById(deptGroupId);
-          if (group && group.user_ids && group.user_ids.length > 0) {
-            outdoorWorkQuery = outdoorWorkQuery.whereIn('outdoor_work_applications.user_id', group.user_ids);
-          } else {
-            outdoorWorkQuery = outdoorWorkQuery.where('1', '=', '0');
+        // 部門群組篩選
+        if (department_group_id) {
+          const deptGroupId = parseInt(department_group_id);
+          if (!isNaN(deptGroupId) && deptGroupId > 0) {
+            const DepartmentGroup = require('../database/models/DepartmentGroup');
+            const group = await DepartmentGroup.findById(deptGroupId);
+            if (group && group.user_ids && group.user_ids.length > 0) {
+              outdoorWorkQuery = outdoorWorkQuery.whereIn('outdoor_work_applications.user_id', group.user_ids);
+            } else {
+              outdoorWorkQuery = outdoorWorkQuery.where('1', '=', '0');
+            }
           }
         }
-      }
 
-      // 日期範圍篩選
-      if (start_date_from || end_date_to) {
-        if (start_date_from && end_date_to) {
-          outdoorWorkQuery = outdoorWorkQuery.where(function() {
-            this.where('outdoor_work_applications.start_date', '<=', end_date_to)
-                .andWhere('outdoor_work_applications.end_date', '>=', start_date_from);
-          });
-        } else if (start_date_from) {
-          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.end_date', '>=', start_date_from);
-        } else if (end_date_to) {
-          outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.start_date', '<=', end_date_to);
+        // 日期範圍篩選
+        if (start_date_from || end_date_to) {
+          if (start_date_from && end_date_to) {
+            outdoorWorkQuery = outdoorWorkQuery.where(function() {
+              this.where('outdoor_work_applications.start_date', '<=', end_date_to)
+                  .andWhere('outdoor_work_applications.end_date', '>=', start_date_from);
+            });
+          } else if (start_date_from) {
+            outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.end_date', '>=', start_date_from);
+          } else if (end_date_to) {
+            outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.start_date', '<=', end_date_to);
+          }
         }
-      }
 
-      const allOutdoorWorkApplications = await outdoorWorkQuery.orderBy('outdoor_work_applications.created_at', 'desc');
+        allOutdoorWorkApplications = await outdoorWorkQuery.orderBy('outdoor_work_applications.created_at', 'desc');
+      }
       
       // 獲取用戶所屬的授權群組
       const userDelegationGroups = await knex('delegation_groups')

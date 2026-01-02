@@ -413,6 +413,8 @@
     "cannotOpenFile": "無法開啟檔案",
     "noPermissionFile": "您沒有權限查看此文件",
     "cannotPreview": "無法在瀏覽器中預覽此文件類型",
+    "mobilePdfMessage": "PDF 文件在手機上無法直接預覽，請選擇下載或在新窗口打開",
+    "openInNewWindow": "在新窗口打開",
     "disclaimer": "文件如附有密碼加密，該密碼由您的香港身分證號碼的前 5 個字母數字字元、您的完整大階英文姓氏以及您出生年份的後兩位數字組成。例如，您的香港身份證號碼是A123456(7)、英文姓氏CHAO及出生日期為1998-05-09，該密碼則是A1234CHAO98。請務必對你的個人資料保密，切勿向任何人士提供保密資料。"
   },
   "approvalHistory": {
@@ -481,6 +483,8 @@
     "allLeaveTypes": "全部類型",
     "flowTypeFilter": "申請方式篩選",
     "allFlowTypes": "全部方式",
+    "eFlow": "電子申請",
+    "paperFlow": "紙本申請",
     "yearFilter": "年份篩選",
     "allYears": "全部年份",
     "dateFrom": "開始日期",
@@ -513,7 +517,9 @@
     "hours": "小時",
     "extraWorkingHoursApplication": "額外工作時數申報",
     "outdoorWorkApplication": "外勤工作申請",
-    "leaveApplication": "假期申請"
+    "leaveApplication": "假期申請",
+    "applicationTypeFilter": "申請類型篩選",
+    "allApplicationTypes": "全部類型"
   },
   "departmentGroupBalances": {
     "title": "部門群組假期餘額",

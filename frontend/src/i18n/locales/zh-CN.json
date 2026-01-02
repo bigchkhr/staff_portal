@@ -408,6 +408,8 @@
     "cannotOpenFile": "无法开启档案",
     "noPermissionFile": "您没有权限查看此文件",
     "cannotPreview": "无法在浏览器中预览此文件类型",
+    "mobilePdfMessage": "PDF 文件在手机上无法直接预览，请选择下载或在新窗口打开",
+    "openInNewWindow": "在新窗口打开",
     "disclaimer": "文件如附有密码加密，该密码由您的香港身份证号码的前 5 个字母数字字符、您的完整大写英文姓氏以及您出生年份的后两位数字组成。例如，您的香港身份证号码是A123456(7)、英文姓氏CHAO及出生日期为1998-05-09，该密码则是A1234CHAO98。请务必对您的个人资料保密，切勿向任何人士提供保密资料。"
   },
   "approvalHistory": {
@@ -476,6 +478,8 @@
     "allLeaveTypes": "全部类型",
     "flowTypeFilter": "申请方式筛选",
     "allFlowTypes": "全部方式",
+    "eFlow": "电子申请",
+    "paperFlow": "纸本申请",
     "yearFilter": "年份筛选",
     "allYears": "全部年份",
     "dateFrom": "开始日期",
@@ -508,7 +512,9 @@
     "hours": "小时",
     "extraWorkingHoursApplication": "额外工作时数申报",
     "outdoorWorkApplication": "外勤工作申请",
-    "leaveApplication": "假期申请"
+    "leaveApplication": "假期申请",
+    "applicationTypeFilter": "申请类型筛选",
+    "allApplicationTypes": "全部类型"
   },
   "departmentGroupBalances": {
     "title": "部门群组假期余额",
