@@ -229,8 +229,8 @@ class AdminController {
 
       // console.log('addBalanceTransaction request:', { user_id, leave_type_id, amount, year: currentYear, start_date, end_date });
 
-      if (!user_id || !leave_type_id || amount === undefined || parseFloat(amount) === 0) {
-        return res.status(400).json({ message: '請填寫所有必填欄位，且數量不能為0' });
+      if (!user_id || !leave_type_id || amount === undefined || amount === null || amount === '') {
+        return res.status(400).json({ message: '請填寫所有必填欄位' });
       }
 
       // 驗證日期範圍
@@ -327,8 +327,8 @@ class AdminController {
       }
 
       // 驗證必填欄位
-      if (amount === undefined || parseFloat(amount) === 0) {
-        return res.status(400).json({ message: '數量不能為0' });
+      if (amount !== undefined && (amount === null || amount === '')) {
+        return res.status(400).json({ message: '數量不能為空' });
       }
 
       // 驗證日期範圍

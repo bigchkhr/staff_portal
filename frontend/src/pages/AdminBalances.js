@@ -166,8 +166,22 @@ const AdminBalances = () => {
 
   const handleSubmit = async () => {
     try {
+      // 驗證必填欄位
+      if (!formData.user_id || !formData.leave_type_id || formData.amount === '' || formData.amount === null || formData.amount === undefined) {
+        alert(t('adminBalances.fillAllFields') || '請填寫所有必填欄位');
+        return;
+      }
+
+      // 驗證 amount 是有效數字（允許 0 和負數）
+      const amountValue = parseFloat(formData.amount);
+      if (isNaN(amountValue)) {
+        alert(t('adminBalances.invalidAmount') || '請輸入有效的數字');
+        return;
+      }
+
       const submitData = {
         ...formData,
+        amount: amountValue, // 確保是數字類型
         start_date: formData.start_date ? dayjs(formData.start_date).format('YYYY-MM-DD') : null,
         end_date: formData.end_date ? dayjs(formData.end_date).format('YYYY-MM-DD') : null
       };
@@ -972,10 +986,13 @@ const AdminBalances = () => {
               label={t('adminBalances.amount')}
               type="number"
               value={formData.amount}
-              onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-              required
+              onChange={(e) => {
+                const value = e.target.value;
+                // 允許空字符串、負數、0 和正數
+                setFormData(prev => ({ ...prev, amount: value }));
+              }}
               inputProps={{ step: 0.5 }}
-              helperText={t('adminBalances.amountHelper')}
+              helperText={t('adminBalances.amountHelper') || '可輸入正數、負數或0'}
             />
             <YearSelector
               value={formData.year}

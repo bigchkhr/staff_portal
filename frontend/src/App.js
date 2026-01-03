@@ -39,6 +39,7 @@ import MyApprovals from './pages/MyApprovals';
 import SystemMaintenance from './pages/SystemMaintenance';
 import ManualApproval from './pages/ManualApproval';
 import PublicHolidayManagement from './pages/PublicHolidayManagement';
+import ExternalLinks from './pages/ExternalLinks';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -92,6 +93,7 @@ function App() {
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
+            <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
             <Route path="/announcements" element={<PrivateRoute><Announcements /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />

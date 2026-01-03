@@ -721,7 +721,11 @@ const ApprovalDetail = () => {
                   <ListItem>
                     <ListItemText 
                       primary={t('approvalDetail.startDate')}
-                      secondary={formatDate(application.start_date)}
+                      secondary={
+                        application.start_date 
+                          ? `${formatDate(application.start_date)}${application.start_session ? ` (${application.start_session === 'AM' ? t('leaveApplication.sessionAM') : t('leaveApplication.sessionPM')})` : ''}`
+                          : '-'
+                      }
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
@@ -729,7 +733,11 @@ const ApprovalDetail = () => {
                   <ListItem>
                     <ListItemText 
                       primary={t('approvalDetail.endDate')}
-                      secondary={formatDate(application.end_date)}
+                      secondary={
+                        application.end_date 
+                          ? `${formatDate(application.end_date)}${application.end_session ? ` (${application.end_session === 'AM' ? t('leaveApplication.sessionAM') : t('leaveApplication.sessionPM')})` : ''}`
+                          : '-'
+                      }
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
@@ -777,103 +785,60 @@ const ApprovalDetail = () => {
               {t('approvalDetail.approvalProcess')}
             </Typography>
 
-            <List>
-              <ListItem>
-                <ListItemText
-                  primary={t('approvalDetail.checkerStage')}
-                  secondary={
-                    <Box>
-                      <Box>
-                        {application.checker_at 
-                          ? `${t('approvalDetail.checkedAt')} ${formatDateTime(application.checker_at)}${application.checker_name ? ` - ${application.checker_name}` : ''}` 
-                          : t('approvalDetail.pendingCheck')}
-                      </Box>
-                      {application.checker_remarks && (
-                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                          {application.checker_remarks}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary={t('approvalDetail.approver1Stage')}
-                  secondary={
-                    <Box>
-                      <Box>
-                        {application.approver_1_at 
-                          ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_1_at)}${application.approver_1_name ? ` - ${application.approver_1_name}` : ''}` 
-                          : application.checker_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                      </Box>
-                      {application.approver_1_remarks && (
-                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                          {application.approver_1_remarks}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary={t('approvalDetail.approver2Stage')}
-                  secondary={
-                    <Box>
-                      <Box>
-                        {application.approver_2_at 
-                          ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_2_at)}${application.approver_2_name ? ` - ${application.approver_2_name}` : ''}` 
-                          : application.approver_1_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                      </Box>
-                      {application.approver_2_remarks && (
-                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                          {application.approver_2_remarks}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary={t('approvalDetail.approver3Stage')}
-                  secondary={
-                    <Box>
-                      <Box>
-                        {application.approver_3_at 
-                          ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_3_at)}${application.approver_3_name ? ` - ${application.approver_3_name}` : ''}` 
-                          : application.approver_2_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                      </Box>
-                      {application.approver_3_remarks && (
-                        <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                          {application.approver_3_remarks}
-                        </Typography>
-                      )}
-                    </Box>
-                  }
-                  primaryTypographyProps={{ variant: 'caption' }}
-                  secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                />
-              </ListItem>
-              {application.status === 'rejected' && application.rejected_by_name && (
+            {/* 檢查是否為紙本申請 */}
+            {(application.is_paper_flow === true || application.flow_type === 'paper-flow') ? (
+              <List>
                 <ListItem>
                   <ListItemText
-                    primary={t('approvalDetail.rejection')}
+                    primary={t('approvalDetail.paperFlowApproval')}
+                    secondary={
+                      application.status === 'approved' 
+                        ? t('approvalDetail.approved')
+                        : application.status === 'rejected'
+                        ? t('approvalDetail.rejected')
+                        : t('approvalDetail.pending')
+                    }
+                    primaryTypographyProps={{ variant: 'caption' }}
+                    secondaryTypographyProps={{ variant: 'body1' }}
+                  />
+                </ListItem>
+                {application.status === 'rejected' && application.rejected_by_name && (
+                  <ListItem>
+                    <ListItemText
+                      primary={t('approvalDetail.rejection')}
+                      secondary={
+                        <Box>
+                          <Box>
+                            {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
+                          </Box>
+                          {application.rejection_reason && (
+                            <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
+                              {application.rejection_reason}
+                            </Typography>
+                          )}
+                        </Box>
+                      }
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                    />
+                  </ListItem>
+                )}
+              </List>
+            ) : (
+              <List>
+                <ListItem>
+                  <ListItemText
+                    primary={t('approvalDetail.checkerStage')}
                     secondary={
                       <Box>
                         <Box>
-                          {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
+                          {application.checker_at 
+                            ? `${t('approvalDetail.checkedAt')} ${formatDateTime(application.checker_at)}${application.checker_name ? ` - ${application.checker_name}` : ''}` 
+                            : t('approvalDetail.pendingCheck')}
                         </Box>
-                        {application.rejection_reason && (
+                        {application.checker_remarks && (
                           <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                            {application.rejection_reason}
+                            {application.checker_remarks}
                           </Typography>
                         )}
                       </Box>
@@ -882,8 +847,92 @@ const ApprovalDetail = () => {
                     secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
                   />
                 </ListItem>
-              )}
-            </List>
+                <ListItem>
+                  <ListItemText
+                    primary={t('approvalDetail.approver1Stage')}
+                    secondary={
+                      <Box>
+                        <Box>
+                          {application.approver_1_at 
+                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_1_at)}${application.approver_1_name ? ` - ${application.approver_1_name}` : ''}` 
+                            : application.checker_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
+                        </Box>
+                        {application.approver_1_remarks && (
+                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
+                            {application.approver_1_remarks}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                    primaryTypographyProps={{ variant: 'caption' }}
+                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('approvalDetail.approver2Stage')}
+                    secondary={
+                      <Box>
+                        <Box>
+                          {application.approver_2_at 
+                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_2_at)}${application.approver_2_name ? ` - ${application.approver_2_name}` : ''}` 
+                            : application.approver_1_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
+                        </Box>
+                        {application.approver_2_remarks && (
+                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
+                            {application.approver_2_remarks}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                    primaryTypographyProps={{ variant: 'caption' }}
+                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText
+                    primary={t('approvalDetail.approver3Stage')}
+                    secondary={
+                      <Box>
+                        <Box>
+                          {application.approver_3_at 
+                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_3_at)}${application.approver_3_name ? ` - ${application.approver_3_name}` : ''}` 
+                            : application.approver_2_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
+                        </Box>
+                        {application.approver_3_remarks && (
+                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
+                            {application.approver_3_remarks}
+                          </Typography>
+                        )}
+                      </Box>
+                    }
+                    primaryTypographyProps={{ variant: 'caption' }}
+                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                  />
+                </ListItem>
+                {application.status === 'rejected' && application.rejected_by_name && (
+                  <ListItem>
+                    <ListItemText
+                      primary={t('approvalDetail.rejection')}
+                      secondary={
+                        <Box>
+                          <Box>
+                            {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
+                          </Box>
+                          {application.rejection_reason && (
+                            <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
+                              {application.rejection_reason}
+                            </Typography>
+                          )}
+                        </Box>
+                      }
+                      primaryTypographyProps={{ variant: 'caption' }}
+                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
+                    />
+                  </ListItem>
+                )}
+              </List>
+            )}
 
             {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (
               <>

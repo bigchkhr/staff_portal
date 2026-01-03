@@ -38,7 +38,8 @@ import {
   ExitToApp as ExitToAppIcon,
   Description as DescriptionIcon,
   Language as LanguageIcon,
-  Notifications as NotificationsIcon
+  Notifications as NotificationsIcon,
+  Link as LinkIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -99,6 +100,7 @@ const Layout = ({ children }) => {
     },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'formLibrary', icon: <DescriptionIcon />, path: '/form-library', show: true },
+    { key: 'externalLinks', icon: <LinkIcon />, path: '/external-links', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },
     { key: 'manualApproval', icon: <AssignmentIcon />, path: '/manual-approval', show: isSystemAdmin },
     { key: 'systemMaintenance', icon: <SettingsIcon />, path: '/system-maintenance', show: isSystemAdmin }

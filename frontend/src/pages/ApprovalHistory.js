@@ -1069,7 +1069,6 @@ const ApprovalHistory = () => {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.endDateTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.daysHours')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalStage')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.status')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.actions')}</TableCell>
                 </TableRow>
@@ -1077,7 +1076,7 @@ const ApprovalHistory = () => {
               <TableBody>
                 {filteredApplications.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} align="center">{t('approvalHistory.noRecords')}</TableCell>
+                    <TableCell colSpan={10} align="center">{t('approvalHistory.noRecords')}</TableCell>
                   </TableRow>
                 ) : (
                   filteredApplications.map((app) => (
@@ -1143,7 +1142,6 @@ const ApprovalHistory = () => {
                             color="primary"
                           />
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(getApprovalDate(app))}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip
                             label={getStatusText(app)}
@@ -1153,23 +1151,23 @@ const ApprovalHistory = () => {
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                            <Button
-                              variant="contained"
+                            <IconButton
+                              color="primary"
                               size="small"
                               onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
-                              startIcon={<VisibilityIcon />}
+                              title={t('approvalHistory.viewDetails')}
                             >
-                              {t('approvalHistory.viewDetails')}
-                            </Button>
+                              <VisibilityIcon />
+                            </IconButton>
                             {(app.application_type !== 'extra_working_hours' && app.application_type !== 'outdoor_work') && canManageFiles(app) && (
-                              <Button
-                                variant="outlined"
+                              <IconButton
+                                color="primary"
                                 size="small"
                                 onClick={() => handleOpenFileDialog(app)}
-                                startIcon={<AttachFileIcon />}
+                                title={t('approvalHistory.manageFiles')}
                               >
-                                {t('approvalHistory.manageFiles')}
-                              </Button>
+                                <AttachFileIcon />
+                              </IconButton>
                             )}
                             {(app.application_type !== 'extra_working_hours' && app.application_type !== 'outdoor_work') && canShowReversalButton(app) && (
                               <Button
@@ -1253,7 +1251,6 @@ const ApprovalHistory = () => {
                                 color="info"
                               />
                             </TableCell>
-                            <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(reversal.created_at)}</TableCell>
                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
                               <Chip
                                 label={getStatusText(reversal)}
@@ -1262,14 +1259,14 @@ const ApprovalHistory = () => {
                               />
                             </TableCell>
                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                              <Button
-                                variant="outlined"
+                              <IconButton
+                                color="primary"
                                 size="small"
                                 onClick={() => navigate(`/approval/${reversal.id}`)}
-                                startIcon={<VisibilityIcon />}
+                                title={t('approvalHistory.viewDetails')}
                               >
-                                {t('approvalHistory.viewDetails')}
-                              </Button>
+                                <VisibilityIcon />
+                              </IconButton>
                             </TableCell>
                           </TableRow>
                         ))
