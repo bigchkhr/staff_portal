@@ -78,6 +78,7 @@ exports.seed = async function (knex) {
   await knex('user_todos').del();
   await knex('form_library').del();
   await knex('employee_documents').del();
+  await knex('external_links').del();
   await knex('users').del();
   await knex('department_groups').del();
   await knex('delegation_groups').del();
@@ -717,7 +718,51 @@ exports.seed = async function (knex) {
  
   ]).returning('*');
 
-
+  // 建立外部連結
+  if (admin && admin.id) {
+    await knex('external_links').insert([
+      {
+        name: 'Big C HK Website',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://www.bigchk.com',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 1,
+        is_active: true
+      },
+      {
+        name: 'Internal E-mail',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://mail.bigc.co.th/',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 2,
+        is_active: true
+      },
+      {
+        name: 'E-Learning',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://e-learning.bigchk.com',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 3,
+        is_active: true
+      },
+      {
+        name: 'AIA GROUP INSURANCE MEDICAL CLAIM FORM',
+        narrative: '團體保險醫療賠償申請表',
+        logo_url: 'https://tse1.mm.bing.net/th/id/OIP.2PIHMKZtcWXXydzUtsprHQHaH4?w=145&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://www.aia.com.hk/content/dam/hk/pdf/claims-corner/employee_benefits/GPOPCF01%200215%20OP%20Claims%20Form.pdf',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 4,
+        is_active: true
+      }
+    ]);
+  }
 
   // 取得假期類型
   const leaveTypes = await knex('leave_types').select('*');

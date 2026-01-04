@@ -37,7 +37,6 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDate } from '../utils/dateFormat';
-import Layout from '../components/Layout';
 
 const ExternalLinks = () => {
   const { t } = useTranslation();
@@ -226,31 +225,13 @@ const ExternalLinks = () => {
   }, [handleSearch]);
 
   return (
-    <Layout>
-      <Box sx={{ px: { xs: 1, sm: 3 }, py: { xs: 2, sm: 3 }, maxWidth: '1400px', mx: 'auto' }}>
+    <Box>
         <Box sx={{ 
           display: 'flex', 
-          justifyContent: 'space-between', 
+          justifyContent: 'flex-end', 
           alignItems: 'center', 
-          mb: 3,
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: 2
+          mb: 3
         }}>
-          <Box>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontSize: { xs: '1.5rem', sm: '2rem' }, 
-                fontWeight: 600,
-                color: 'primary.main'
-              }}
-            >
-              {t('externalLinks.title')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              {t('externalLinks.pageDescription')}
-            </Typography>
-          </Box>
           {isSystemAdmin && (
             <Button
               variant="contained"
@@ -262,8 +243,7 @@ const ExternalLinks = () => {
                 boxShadow: 2,
                 '&:hover': {
                   boxShadow: 4
-                },
-                width: { xs: '100%', sm: 'auto' }
+                }
               }}
             >
               {t('externalLinks.addLink')}
@@ -839,8 +819,7 @@ const ExternalLinks = () => {
             </DialogActions>
           </Dialog>
         )}
-      </Box>
-    </Layout>
+    </Box>
   );
 };
 

@@ -39,7 +39,9 @@ import {
   Description as DescriptionIcon,
   Language as LanguageIcon,
   Notifications as NotificationsIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Build as BuildIcon,
+  CalendarToday as CalendarTodayIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -98,9 +100,9 @@ const Layout = ({ children }) => {
       path: '/my-approvals', 
       show: true 
     },
+    { key: 'schedule', icon: <CalendarTodayIcon />, path: '/schedule', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
-    { key: 'formLibrary', icon: <DescriptionIcon />, path: '/form-library', show: true },
-    { key: 'externalLinks', icon: <LinkIcon />, path: '/external-links', show: true },
+    { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },
     { key: 'manualApproval', icon: <AssignmentIcon />, path: '/manual-approval', show: isSystemAdmin },
     { key: 'systemMaintenance', icon: <SettingsIcon />, path: '/system-maintenance', show: isSystemAdmin }

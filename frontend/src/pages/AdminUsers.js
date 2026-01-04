@@ -18,16 +18,20 @@ import {
   Divider,
   Chip,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Switch,
+  FormControlLabel,
+  Tooltip
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Search as SearchIcon } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { formatDate } from '../utils/dateFormat';
 import UserFormDialog from '../components/UserFormDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 // 將表格行提取為獨立的 memoized 組件，避免不必要的重新渲染
-const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
+const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t, isMobile, index, isHRMember }) => {
   const departmentName = i18n.language === 'en' 
     ? (user.department_name || user.department_name_zh || '-')
     : (user.department_name_zh || user.department_name || '-');
@@ -37,6 +41,11 @@ const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
     : (user.position_name_zh || user.position_name || '-');
   const hireDate = formatDate(user.hire_date);
   const statusText = user.deactivated ? t('adminUsers.deactivated') : t('adminUsers.active');
+  
+  const handleForcePasswordChangeToggle = async (e) => {
+    e.stopPropagation();
+    await onToggleForcePasswordChange(user.id, e.target.checked);
+  };
   
   if (isMobile) {
     return (
@@ -109,6 +118,21 @@ const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
 
           <Divider sx={{ my: 1.5 }} />
 
+          {isHRMember && (
+            <Box sx={{ mb: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!user.force_password_change}
+                    onChange={handleForcePasswordChangeToggle}
+                    size="small"
+                    color="warning"
+                  />
+                }
+                label={t('adminUsers.forcePasswordChange')}
+              />
+            </Box>
+          )}
           <Button
             fullWidth
             variant="outlined"
@@ -150,20 +174,38 @@ const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
         />
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
-        <IconButton 
-          size="small" 
-          onClick={() => onEdit(user)}
-          color="primary"
-          sx={{
-            '&:hover': {
-              backgroundColor: 'primary.light',
-              color: 'white'
-            },
-            transition: 'all 0.2s'
-          }}
-        >
-          <EditIcon fontSize="small" />
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {isHRMember && (
+            <Tooltip title={user.force_password_change ? t('adminUsers.forcePasswordChangeEnabled') : t('adminUsers.forcePasswordChangeDisabled')}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!user.force_password_change}
+                    onChange={handleForcePasswordChangeToggle}
+                    size="small"
+                    color="warning"
+                  />
+                }
+                label=""
+                sx={{ m: 0 }}
+              />
+            </Tooltip>
+          )}
+          <IconButton 
+            size="small" 
+            onClick={() => onEdit(user)}
+            color="primary"
+            sx={{
+              '&:hover': {
+                backgroundColor: 'primary.light',
+                color: 'white'
+              },
+              transition: 'all 0.2s'
+            }}
+          >
+            <EditIcon fontSize="small" />
+          </IconButton>
+        </Box>
       </TableCell>
     </TableRow>
   );
@@ -172,7 +214,7 @@ const UserTableRow = memo(({ user, onEdit, i18n, t, isMobile, index }) => {
 UserTableRow.displayName = 'UserTableRow';
 
 // 將表格提取為獨立的 memoized 組件，只有當 filteredUsers 改變時才重新渲染
-const UsersTable = memo(({ users, onEdit, i18n, t, isMobile, isTablet }) => {
+const UsersTable = memo(({ users, onEdit, onToggleForcePasswordChange, i18n, t, isMobile, isTablet, isHRMember }) => {
   if (isMobile) {
     return (
       <Box>
@@ -188,9 +230,11 @@ const UsersTable = memo(({ users, onEdit, i18n, t, isMobile, isTablet }) => {
               key={u.id} 
               user={u} 
               onEdit={onEdit}
+              onToggleForcePasswordChange={onToggleForcePasswordChange}
               i18n={i18n}
               t={t}
               isMobile={isMobile}
+              isHRMember={isHRMember}
             />
           ))
         )}
@@ -232,13 +276,14 @@ const UsersTable = memo(({ users, onEdit, i18n, t, isMobile, isTablet }) => {
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.position')}</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.hireDate')}</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.accountStatus')}</TableCell>
+              {isHRMember && <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.forcePasswordChange')}</TableCell>}
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={isHRMember ? 9 : 8} align="center" sx={{ py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
                     {t('adminUsers.noUsers')}
                   </Typography>
@@ -250,10 +295,12 @@ const UsersTable = memo(({ users, onEdit, i18n, t, isMobile, isTablet }) => {
                   key={u.id} 
                   user={u} 
                   onEdit={onEdit}
+                  onToggleForcePasswordChange={onToggleForcePasswordChange}
                   i18n={i18n}
                   t={t}
                   isMobile={false}
                   index={index}
+                  isHRMember={isHRMember}
                 />
               ))
             )}
@@ -271,6 +318,8 @@ const AdminUsers = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  const { user: currentUser } = useAuth();
+  const isHRMember = currentUser?.is_hr_member || currentUser?.is_system_admin;
   const [users, setUsers] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -364,6 +413,21 @@ const AdminUsers = () => {
   const handleSuccess = useCallback(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  const handleToggleForcePasswordChange = useCallback(async (userId, forcePasswordChange) => {
+    try {
+      await axios.put(`/api/admin/users/${userId}`, { force_password_change: forcePasswordChange });
+      // 更新本地狀態
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u.id === userId ? { ...u, force_password_change: forcePasswordChange } : u
+        )
+      );
+    } catch (error) {
+      console.error('Toggle force password change error:', error);
+      alert(error.response?.data?.message || t('adminUsers.operationFailed'));
+    }
+  }, [t]);
 
   return (
     <Box sx={{ px: { xs: 1, sm: 3 }, py: { xs: 2, sm: 3 }, maxWidth: '1400px', mx: 'auto' }}>
@@ -464,10 +528,12 @@ const AdminUsers = () => {
       <UsersTable 
         users={filteredUsers} 
         onEdit={handleEdit}
+        onToggleForcePasswordChange={handleToggleForcePasswordChange}
         i18n={i18n}
         t={t}
         isMobile={isMobile}
         isTablet={isTablet}
+        isHRMember={isHRMember}
       />
 
       <UserFormDialog

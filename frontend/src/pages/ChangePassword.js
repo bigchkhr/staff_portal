@@ -7,7 +7,8 @@ import {
   Typography,
   Box,
   InputAdornment,
-  IconButton
+  IconButton,
+  Alert
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -60,7 +61,7 @@ const ChangePassword = () => {
   });
   const [loading, setLoading] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState([]);
-  const { changePassword } = useAuth();
+  const { changePassword, forcePasswordChange } = useAuth();
 
   const handleClickShowPassword = (field) => {
     setShowPassword(prev => ({
@@ -140,6 +141,12 @@ const ChangePassword = () => {
         <Typography variant="h5" gutterBottom>
           {t('changePassword.title')}
         </Typography>
+
+        {forcePasswordChange && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            {t('changePassword.forcePasswordChangeRequired')}
+          </Alert>
+        )}
 
         <Box component="form" onSubmit={handleSubmit}>
           <TextField

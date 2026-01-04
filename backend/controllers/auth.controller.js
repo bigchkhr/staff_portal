@@ -95,6 +95,7 @@ class AuthController {
         position_name: user.position_name || null,
         position_name_zh: user.position_name_zh || null,
         deactivated: !!user.deactivated,
+        force_password_change: !!user.force_password_change,
         is_system_admin: isHRMember,
         is_dept_head: isDeptHead,
         is_hr_member: isHRMember,
@@ -150,6 +151,9 @@ class AuthController {
 
       const newPasswordHash = await hashPassword(newPassword);
       await User.updatePassword(userId, newPasswordHash);
+      
+      // 清除強制更改密碼標記
+      await User.update(userId, { force_password_change: false });
 
       res.json({ message: '密碼已成功更改' });
     } catch (error) {
@@ -193,6 +197,7 @@ class AuthController {
           position_name: user.position_name,
           position_name_zh: user.position_name_zh,
           deactivated: !!user.deactivated,
+          force_password_change: !!user.force_password_change,
           is_system_admin: isHRMember,
           is_dept_head: isDeptHead,
           is_hr_member: isHRMember,

@@ -40,11 +40,13 @@ import SystemMaintenance from './pages/SystemMaintenance';
 import ManualApproval from './pages/ManualApproval';
 import PublicHolidayManagement from './pages/PublicHolidayManagement';
 import ExternalLinks from './pages/ExternalLinks';
+import Tools from './pages/Tools';
+import Schedule from './pages/Schedule';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
-// axios.defaults.baseURL = 'http://localhost:1689';
-axios.defaults.baseURL = 'http://172.31.132.13:1689';
+axios.defaults.baseURL = 'http://localhost:1689';
+// axios.defaults.baseURL = 'http://172.31.132.13:1689';
 
 const theme = createTheme({
   palette: {
@@ -92,11 +94,13 @@ function App() {
             <Route path="/admin/groups" element={<PrivateRoute><AdminGroups /></PrivateRoute>} />
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
+            <Route path="/tools" element={<PrivateRoute><Tools /></PrivateRoute>} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
             <Route path="/announcements" element={<PrivateRoute><Announcements /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
+            <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

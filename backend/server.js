@@ -135,6 +135,7 @@ const formLibraryRoutes = require('./routes/formLibrary.routes');
 const announcementRoutes = require('./routes/announcement.routes');
 const publicHolidayRoutes = require('./routes/publicHoliday.routes');
 const externalLinkRoutes = require('./routes/externalLink.routes');
+const scheduleRoutes = require('./routes/schedule.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -153,6 +154,7 @@ app.use('/api/form-library', formLibraryRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/public-holidays', publicHolidayRoutes);
 app.use('/api/external-links', externalLinkRoutes);
+app.use('/api/schedules', scheduleRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

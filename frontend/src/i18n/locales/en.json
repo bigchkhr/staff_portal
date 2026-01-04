@@ -55,6 +55,7 @@
     "announcements": "Announcements",
     "myApplications": "My Applications",
     "myApprovals": "My Approvals",
+    "schedule": "Schedule",
     "systemMaintenance": "System Maintenance",
     "manualApproval": "Manual Approval",
     "applyLeave": "Apply Leave",
@@ -65,8 +66,7 @@
     "applyOutdoorWork": "Outdoor Work Application",
     "outdoorWorkHistory": "Outdoor Work History",
     "myDocuments": "My Documents",
-    "formLibrary": "Form Library",
-    "externalLinks": "External Links",
+    "tools": "Tools",
     "pendingApproval": "Pending Approval",
     "approvalHistory": "Approval History",
     "departmentGroupBalances": "Department Group Balances",
@@ -319,7 +319,8 @@
     "passwordTooShort": "New password must be at least 6 characters",
     "passwordChanged": "Password changed successfully",
     "changing": "Changing...",
-    "changeButton": "Change Password"
+    "changeButton": "Change Password",
+    "forcePasswordChangeRequired": "The system administrator has required you to change your password. Please change your password before continuing to use the system."
   },
   "approvalDetail": {
     "title": "Application Details",
@@ -655,7 +656,7 @@
     "close": "Close"
   },
   "externalLinks": {
-    "title": "External Links",
+    "title": "Links",
     "pageDescription": "Manage and access external resource links",
     "fetchError": "Error fetching external links list",
     "pleaseEnterName": "Please enter link name",
@@ -692,6 +693,12 @@
     "edit": "Edit",
     "delete": "Delete",
     "create": "Create"
+  },
+  "tools": {
+    "title": "Tools",
+    "pageDescription": "Access useful tools including form library and external links",
+    "formLibrary": "Form Library",
+    "externalLinks": "External Links"
   },
   "adminPaperFlow": {
     "title": "Paper Flow Leave Application (System Administrator Only)",
@@ -959,7 +966,10 @@
     "accountDeactivated": "Account Deactivated (Cannot Login)",
     "accountActive": "Account Active",
     "enterPassword": "Please enter password",
-    "operationFailed": "Operation failed"
+    "operationFailed": "Operation failed",
+    "forcePasswordChange": "Force Password Change",
+    "forcePasswordChangeEnabled": "Force password change enabled",
+    "forcePasswordChangeDisabled": "Force password change disabled"
   },
   "adminLeaveTypes": {
     "title": "Leave Type Management",
@@ -1119,5 +1129,36 @@
     "zhCN": "简体中文",
     "en": "English",
     "selectLanguage": "Select Language"
+  },
+  "schedule": {
+    "title": "Schedule",
+    "selectGroup": "Select Group",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "edit": "Edit",
+    "exitEdit": "Exit Edit",
+    "batchEdit": "Batch Edit",
+    "viewOnly": "You can only view the schedule for this group. You do not have permission to edit.",
+    "employee": "Employee",
+    "morning": "Morning",
+    "afternoon": "Afternoon",
+    "morningLeave": "Morning Leave",
+    "afternoonLeave": "Afternoon Leave",
+    "selectGroupFirst": "Please select a group first",
+    "selectUsers": "Select Employees",
+    "selectDates": "Select Dates",
+    "selectUsersAndDates": "Please select at least one employee and one date",
+    "confirmDelete": "Confirm Delete",
+    "deleteConfirmMessage": "Are you sure you want to delete this schedule record?",
+    "deleteSuccess": "Delete successful",
+    "deleteFailed": "Delete failed",
+    "batchUpdateSuccess": "Batch update successful",
+    "batchUpdateFailed": "Batch update failed",
+    "updateFailed": "Update failed",
+    "fetchGroupsFailed": "Failed to fetch group list",
+    "fetchSchedulesFailed": "Failed to fetch schedule",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning"
   }
 }

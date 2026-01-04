@@ -94,6 +94,8 @@ export const AuthProvider = ({ children }) => {
   const changePassword = async (currentPassword, newPassword) => {
     try {
       await axios.put('/api/auth/change-password', { currentPassword, newPassword });
+      // 重新獲取用戶信息以更新force_password_change狀態
+      await fetchCurrentUser();
       return { success: true };
     } catch (error) {
       return {
@@ -111,7 +113,8 @@ export const AuthProvider = ({ children }) => {
     changePassword,
     isDeactivated: !!user?.deactivated,
     isSystemAdmin: user?.is_system_admin,
-    isDeptHead: user?.is_dept_head
+    isDeptHead: user?.is_dept_head,
+    forcePasswordChange: !!user?.force_password_change
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

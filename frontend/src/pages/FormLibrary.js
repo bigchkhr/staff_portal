@@ -311,30 +311,13 @@ const FormLibrary = () => {
   }, [handleSearch]);
 
   return (
-    <Box sx={{ px: { xs: 1, sm: 3 }, py: { xs: 2, sm: 3 }, maxWidth: '1400px', mx: 'auto' }}>
+    <Box>
       <Box sx={{ 
         display: 'flex', 
-        justifyContent: 'space-between', 
+        justifyContent: 'flex-end', 
         alignItems: 'center', 
-        mb: 3,
-        flexDirection: { xs: 'column', sm: 'row' },
-        gap: 2
+        mb: 3
       }}>
-        <Box>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontSize: { xs: '1.5rem', sm: '2rem' }, 
-              fontWeight: 600,
-              color: 'primary.main'
-            }}
-          >
-            {t('formLibrary.title')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {t('formLibrary.pageDescription')}
-          </Typography>
-        </Box>
         {isSystemAdmin && (
           <Button
             variant="contained"
@@ -346,8 +329,7 @@ const FormLibrary = () => {
               boxShadow: 2,
               '&:hover': {
                 boxShadow: 4
-              },
-              width: { xs: '100%', sm: 'auto' }
+              }
             }}
           >
             {t('formLibrary.uploadForm')}

@@ -1,6 +1,30 @@
 const ExternalLink = require('../database/models/ExternalLink');
 const User = require('../database/models/User');
 
+// 驗證 URL 或 data URI 的輔助函數
+function validateUrlOrDataUri(urlString) {
+  if (!urlString || typeof urlString !== 'string') {
+    return false;
+  }
+  
+  const trimmed = urlString.trim();
+  
+  // 檢查是否為 data URI（格式：data:[<mediatype>][;base64],<data>）
+  if (trimmed.startsWith('data:')) {
+    // 基本格式驗證：data: 後面應該有逗號和數據內容
+    // 允許各種格式：data:image/jpeg;base64,xxx 或 data:text/plain,xxx 等
+    return trimmed.length > 5 && trimmed.includes(',');
+  }
+  
+  // 否則驗證為標準 URL
+  try {
+    new URL(trimmed);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 class ExternalLinkController {
   // 獲取所有外部連結
   async getAllLinks(req, res) {
@@ -50,14 +74,14 @@ class ExternalLinkController {
         return res.status(400).json({ message: '請輸入有效的URL格式' });
       }
 
-      // 驗證 logo_url 格式（如果提供）
+      // 驗證 logo_url 格式（如果提供）- 支援標準 URL 或 data URI
       let validatedLogoUrl = null;
       if (logo_url && logo_url.trim()) {
-        try {
-          new URL(logo_url.trim());
-          validatedLogoUrl = logo_url.trim();
-        } catch (e) {
-          return res.status(400).json({ message: '請輸入有效的Logo URL格式' });
+        const trimmedLogoUrl = logo_url.trim();
+        if (validateUrlOrDataUri(trimmedLogoUrl)) {
+          validatedLogoUrl = trimmedLogoUrl;
+        } else {
+          return res.status(400).json({ message: '請輸入有效的Logo URL格式或data URI' });
         }
       }
 
@@ -118,13 +142,12 @@ class ExternalLinkController {
           updateData.logo_url = null;
         } else {
           const trimmedLogoUrl = logo_url.trim();
-          // 如果提供了 logo_url，驗證其格式
+          // 如果提供了 logo_url，驗證其格式 - 支援標準 URL 或 data URI
           if (trimmedLogoUrl) {
-            try {
-              new URL(trimmedLogoUrl);
+            if (validateUrlOrDataUri(trimmedLogoUrl)) {
               updateData.logo_url = trimmedLogoUrl;
-            } catch (e) {
-              return res.status(400).json({ message: '請輸入有效的Logo URL格式' });
+            } else {
+              return res.status(400).json({ message: '請輸入有效的Logo URL格式或data URI' });
             }
           } else {
             updateData.logo_url = null;
