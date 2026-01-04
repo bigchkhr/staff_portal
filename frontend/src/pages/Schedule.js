@@ -94,8 +94,10 @@ const Schedule = () => {
   };
 
   const fetchGroupMembers = async () => {
+    if (!selectedGroupId) return;
+    
     try {
-      const response = await axios.get(`/api/schedules/groups/${selectedGroupId}/members`);
+      const response = await axios.get(`/api/groups/department/${selectedGroupId}/members`);
       const members = response.data.members || [];
       members.sort((a, b) => {
         const aNum = a.employee_number || '';
@@ -105,6 +107,11 @@ const Schedule = () => {
       setGroupMembers(members);
     } catch (error) {
       console.error('Fetch group members error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.fetchGroupsFailed')
+      });
     }
   };
 
@@ -123,10 +130,11 @@ const Schedule = () => {
       setSchedules(response.data.schedules || []);
     } catch (error) {
       console.error('Fetch schedules error:', error);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || t('schedule.fetchSchedulesFailed');
       Swal.fire({
         icon: 'error',
         title: t('schedule.error'),
-        text: t('schedule.fetchSchedulesFailed')
+        text: errorMessage
       });
     } finally {
       setLoading(false);

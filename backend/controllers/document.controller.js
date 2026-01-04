@@ -131,13 +131,14 @@ class DocumentController {
         return res.status(403).json({ message: '只有HR Group成員可以查看所有文件' });
       }
 
-      const { user_id, category, search, uploaded_by_id } = req.query;
+      const { user_id, category, search, uploaded_by_id, department_group_id } = req.query;
       
       const options = {
         user_id: user_id || null,
         category: category || null,
         search: search || null,
-        uploaded_by_id: uploaded_by_id || null
+        uploaded_by_id: uploaded_by_id || null,
+        department_group_id: department_group_id || null
       };
 
       // HR成員可以看到所有文件，根據過濾條件篩選

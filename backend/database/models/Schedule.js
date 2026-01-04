@@ -3,72 +3,86 @@ const knex = require('../../config/database');
 class Schedule {
   // 取得所有排班記錄（可選篩選條件）
   static async findAll(filters = {}) {
-    let query = knex('schedules')
-      .leftJoin('users', 'schedules.user_id', 'users.id')
-      .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
-      .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
-      .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
-      .select(
-        'schedules.*',
-        'users.name as user_name',
-        'users.name_zh as user_name_zh',
-        'users.employee_number',
-        'department_groups.name as group_name',
-        'department_groups.name_zh as group_name_zh',
-        'creator.name as created_by_name',
-        'creator.name_zh as created_by_name_zh',
-        'updater.name as updated_by_name',
-        'updater.name_zh as updated_by_name_zh'
-      );
+    try {
+      let query = knex('schedules')
+        .leftJoin('users', 'schedules.user_id', 'users.id')
+        .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
+        .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
+        .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
+        .select(
+          'schedules.*',
+          'users.name as user_name',
+          'users.name_zh as user_name_zh',
+          'users.employee_number',
+          'department_groups.name as group_name',
+          'department_groups.name_zh as group_name_zh',
+          'creator.name as created_by_name',
+          'creator.name_zh as created_by_name_zh',
+          'updater.name as updated_by_name',
+          'updater.name_zh as updated_by_name_zh'
+        );
 
-    // 根據群組ID篩選
-    if (filters.department_group_id) {
-      query = query.where('schedules.department_group_id', filters.department_group_id);
-    }
+      // 根據群組ID篩選
+      if (filters.department_group_id) {
+        query = query.where('schedules.department_group_id', filters.department_group_id);
+      }
 
-    // 根據用戶ID篩選
-    if (filters.user_id) {
-      query = query.where('schedules.user_id', filters.user_id);
-    }
+      // 根據用戶ID篩選
+      if (filters.user_id) {
+        query = query.where('schedules.user_id', filters.user_id);
+      }
 
-    // 根據日期範圍篩選
-    if (filters.start_date) {
-      query = query.where('schedules.schedule_date', '>=', filters.start_date);
-    }
-    if (filters.end_date) {
-      query = query.where('schedules.schedule_date', '<=', filters.end_date);
-    }
+      // 根據日期範圍篩選
+      if (filters.start_date) {
+        query = query.where('schedules.schedule_date', '>=', filters.start_date);
+      }
+      if (filters.end_date) {
+        query = query.where('schedules.schedule_date', '<=', filters.end_date);
+      }
 
-    // 根據日期篩選
-    if (filters.schedule_date) {
-      query = query.where('schedules.schedule_date', filters.schedule_date);
-    }
+      // 根據日期篩選
+      if (filters.schedule_date) {
+        query = query.where('schedules.schedule_date', filters.schedule_date);
+      }
 
-    return await query.orderBy('schedules.schedule_date', 'desc')
-      .orderBy('users.employee_number');
+      const results = await query.orderBy('schedules.schedule_date', 'desc')
+        .orderBy('users.employee_number');
+      
+      // 確保返回空數組而不是 undefined
+      return results || [];
+    } catch (error) {
+      console.error('Schedule.findAll query error:', error);
+      throw error;
+    }
   }
 
   // 根據ID取得單一記錄
   static async findById(id) {
-    return await knex('schedules')
-      .leftJoin('users', 'schedules.user_id', 'users.id')
-      .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
-      .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
-      .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
-      .select(
-        'schedules.*',
-        'users.name as user_name',
-        'users.name_zh as user_name_zh',
-        'users.employee_number',
-        'department_groups.name as group_name',
-        'department_groups.name_zh as group_name_zh',
-        'creator.name as created_by_name',
-        'creator.name_zh as created_by_name_zh',
-        'updater.name as updated_by_name',
-        'updater.name_zh as updated_by_name_zh'
-      )
-      .where('schedules.id', id)
-      .first();
+    try {
+      const result = await knex('schedules')
+        .leftJoin('users', 'schedules.user_id', 'users.id')
+        .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
+        .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
+        .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
+        .select(
+          'schedules.*',
+          'users.name as user_name',
+          'users.name_zh as user_name_zh',
+          'users.employee_number',
+          'department_groups.name as group_name',
+          'department_groups.name_zh as group_name_zh',
+          'creator.name as created_by_name',
+          'creator.name_zh as created_by_name_zh',
+          'updater.name as updated_by_name',
+          'updater.name_zh as updated_by_name_zh'
+        )
+        .where('schedules.id', id)
+        .first();
+      return result || null;
+    } catch (error) {
+      console.error('Schedule.findById error:', error);
+      throw error;
+    }
   }
 
   // 建立排班記錄

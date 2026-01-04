@@ -27,7 +27,4 @@ router.delete('/:id', scheduleController.deleteSchedule);
 // 批量刪除排班記錄
 router.delete('/batch', scheduleController.deleteBatchSchedules);
 
-// 取得群組成員列表
-router.get('/groups/:department_group_id/members', scheduleController.getGroupMembers);
-
 module.exports = router;

@@ -10,15 +10,16 @@ class ScheduleController {
       const userId = req.user.id;
 
       const filters = {};
-      if (department_group_id) filters.department_group_id = department_group_id;
-      if (user_id) filters.user_id = user_id;
+      if (department_group_id) filters.department_group_id = parseInt(department_group_id, 10);
+      if (user_id) filters.user_id = parseInt(user_id, 10);
       if (start_date) filters.start_date = start_date;
       if (end_date) filters.end_date = end_date;
       if (schedule_date) filters.schedule_date = schedule_date;
 
       // 如果指定了群組，檢查用戶是否有權限查看
       if (department_group_id) {
-        const canView = await this.canViewGroupSchedule(userId, department_group_id, req.user.is_system_admin);
+        const groupId = parseInt(department_group_id, 10);
+        const canView = await this.canViewGroupSchedule(userId, groupId, req.user.is_system_admin);
         if (!canView) {
           return res.status(403).json({ message: '您沒有權限查看此群組的排班表' });
         }
@@ -41,7 +42,12 @@ class ScheduleController {
       res.json({ schedules });
     } catch (error) {
       console.error('Get schedules error:', error);
-      res.status(500).json({ message: '取得排班表失敗', error: error.message });
+      console.error('Error stack:', error.stack);
+      res.status(500).json({ 
+        message: '取得排班表失敗', 
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   }
 
@@ -258,26 +264,6 @@ class ScheduleController {
     } catch (error) {
       console.error('Delete batch schedules error:', error);
       res.status(500).json({ message: '批量刪除排班記錄失敗', error: error.message });
-    }
-  }
-
-  // 取得群組成員列表（用於排班選擇）
-  async getGroupMembers(req, res) {
-    try {
-      const { department_group_id } = req.params;
-      const userId = req.user.id;
-
-      // 檢查查看權限
-      const canView = await this.canViewGroupSchedule(userId, department_group_id, req.user.is_system_admin);
-      if (!canView) {
-        return res.status(403).json({ message: '您沒有權限查看此群組的成員' });
-      }
-
-      const members = await DepartmentGroup.getMembers(department_group_id);
-      res.json({ members });
-    } catch (error) {
-      console.error('Get group members error:', error);
-      res.status(500).json({ message: '取得群組成員失敗', error: error.message });
     }
   }
 

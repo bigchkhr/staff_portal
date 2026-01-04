@@ -44,6 +44,42 @@ class EmployeeDocument {
       });
     }
 
+    // 根據部門群組過濾
+    if (options.department_group_id) {
+      try {
+        // 獲取該群組的所有用戶ID
+        const group = await knex('department_groups')
+          .where('id', options.department_group_id)
+          .first();
+        
+        if (group && group.user_ids) {
+          // 解析 user_ids 數組
+          let userIds = group.user_ids;
+          if (typeof userIds === 'string') {
+            try {
+              userIds = JSON.parse(userIds);
+            } catch (e) {
+              userIds = userIds.replace(/[{}]/g, '').split(',').filter(Boolean).map(Number);
+            }
+          }
+          
+          if (Array.isArray(userIds) && userIds.length > 0) {
+            query = query.whereIn('employee_documents.user_id', userIds);
+          } else {
+            // 如果群組沒有成員，返回空結果
+            query = query.where('employee_documents.user_id', -1);
+          }
+        } else {
+          // 如果群組不存在或沒有成員，返回空結果
+          query = query.where('employee_documents.user_id', -1);
+        }
+      } catch (error) {
+        console.error('Error filtering by department group:', error);
+        // 發生錯誤時返回空結果
+        query = query.where('employee_documents.user_id', -1);
+      }
+    }
+
     return await query.orderBy('employee_documents.created_at', 'desc');
   }
 

@@ -27,7 +27,8 @@ import {
   CircularProgress,
   useTheme,
   useMediaQuery,
-  Tooltip
+  Tooltip,
+  InputAdornment
 } from '@mui/material';
 import { 
   CloudUpload as CloudUploadIcon, 
@@ -49,6 +50,7 @@ const HRDocumentUpload = () => {
   const [documents, setDocuments] = useState([]);
   const [users, setUsers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [departmentGroups, setDepartmentGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -64,8 +66,10 @@ const HRDocumentUpload = () => {
     user_id: '',
     category: '',
     search: '',
-    uploaded_by_id: ''
+    uploaded_by_id: '',
+    department_group_id: ''
   });
+  const [hasSearched, setHasSearched] = useState(false); // 追蹤是否已執行過搜尋
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [filterUserDialogOpen, setFilterUserDialogOpen] = useState(false);
@@ -75,15 +79,24 @@ const HRDocumentUpload = () => {
   const [searchInput, setSearchInput] = useState(''); // 分離搜尋輸入狀態，避免重新渲染
 
   useEffect(() => {
-    fetchDocuments();
     fetchUsers();
     fetchCategories();
-  }, [filters]);
+    fetchDepartmentGroups();
+    // 不自動載入文件，等待用戶設置過濾條件
+  }, []);
+
+  // 當過濾條件改變時，如果有設置過濾條件，則載入文件
+  useEffect(() => {
+    if (hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_id) {
+      fetchDocuments();
+    }
+  }, [filters, hasSearched]);
 
   // 當選擇的過濾器用戶改變時，更新過濾器
   useEffect(() => {
     if (selectedFilterUser) {
       setFilters(prev => ({ ...prev, user_id: selectedFilterUser.id.toString() }));
+      setHasSearched(true);
     } else if (selectedFilterUser === null && filters.user_id) {
       // 允許清除選擇
       setFilters(prev => ({ ...prev, user_id: '' }));
@@ -105,9 +118,11 @@ const HRDocumentUpload = () => {
       if (filters.category) params.append('category', filters.category);
       if (filters.search) params.append('search', filters.search);
       if (filters.uploaded_by_id) params.append('uploaded_by_id', filters.uploaded_by_id);
+      if (filters.department_group_id) params.append('department_group_id', filters.department_group_id);
 
       const response = await axios.get(`/api/documents/all?${params.toString()}`);
       setDocuments(response.data.documents || []);
+      setHasSearched(true);
     } catch (error) {
       console.error('Fetch documents error:', error);
       if (error.response?.status === 403) {
@@ -140,6 +155,15 @@ const HRDocumentUpload = () => {
       setCategories(response.data.categories || []);
     } catch (error) {
       console.error('Fetch categories error:', error);
+    }
+  };
+
+  const fetchDepartmentGroups = async () => {
+    try {
+      const response = await axios.get('/api/groups/department?closed=false');
+      setDepartmentGroups(response.data.groups || []);
+    } catch (error) {
+      console.error('Fetch department groups error:', error);
     }
   };
 
@@ -352,7 +376,23 @@ const HRDocumentUpload = () => {
   // 處理搜尋按鈕點擊或 Enter 鍵
   const handleSearch = useCallback(() => {
     setFilters(prev => ({ ...prev, search: searchInput }));
+    setHasSearched(true);
   }, [searchInput]);
+
+  // 處理清除所有過濾條件
+  const handleClearFilters = useCallback(() => {
+    setFilters({
+      user_id: '',
+      category: '',
+      search: '',
+      uploaded_by_id: '',
+      department_group_id: ''
+    });
+    setSearchInput('');
+    setSelectedFilterUser(null);
+    setHasSearched(false);
+    setDocuments([]);
+  }, []);
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -479,7 +519,10 @@ const HRDocumentUpload = () => {
             <Select
               value={filters.category}
               label={t('hrDocumentUpload.documentCategory')}
-              onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value }))}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, category: e.target.value }));
+                setHasSearched(true);
+              }}
               sx={{ borderRadius: 1 }}
             >
               <MenuItem value="">{t('hrDocumentUpload.all')}</MenuItem>
@@ -488,6 +531,49 @@ const HRDocumentUpload = () => {
               ))}
             </Select>
           </FormControl>
+
+          <FormControl 
+            sx={{ 
+              minWidth: { xs: '100%', sm: 200 },
+              flex: { xs: '1 1 100%', sm: '0 0 auto' }
+            }}
+          >
+            <InputLabel>{t('hrDocumentUpload.departmentGroup')}</InputLabel>
+            <Select
+              value={filters.department_group_id}
+              label={t('hrDocumentUpload.departmentGroup')}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, department_group_id: e.target.value }));
+                setHasSearched(true);
+              }}
+              sx={{ borderRadius: 1 }}
+            >
+              <MenuItem value="">{t('hrDocumentUpload.all')}</MenuItem>
+              {departmentGroups.map(group => (
+                <MenuItem key={group.id} value={group.id.toString()}>
+                  {group.name_zh || group.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            placeholder={t('hrDocumentUpload.searchPlaceholder')}
+            value={searchInput}
+            onChange={handleSearchInputChange}
+            onKeyPress={handleSearchKeyPress}
+            sx={{
+              flex: { xs: '1 1 100%', sm: '1 1 auto' },
+              minWidth: { xs: '100%', sm: 200 }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: 'text.secondary' }} />
+                </InputAdornment>
+              )
+            }}
+          />
 
           <Button
             variant="contained"
@@ -506,10 +592,34 @@ const HRDocumentUpload = () => {
           >
             {isMobile ? <SearchIcon /> : t('common.search')}
           </Button>
+
+          {(hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_id) && (
+            <Button
+              variant="outlined"
+              onClick={handleClearFilters}
+              sx={{
+                height: { xs: '48px', sm: '56px' },
+                minWidth: { xs: '100%', sm: '100px' },
+                borderRadius: 1,
+                textTransform: 'none'
+              }}
+            >
+              {t('common.reset')}
+            </Button>
+          )}
         </Box>
       </Paper>
 
-      {isMobile ? (
+      {!hasSearched && !filters.user_id && !filters.category && !filters.search && !filters.department_group_id ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            {t('hrDocumentUpload.pleaseSetFilter')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {t('hrDocumentUpload.noFilterSet')}
+          </Typography>
+        </Paper>
+      ) : isMobile ? (
         // 移動設備：卡片式佈局
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {loading && filteredDocuments.length === 0 ? (
@@ -685,7 +795,7 @@ const HRDocumentUpload = () => {
                     </Typography>
                   </TableCell>
                 </TableRow>
-              ) : (
+              ) : filteredDocuments.length > 0 ? (
                 filteredDocuments.map((doc) => (
                   <TableRow 
                     key={doc.id}
@@ -799,7 +909,7 @@ const HRDocumentUpload = () => {
                     </TableCell>
                   </TableRow>
                 ))
-              )}
+              ) : null}
             </TableBody>
           </Table>
         </TableContainer>

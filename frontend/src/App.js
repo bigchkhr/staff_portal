@@ -44,8 +44,8 @@ import Tools from './pages/Tools';
 import Schedule from './pages/Schedule';
 
 // 設定後端 API 地址
-// axios.defaults.baseURL = 'http://3.1.139.29:1689';
-axios.defaults.baseURL = 'http://localhost:1689';
+axios.defaults.baseURL = 'http://3.1.139.29:1689';
+// axios.defaults.baseURL = 'http://localhost:1689';
 // axios.defaults.baseURL = 'http://172.31.132.13:1689';
 
 const theme = createTheme({
