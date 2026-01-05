@@ -101,6 +101,7 @@ const Layout = ({ children }) => {
       show: true 
     },
     { key: 'schedule', icon: <CalendarTodayIcon />, path: '/schedule', show: true },
+    { key: 'groupLeaveCalendar', icon: <EventNoteIcon />, path: '/group-leave-calendar', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },

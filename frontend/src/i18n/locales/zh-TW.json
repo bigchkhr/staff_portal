@@ -56,6 +56,7 @@
     "myApplications": "我的申請",
     "myApprovals": "我的批核",
     "schedule": "排班表",
+    "groupLeaveCalendar": "群組假期週曆",
     "systemMaintenance": "系統維護",
     "manualApproval": "人手批核",
     "applyLeave": "申請假期",
@@ -1159,10 +1160,26 @@
     "batchUpdateSuccess": "批量更新成功",
     "batchUpdateFailed": "批量更新失敗",
     "updateFailed": "更新失敗",
+    "updateSuccess": "更新成功",
     "fetchGroupsFailed": "取得群組列表失敗",
     "fetchSchedulesFailed": "取得排班表失敗",
+    "startTime": "開始時間",
+    "endTime": "結束時間",
+    "leaveType": "假期類別",
+    "leavePeriod": "假期時段",
+    "fullDayLeave": "全天假",
+    "editSchedule": "編輯排班",
+    "createSchedule": "建立排班",
     "success": "成功",
     "error": "錯誤",
     "warning": "警告"
+  },
+  "groupLeaveCalendar": {
+    "title": "群組假期週曆",
+    "selectGroups": "選擇群組",
+    "selectGroupsFirst": "請先選擇群組",
+    "today": "今天",
+    "noLeave": "無放假",
+    "noLeaveThisWeek": "本週無人放假"
   }
 }

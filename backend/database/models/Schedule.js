@@ -9,17 +9,21 @@ class Schedule {
         .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
         .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
         .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
         .select(
           'schedules.*',
-          'users.name as user_name',
+          'users.display_name as user_name',
           'users.name_zh as user_name_zh',
           'users.employee_number',
           'department_groups.name as group_name',
           'department_groups.name_zh as group_name_zh',
-          'creator.name as created_by_name',
+          'creator.display_name as created_by_name',
           'creator.name_zh as created_by_name_zh',
-          'updater.name as updated_by_name',
-          'updater.name_zh as updated_by_name_zh'
+          'updater.display_name as updated_by_name',
+          'updater.name_zh as updated_by_name_zh',
+          'leave_types.code as leave_type_code',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh'
         );
 
       // 根據群組ID篩選
@@ -64,17 +68,21 @@ class Schedule {
         .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
         .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
         .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
         .select(
           'schedules.*',
-          'users.name as user_name',
+          'users.display_name as user_name',
           'users.name_zh as user_name_zh',
           'users.employee_number',
           'department_groups.name as group_name',
           'department_groups.name_zh as group_name_zh',
-          'creator.name as created_by_name',
+          'creator.display_name as created_by_name',
           'creator.name_zh as created_by_name_zh',
-          'updater.name as updated_by_name',
-          'updater.name_zh as updated_by_name_zh'
+          'updater.display_name as updated_by_name',
+          'updater.name_zh as updated_by_name_zh',
+          'leave_types.code as leave_type_code',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh'
         )
         .where('schedules.id', id)
         .first();
@@ -114,6 +122,9 @@ class Schedule {
         await knex('schedules')
           .where('id', existing.id)
           .update({
+            start_time: scheduleData.start_time,
+            end_time: scheduleData.end_time,
+            leave_type_id: scheduleData.leave_type_id,
             is_morning_leave: scheduleData.is_morning_leave,
             is_afternoon_leave: scheduleData.is_afternoon_leave,
             updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,

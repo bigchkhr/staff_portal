@@ -348,8 +348,13 @@ const ExternalLinks = () => {
                           <img 
                             src={link.logo_url} 
                             alt={link.name}
-                            style={{ width: 48, height: 48, objectFit: 'contain' }}
-                            onError={(e) => { e.target.style.display = 'none'; }}
+                            style={{ width: 48, height: 48, objectFit: 'contain', maxWidth: '48px', maxHeight: '48px' }}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => { 
+                              e.target.style.display = 'none'; 
+                              console.warn('Failed to load external logo:', link.logo_url);
+                            }}
                           />
                         )}
                         <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -487,8 +492,13 @@ const ExternalLinks = () => {
                             <img 
                               src={link.logo_url} 
                               alt={link.name}
-                              style={{ width: 48, height: 48, objectFit: 'contain' }}
-                              onError={(e) => { e.target.style.display = 'none'; }}
+                              style={{ width: 48, height: 48, objectFit: 'contain', maxWidth: '48px', maxHeight: '48px' }}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => { 
+                                e.target.style.display = 'none'; 
+                                console.warn('Failed to load external logo:', link.logo_url);
+                              }}
                             />
                           )}
                           <Box>

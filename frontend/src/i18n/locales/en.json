@@ -56,6 +56,7 @@
     "myApplications": "My Applications",
     "myApprovals": "My Approvals",
     "schedule": "Schedule",
+    "groupLeaveCalendar": "Group Leave Calendar",
     "systemMaintenance": "System Maintenance",
     "manualApproval": "Manual Approval",
     "applyLeave": "Apply Leave",
@@ -1159,10 +1160,26 @@
     "batchUpdateSuccess": "Batch update successful",
     "batchUpdateFailed": "Batch update failed",
     "updateFailed": "Update failed",
+    "updateSuccess": "Update successful",
     "fetchGroupsFailed": "Failed to fetch group list",
     "fetchSchedulesFailed": "Failed to fetch schedule",
+    "startTime": "Start Time",
+    "endTime": "End Time",
+    "leaveType": "Leave Type",
+    "leavePeriod": "Leave Period",
+    "fullDayLeave": "Full Day Leave",
+    "editSchedule": "Edit Schedule",
+    "createSchedule": "Create Schedule",
     "success": "Success",
     "error": "Error",
     "warning": "Warning"
+  },
+  "groupLeaveCalendar": {
+    "title": "Group Leave Calendar",
+    "selectGroups": "Select Groups",
+    "selectGroupsFirst": "Please select groups first",
+    "today": "Today",
+    "noLeave": "No Leave",
+    "noLeaveThisWeek": "No one is on leave this week"
   }
 }

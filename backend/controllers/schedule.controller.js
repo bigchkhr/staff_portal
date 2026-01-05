@@ -9,6 +9,15 @@ class ScheduleController {
       const { department_group_id, user_id, start_date, end_date, schedule_date } = req.query;
       const userId = req.user.id;
 
+      console.log('getSchedules called with params:', {
+        department_group_id,
+        user_id,
+        start_date,
+        end_date,
+        schedule_date,
+        userId
+      });
+
       const filters = {};
       if (department_group_id) filters.department_group_id = parseInt(department_group_id, 10);
       if (user_id) filters.user_id = parseInt(user_id, 10);
@@ -16,10 +25,13 @@ class ScheduleController {
       if (end_date) filters.end_date = end_date;
       if (schedule_date) filters.schedule_date = schedule_date;
 
+      console.log('Filters:', filters);
+
       // 如果指定了群組，檢查用戶是否有權限查看
       if (department_group_id) {
         const groupId = parseInt(department_group_id, 10);
         const canView = await this.canViewGroupSchedule(userId, groupId, req.user.is_system_admin);
+        console.log(`Permission check for group ${groupId}:`, canView);
         if (!canView) {
           return res.status(403).json({ message: '您沒有權限查看此群組的排班表' });
         }
@@ -38,15 +50,27 @@ class ScheduleController {
         return res.json({ schedules: filteredSchedules });
       }
 
+      console.log('Querying schedules with filters:', filters);
       const schedules = await Schedule.findAll(filters);
+      console.log(`Found ${schedules.length} schedules`);
+      if (schedules.length > 0) {
+        console.log('Sample schedule:', schedules[0]);
+      }
       res.json({ schedules });
     } catch (error) {
       console.error('Get schedules error:', error);
       console.error('Error stack:', error.stack);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint
+      });
       res.status(500).json({ 
         message: '取得排班表失敗', 
         error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        hint: error.detail || error.hint || '請確認資料庫 migration 是否已執行'
       });
     }
   }
@@ -78,7 +102,7 @@ class ScheduleController {
   // 建立排班記錄（單筆）
   async createSchedule(req, res) {
     try {
-      const { user_id, department_group_id, schedule_date, is_morning_leave, is_afternoon_leave } = req.body;
+      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, is_morning_leave, is_afternoon_leave } = req.body;
       const userId = req.user.id;
 
       // 驗證必填欄位
@@ -102,6 +126,9 @@ class ScheduleController {
         user_id,
         department_group_id,
         schedule_date,
+        start_time: start_time || null,
+        end_time: end_time || null,
+        leave_type_id: leave_type_id || null,
         is_morning_leave: is_morning_leave || false,
         is_afternoon_leave: is_afternoon_leave || false,
         created_by_id: userId,
@@ -160,6 +187,9 @@ class ScheduleController {
         user_id: s.user_id,
         department_group_id: departmentGroupId,
         schedule_date: s.schedule_date,
+        start_time: s.start_time || null,
+        end_time: s.end_time || null,
+        leave_type_id: s.leave_type_id || null,
         is_morning_leave: s.is_morning_leave || false,
         is_afternoon_leave: s.is_afternoon_leave || false,
         created_by_id: userId,
@@ -181,7 +211,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { is_morning_leave, is_afternoon_leave } = req.body;
+      const { start_time, end_time, leave_type_id, is_morning_leave, is_afternoon_leave } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -198,6 +228,9 @@ class ScheduleController {
       const updateData = {
         updated_by_id: userId
       };
+      if (start_time !== undefined) updateData.start_time = start_time || null;
+      if (end_time !== undefined) updateData.end_time = end_time || null;
+      if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
       if (is_morning_leave !== undefined) updateData.is_morning_leave = is_morning_leave;
       if (is_afternoon_leave !== undefined) updateData.is_afternoon_leave = is_afternoon_leave;
 

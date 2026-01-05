@@ -42,11 +42,12 @@ import PublicHolidayManagement from './pages/PublicHolidayManagement';
 import ExternalLinks from './pages/ExternalLinks';
 import Tools from './pages/Tools';
 import Schedule from './pages/Schedule';
+import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 
 // 設定後端 API 地址
-axios.defaults.baseURL = 'http://3.1.139.29:1689';
+// axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.13:1689';
+axios.defaults.baseURL = 'http://172.31.132.13:1689';
 
 const theme = createTheme({
   palette: {
@@ -101,6 +102,7 @@ function App() {
             <Route path="/announcements" element={<PrivateRoute><Announcements /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
             <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
+            <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
