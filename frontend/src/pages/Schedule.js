@@ -41,9 +41,18 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
+
+// 配置 dayjs 時區插件
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// 設置默認時區為香港（UTC+8）
+dayjs.tz.setDefault('Asia/Hong_Kong');
 
 const Schedule = () => {
   const { t, i18n } = useTranslation();
@@ -52,8 +61,8 @@ const Schedule = () => {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
   const [schedules, setSchedules] = useState([]);
-  const [startDate, setStartDate] = useState(dayjs());
-  const [endDate, setEndDate] = useState(dayjs().add(6, 'day'));
+  const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong'));
+  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').add(6, 'day'));
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -67,6 +76,8 @@ const Schedule = () => {
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [editStartTime, setEditStartTime] = useState(null);
   const [editEndTime, setEditEndTime] = useState(null);
+  const [editEndHour, setEditEndHour] = useState(null);
+  const [editEndMinute, setEditEndMinute] = useState(null);
   const [editLeaveTypeId, setEditLeaveTypeId] = useState('');
   const [editIsMorningLeave, setEditIsMorningLeave] = useState(false);
   const [editIsAfternoonLeave, setEditIsAfternoonLeave] = useState(false);
@@ -139,16 +150,41 @@ const Schedule = () => {
     
     setLoading(true);
     try {
+      // 確保日期有效並使用香港時區格式化
+      let startDateStr, endDateStr;
+      try {
+        const start = dayjs(startDate);
+        const end = dayjs(endDate);
+        if (!start.isValid() || !end.isValid()) {
+          throw new Error('Invalid date range');
+        }
+        startDateStr = start.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+        endDateStr = end.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      } catch (error) {
+        console.error('Error formatting dates for API:', error);
+        throw error;
+      }
+      
       const response = await axios.get('/api/schedules', {
         params: {
           department_group_id: selectedGroupId,
-          start_date: startDate.format('YYYY-MM-DD'),
-          end_date: endDate.format('YYYY-MM-DD')
+          start_date: startDateStr,
+          end_date: endDateStr
         }
       });
       const schedulesData = response.data.schedules || [];
       console.log('Fetched schedules:', schedulesData);
-      console.log('Schedule dates:', schedulesData.map(s => ({ id: s.id, user_id: s.user_id, schedule_date: s.schedule_date, type: typeof s.schedule_date })));
+      console.log('Schedule dates:', schedulesData.map(s => ({ 
+        id: s.id, 
+        user_id: s.user_id, 
+        schedule_date: s.schedule_date, 
+        type: typeof s.schedule_date,
+        isDate: s.schedule_date instanceof Date
+      })));
+      console.log('Date range:', { 
+        start: startDate.format('YYYY-MM-DD'), 
+        end: endDate.format('YYYY-MM-DD') 
+      });
       setSchedules(schedulesData);
     } catch (error) {
       console.error('Fetch schedules error:', error);
@@ -195,37 +231,190 @@ const Schedule = () => {
   };
 
   const getScheduleForUserAndDate = (userId, date) => {
-    const dateStr = dayjs(date).format('YYYY-MM-DD');
+    // 如果 date 為 null 或 undefined，返回 null
+    if (!date) {
+      return null;
+    }
+    
+    // 使用香港時區格式化日期，確保日期有效
+    let dateStr;
+    try {
+      // 如果 date 已經是 dayjs 對象，直接使用其日期部分（不受時區影響）
+      if (dayjs.isDayjs(date)) {
+        // 已經是 dayjs 對象，直接獲取日期字符串（YYYY-MM-DD），不進行時區轉換
+        // 這樣可以避免時區轉換導致的日期偏移
+        dateStr = date.format('YYYY-MM-DD');
+      } else {
+        // 需要解析，先解析為本地時間，然後轉換為香港時區
+        let dateObj = dayjs(date);
+        if (!dateObj.isValid()) {
+          console.warn('Invalid date in getScheduleForUserAndDate:', date);
+          return null;
+        }
+        // 如果是字符串日期（YYYY-MM-DD），直接使用；否則轉換時區
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          dateStr = date;
+        } else {
+          dateObj = dateObj.tz('Asia/Hong_Kong');
+          dateStr = dateObj.format('YYYY-MM-DD');
+        }
+      }
+    } catch (error) {
+      console.error('Error formatting date in getScheduleForUserAndDate:', error, date);
+      return null;
+    }
     // 確保 user_id 類型一致（都轉為數字）
     const userIdNum = Number(userId);
     const found = schedules.find(s => {
       const sUserId = Number(s.user_id);
       // 處理 schedule_date 可能是 Date 對象或字符串的情況
       let sDateStr = s.schedule_date;
-      if (sDateStr instanceof Date) {
-        sDateStr = dayjs(sDateStr).format('YYYY-MM-DD');
-      } else if (sDateStr && typeof sDateStr === 'string') {
-        // 如果包含時間部分，只取日期部分
-        sDateStr = sDateStr.split('T')[0];
+      
+      // 如果為 null 或 undefined，跳過
+      if (!sDateStr) {
+        return false;
       }
-      return sUserId === userIdNum && sDateStr === dateStr;
+      
+      try {
+        // 處理 Date 對象或字符串，統一轉換為日期字符串（YYYY-MM-DD）
+        if (sDateStr instanceof Date) {
+          // Date 對象，使用本地日期部分（避免時區轉換導致的日期偏移）
+          // 因為數據庫存儲的是純日期，不應該進行時區轉換
+          const year = sDateStr.getFullYear();
+          const month = String(sDateStr.getMonth() + 1).padStart(2, '0');
+          const day = String(sDateStr.getDate()).padStart(2, '0');
+          sDateStr = `${year}-${month}-${day}`;
+        } else if (typeof sDateStr === 'string') {
+          // 字符串格式
+          if (sDateStr.includes('T') && sDateStr.includes('Z')) {
+            // UTC 時間字符串，需要轉換為香港時區
+            const parsed = dayjs.utc(sDateStr);
+            if (!parsed.isValid()) {
+              return false;
+            }
+            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+          } else if (sDateStr.includes('T')) {
+            // 有時區信息的時間字符串，需要轉換
+            const parsed = dayjs(sDateStr);
+            if (!parsed.isValid()) {
+              return false;
+            }
+            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+          } else {
+            // 純日期字符串（YYYY-MM-DD），直接使用，不進行時區轉換
+            // 因為數據庫存儲的是純日期，不應該進行時區轉換
+            sDateStr = sDateStr.split('T')[0].substring(0, 10);
+          }
+        } else {
+          // 嘗試用 dayjs 解析其他格式
+          const parsed = dayjs(sDateStr);
+          if (parsed.isValid()) {
+            // 如果是純日期格式，直接格式化；否則轉換時區
+            if (typeof sDateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sDateStr)) {
+              sDateStr = sDateStr;
+            } else {
+              sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+            }
+          } else {
+            return false;
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing schedule date:', error, sDateStr);
+        return false;
+      }
+      
+      const matches = sUserId === userIdNum && sDateStr === dateStr;
+      if (matches) {
+        console.log('Found schedule match:', { 
+          userId, 
+          sUserId, 
+          dateStr, 
+          sDateStr, 
+          schedule: s 
+        });
+      }
+      return matches;
     });
-    if (found) {
-      console.log('Found schedule:', { userId, dateStr, found });
-    }
     return found;
   };
 
   const handleOpenEditDialog = (userId, date) => {
     if (!editMode || !canEdit) return;
+    
+    // 確保日期有效
+    if (!date) {
+      console.warn('Invalid date in handleOpenEditDialog');
+      return;
+    }
 
-    const dateStr = dayjs(date).format('YYYY-MM-DD');
-    const existingSchedule = getScheduleForUserAndDate(userId, dateStr);
+    // 使用香港時區格式化日期
+    // 如果 date 已經是 dayjs 對象，直接使用其日期部分（不受時區影響）
+    let dateStr;
+    try {
+      if (dayjs.isDayjs(date)) {
+        // 已經是 dayjs 對象，直接獲取日期字符串（YYYY-MM-DD），不進行時區轉換
+        // 這樣可以避免時區轉換導致的日期偏移
+        dateStr = date.format('YYYY-MM-DD');
+      } else {
+        // 需要解析
+        let dateObj = dayjs(date);
+        if (!dateObj.isValid()) {
+          console.warn('Invalid date in handleOpenEditDialog:', date);
+          return;
+        }
+        // 如果是字符串日期（YYYY-MM-DD），直接使用；否則轉換時區
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          dateStr = date;
+        } else {
+          dateObj = dateObj.tz('Asia/Hong_Kong');
+          dateStr = dateObj.format('YYYY-MM-DD');
+        }
+      }
+      console.log('Opening edit dialog for date:', { original: date, formatted: dateStr, isDayjs: dayjs.isDayjs(date) });
+    } catch (error) {
+      console.error('Error formatting date in handleOpenEditDialog:', error, date);
+      return;
+    }
+    
+    const existingSchedule = getScheduleForUserAndDate(userId, date);
 
     if (existingSchedule) {
       setEditingSchedule(existingSchedule);
       setEditStartTime(existingSchedule.start_time ? dayjs(existingSchedule.start_time, 'HH:mm:ss') : null);
-      setEditEndTime(existingSchedule.end_time ? dayjs(existingSchedule.end_time, 'HH:mm:ss') : null);
+      
+      // 處理結束時間，支援26:00格式
+      if (existingSchedule.end_time) {
+        const endTimeStr = existingSchedule.end_time;
+        // 解析時間字符串
+        const timeMatch = endTimeStr.match(/^(\d{1,2}):(\d{2})/);
+        if (timeMatch) {
+          const hours = parseInt(timeMatch[1], 10);
+          const minutes = parseInt(timeMatch[2], 10);
+          setEditEndHour(hours);
+          setEditEndMinute(minutes);
+          // 轉換為dayjs對象用於內部處理
+          if (hours >= 24) {
+            // 跨日時間
+            const baseTime = dayjs().startOf('day').add(24, 'hour');
+            const time = baseTime.add(hours - 24, 'hour').add(minutes, 'minute');
+            setEditEndTime(time);
+          } else {
+            // 正常時間
+            const time = dayjs().startOf('day').hour(hours).minute(minutes);
+            setEditEndTime(time);
+          }
+        } else {
+          setEditEndHour(null);
+          setEditEndMinute(null);
+          setEditEndTime(null);
+        }
+      } else {
+        setEditEndHour(null);
+        setEditEndMinute(null);
+        setEditEndTime(null);
+      }
+      
       setEditLeaveTypeId(existingSchedule.leave_type_id || '');
       setEditIsMorningLeave(existingSchedule.is_morning_leave || false);
       setEditIsAfternoonLeave(existingSchedule.is_afternoon_leave || false);
@@ -237,6 +426,8 @@ const Schedule = () => {
       });
       setEditStartTime(null);
       setEditEndTime(null);
+      setEditEndHour(null);
+      setEditEndMinute(null);
       setEditLeaveTypeId('');
       setEditIsMorningLeave(false);
       setEditIsAfternoonLeave(false);
@@ -244,16 +435,47 @@ const Schedule = () => {
     setEditDialogOpen(true);
   };
 
+  // 從選擇器更新結束時間
+  const updateEndTimeFromSelect = (hour, minute) => {
+    if (hour !== null && minute !== null) {
+      // 格式化為 HH:mm
+      const endTimeValue = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      // 轉換為dayjs對象用於內部處理
+      if (hour >= 24) {
+        // 跨日時間
+        const baseTime = dayjs().startOf('day').add(24, 'hour');
+        const time = baseTime.add(hour - 24, 'hour').add(minute, 'minute');
+        setEditEndTime(time);
+      } else {
+        // 正常時間
+        const time = dayjs().startOf('day').hour(hour).minute(minute);
+        setEditEndTime(time);
+      }
+    } else {
+      setEditEndTime(null);
+    }
+  };
+
   const handleSaveSchedule = async () => {
     if (!editingSchedule) return;
 
     try {
+      // 處理結束時間，使用選擇器的值（支援24-32小時格式）
+      let endTimeValue = null;
+      if (editEndHour !== null && editEndMinute !== null) {
+        // 使用選擇器的值
+        endTimeValue = `${String(editEndHour).padStart(2, '0')}:${String(editEndMinute).padStart(2, '0')}`;
+      } else if (editEndTime) {
+        // 如果選擇器為空，使用TimePicker的值（正常時間）
+        endTimeValue = editEndTime.format('HH:mm');
+      }
+      
       const scheduleData = {
         user_id: editingSchedule.user_id,
         department_group_id: selectedGroupId,
         schedule_date: editingSchedule.schedule_date,
         start_time: editStartTime ? editStartTime.format('HH:mm:ss') : null,
-        end_time: editEndTime ? editEndTime.format('HH:mm:ss') : null,
+        end_time: endTimeValue,
         leave_type_id: editLeaveTypeId || null,
         is_morning_leave: editIsMorningLeave,
         is_afternoon_leave: editIsAfternoonLeave
@@ -271,10 +493,14 @@ const Schedule = () => {
       setEditingSchedule(null);
       setEditStartTime(null);
       setEditEndTime(null);
+      setEditEndHour(null);
+      setEditEndMinute(null);
       setEditLeaveTypeId('');
       setEditIsMorningLeave(false);
       setEditIsAfternoonLeave(false);
-      fetchSchedules();
+      
+      // 等待數據刷新完成
+      await fetchSchedules();
       
       Swal.fire({
         icon: 'success',
@@ -289,6 +515,17 @@ const Schedule = () => {
         text: error.response?.data?.message || t('schedule.updateFailed')
       });
     }
+  };
+
+  // 格式化結束時間用於顯示（支援26:00格式）
+  const formatEndTimeForDisplay = (endTime) => {
+    if (!endTime) return '';
+    // 如果是字符串格式，直接返回前5個字符（HH:mm）
+    if (typeof endTime === 'string') {
+      return endTime.length >= 5 ? endTime.substring(0, 5) : endTime;
+    }
+    // 如果是Date對象或其他格式，轉換為字符串
+    return endTime.toString().substring(0, 5);
   };
 
   // 取得假期顯示文字
@@ -327,30 +564,53 @@ const Schedule = () => {
       const schedulesData = [];
       
       selectedDates.forEach(date => {
-        selectedUsers.forEach(userId => {
-          schedulesData.push({
-            user_id: userId,
-            schedule_date: dayjs(date).format('YYYY-MM-DD'),
-            is_morning_leave: batchMorningLeave,
-            is_afternoon_leave: batchAfternoonLeave
+        if (!date) return;
+        try {
+          let dateObj;
+          if (dayjs.isDayjs(date)) {
+            // 已經是 dayjs 對象，確保使用香港時區
+            dateObj = date.tz('Asia/Hong_Kong', true); // true 表示保持日期不變
+          } else {
+            // 需要解析
+            dateObj = dayjs(date);
+            if (!dateObj.isValid()) {
+              console.warn('Invalid date in batch save:', date);
+              return;
+            }
+            dateObj = dateObj.tz('Asia/Hong_Kong');
+          }
+          const dateStr = dateObj.format('YYYY-MM-DD');
+          console.log('Batch save date:', { original: date, formatted: dateStr });
+          selectedUsers.forEach(userId => {
+            schedulesData.push({
+              user_id: userId,
+              department_group_id: selectedGroupId,
+              schedule_date: dateStr,
+              is_morning_leave: batchMorningLeave,
+              is_afternoon_leave: batchAfternoonLeave
+            });
           });
-        });
+        } catch (error) {
+          console.error('Error processing date in batch save:', error, date);
+        }
       });
 
       await axios.post('/api/schedules/batch', { schedules: schedulesData });
-      
-      Swal.fire({
-        icon: 'success',
-        title: t('schedule.success'),
-        text: t('schedule.batchUpdateSuccess')
-      });
       
       setBatchEditDialogOpen(false);
       setSelectedUsers([]);
       setSelectedDates([]);
       setBatchMorningLeave(false);
       setBatchAfternoonLeave(false);
-      fetchSchedules();
+      
+      // 等待數據刷新完成
+      await fetchSchedules();
+      
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.batchUpdateSuccess')
+      });
     } catch (error) {
       console.error('Batch save error:', error);
       Swal.fire({
@@ -374,12 +634,15 @@ const Schedule = () => {
     if (result.isConfirmed) {
       try {
         await axios.delete(`/api/schedules/${scheduleId}`);
+        
+        // 等待數據刷新完成
+        await fetchSchedules();
+        
         Swal.fire({
           icon: 'success',
           title: t('schedule.success'),
           text: t('schedule.deleteSuccess')
         });
-        fetchSchedules();
       } catch (error) {
         console.error('Delete schedule error:', error);
         Swal.fire({
@@ -393,8 +656,20 @@ const Schedule = () => {
 
   const generateDateRange = () => {
     const dates = [];
+    // 確保使用香港時區
     let current = dayjs(startDate);
-    const end = dayjs(endDate);
+    if (!current.isValid()) {
+      console.warn('Invalid startDate in generateDateRange');
+      return [];
+    }
+    current = current.tz('Asia/Hong_Kong').startOf('day');
+    
+    let end = dayjs(endDate);
+    if (!end.isValid()) {
+      console.warn('Invalid endDate in generateDateRange');
+      return [];
+    }
+    end = end.tz('Asia/Hong_Kong').startOf('day');
     
     while (current.isBefore(end) || current.isSame(end, 'day')) {
       dates.push(current);
@@ -544,7 +819,7 @@ const Schedule = () => {
                                       {/* 顯示工作時間 */}
                                       {schedule.start_time && schedule.end_time && (
                                         <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
-                                          {schedule.start_time.substring(0, 5)} - {schedule.end_time.substring(0, 5)}
+                                          {schedule.start_time.substring(0, 5)} - {formatEndTimeForDisplay(schedule.end_time)}
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
@@ -582,7 +857,7 @@ const Schedule = () => {
                                       {/* 顯示工作時間 */}
                                       {schedule.start_time && schedule.end_time && (
                                         <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
-                                          {schedule.start_time.substring(0, 5)} - {schedule.end_time.substring(0, 5)}
+                                          {schedule.start_time.substring(0, 5)} - {formatEndTimeForDisplay(schedule.end_time)}
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
@@ -643,6 +918,8 @@ const Schedule = () => {
             setEditingSchedule(null);
             setEditStartTime(null);
             setEditEndTime(null);
+            setEditEndHour(null);
+            setEditEndMinute(null);
             setEditLeaveTypeId('');
             setEditIsMorningLeave(false);
             setEditIsAfternoonLeave(false);
@@ -663,12 +940,59 @@ const Schedule = () => {
                   />
                 </Grid>
                 <Grid item xs={6}>
-                  <TimePicker
-                    label={t('schedule.endTime')}
-                    value={editEndTime}
-                    onChange={(newValue) => setEditEndTime(newValue)}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
+                      {t('schedule.endTime')}
+                    </Typography>
+                    <Grid container spacing={1}>
+                      <Grid item xs={5}>
+                        <FormControl fullWidth>
+                          <InputLabel>{t('schedule.hour')}</InputLabel>
+                          <Select
+                            value={editEndHour !== null ? editEndHour : ''}
+                            onChange={(e) => {
+                              const hour = e.target.value === '' ? null : Number(e.target.value);
+                              setEditEndHour(hour);
+                              updateEndTimeFromSelect(hour, editEndMinute);
+                            }}
+                            label={t('schedule.hour')}
+                          >
+                            {Array.from({ length: 33 }, (_, i) => i).map(hour => (
+                              <MenuItem key={hour} value={hour}>
+                                {String(hour).padStart(2, '0')} {hour >= 24 ? `(${t('schedule.nextDay')}${String(hour - 24).padStart(2, '0')}:00)` : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Typography>:</Typography>
+                      </Grid>
+                      <Grid item xs={5}>
+                        <FormControl fullWidth>
+                          <InputLabel>{t('schedule.minute')}</InputLabel>
+                          <Select
+                            value={editEndMinute !== null ? editEndMinute : ''}
+                            onChange={(e) => {
+                              const minute = e.target.value === '' ? null : Number(e.target.value);
+                              setEditEndMinute(minute);
+                              updateEndTimeFromSelect(editEndHour, minute);
+                            }}
+                            label={t('schedule.minute')}
+                          >
+                            {Array.from({ length: 60 }, (_, i) => i).map(minute => (
+                              <MenuItem key={minute} value={minute}>
+                                {String(minute).padStart(2, '0')}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                      {t('schedule.endTimeHelper')}
+                    </Typography>
+                  </Box>
                 </Grid>
                 <Grid item xs={12}>
                   <FormControl fullWidth>
@@ -756,6 +1080,8 @@ const Schedule = () => {
               setEditingSchedule(null);
               setEditStartTime(null);
               setEditEndTime(null);
+              setEditEndHour(null);
+            setEditEndMinute(null);
               setEditLeaveTypeId('');
               setEditIsMorningLeave(false);
               setEditIsAfternoonLeave(false);
@@ -810,12 +1136,32 @@ const Schedule = () => {
                 {dates.map(date => (
                   <Box key={date.format('YYYY-MM-DD')} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <Checkbox
-                      checked={selectedDates.some(d => dayjs(d).isSame(date, 'day'))}
+                      checked={selectedDates.some(d => {
+                        if (!d || !date) return false;
+                        try {
+                          const dDate = dayjs(d);
+                          const checkDate = dayjs(date);
+                          if (!dDate.isValid() || !checkDate.isValid()) return false;
+                          return dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
+                        } catch (error) {
+                          return false;
+                        }
+                      })}
                       onChange={(e) => {
                         if (e.target.checked) {
                           setSelectedDates([...selectedDates, date]);
                         } else {
-                          setSelectedDates(selectedDates.filter(d => !dayjs(d).isSame(date, 'day')));
+                          setSelectedDates(selectedDates.filter(d => {
+                            if (!d || !date) return true;
+                            try {
+                              const dDate = dayjs(d);
+                              const checkDate = dayjs(date);
+                              if (!dDate.isValid() || !checkDate.isValid()) return true;
+                              return !dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
+                            } catch (error) {
+                              return true;
+                            }
+                          }));
                         }
                       }}
                     />

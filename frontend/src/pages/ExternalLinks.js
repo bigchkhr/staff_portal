@@ -224,6 +224,27 @@ const ExternalLinks = () => {
     }
   }, [handleSearch]);
 
+  // 處理 URL，確保有正確的協議
+  const formatUrl = (url) => {
+    if (!url) return '';
+    // 如果 URL 已經有協議，直接返回
+    if (url.match(/^https?:\/\//i)) {
+      return url;
+    }
+    // 否則添加 https://
+    return `https://${url}`;
+  };
+
+  // 處理連結點擊
+  const handleLinkClick = (e, url) => {
+    // 如果點擊的是管理按鈕，不打開連結
+    if (e.target.closest('button') || e.target.closest('[role="button"]')) {
+      return;
+    }
+    const formattedUrl = formatUrl(url);
+    window.open(formattedUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Box>
         <Box sx={{ 
@@ -333,11 +354,20 @@ const ExternalLinks = () => {
                 <Paper 
                   key={link.id}
                   elevation={2}
+                  component={!isSystemAdmin ? 'a' : 'div'}
+                  href={!isSystemAdmin ? formatUrl(link.url) : undefined}
+                  target={!isSystemAdmin ? '_blank' : undefined}
+                  rel={!isSystemAdmin ? 'noopener noreferrer' : undefined}
                   sx={{ 
                     p: 2,
                     borderRadius: 2,
+                    cursor: !isSystemAdmin ? 'pointer' : 'default',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    transition: 'all 0.2s ease-in-out',
                     '&:hover': { 
-                      boxShadow: 4
+                      boxShadow: 4,
+                      transform: !isSystemAdmin ? 'translateY(-2px)' : 'none'
                     }
                   }}
                 >
@@ -362,12 +392,26 @@ const ExternalLinks = () => {
                         </Typography>
                       </Box>
                       <MuiLink 
-                        href={link.url} 
+                        href={formatUrl(link.url)} 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.875rem' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 0.5, 
+                          fontSize: '0.875rem',
+                          color: 'primary.main',
+                          textDecoration: 'none',
+                          wordBreak: 'break-all',
+                          '&:hover': {
+                            textDecoration: 'underline'
+                          }
+                        }}
                       >
-                        {link.url}
+                        {link.url.length > 50 ? `${link.url.substring(0, 50)}...` : link.url}
                         <OpenInNewIcon sx={{ fontSize: 14 }} />
                       </MuiLink>
                     </Box>
@@ -506,16 +550,20 @@ const ExternalLinks = () => {
                               {link.name}
                             </Typography>
                             <MuiLink 
-                              href={link.url} 
+                              href={formatUrl(link.url)} 
                               target="_blank" 
                               rel="noopener noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
                               sx={{ 
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 gap: 0.5,
                                 fontSize: '0.75rem',
-                                color: 'text.secondary',
+                                color: 'primary.main',
                                 textDecoration: 'none',
+                                wordBreak: 'break-all',
                                 '&:hover': {
                                   textDecoration: 'underline'
                                 }
@@ -559,9 +607,12 @@ const ExternalLinks = () => {
                             <IconButton
                               size="small"
                               component="a"
-                              href={link.url}
+                              href={formatUrl(link.url)}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
                               sx={{ 
                                 color: 'primary.main',
                                 '&:hover': { backgroundColor: 'primary.light', color: 'white' }

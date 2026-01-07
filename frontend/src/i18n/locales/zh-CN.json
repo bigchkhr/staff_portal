@@ -1112,7 +1112,11 @@
     "createSchedule": "创建排班",
     "success": "成功",
     "error": "错误",
-    "warning": "警告"
+    "warning": "警告",
+    "hour": "小时",
+    "minute": "分钟",
+    "nextDay": "翌日",
+    "endTimeHelper": "可选择24-32小时表示跨日时间（如26:00表示翌日凌晨2:00）"
   },
   "groupLeaveCalendar": {
     "title": "群组假期周历",

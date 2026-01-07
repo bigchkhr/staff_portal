@@ -52,8 +52,29 @@ class Schedule {
       const results = await query.orderBy('schedules.schedule_date', 'desc')
         .orderBy('users.employee_number');
       
-      // 確保返回空數組而不是 undefined
-      return results || [];
+      // 確保返回空數組而不是 undefined，並格式化日期
+      if (!results || results.length === 0) {
+        return [];
+      }
+      
+      // 確保 schedule_date 格式為 YYYY-MM-DD 字符串
+      return results.map(schedule => {
+        if (schedule.schedule_date) {
+          // 如果是 Date 對象，使用本地日期部分（避免 UTC 轉換導致的日期偏移）
+          if (schedule.schedule_date instanceof Date) {
+            const date = schedule.schedule_date;
+            // 使用本地日期，而不是 UTC 日期，避免時區轉換導致的日期偏移
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            schedule.schedule_date = `${year}-${month}-${day}`;
+          } else if (typeof schedule.schedule_date === 'string') {
+            // 如果包含時間部分，只取日期部分
+            schedule.schedule_date = schedule.schedule_date.split('T')[0].substring(0, 10);
+          }
+        }
+        return schedule;
+      });
     } catch (error) {
       console.error('Schedule.findAll query error:', error);
       throw error;
@@ -86,19 +107,65 @@ class Schedule {
         )
         .where('schedules.id', id)
         .first();
-      return result || null;
+      
+      if (!result) {
+        return null;
+      }
+      
+      // 確保 schedule_date 格式為 YYYY-MM-DD 字符串
+      if (result.schedule_date) {
+        // 如果是 Date 對象，使用本地日期部分（避免 UTC 轉換導致的日期偏移）
+        if (result.schedule_date instanceof Date) {
+          const date = result.schedule_date;
+          // 使用本地日期，而不是 UTC 日期，避免時區轉換導致的日期偏移
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          result.schedule_date = `${year}-${month}-${day}`;
+        } else if (typeof result.schedule_date === 'string') {
+          // 如果包含時間部分，只取日期部分
+          result.schedule_date = result.schedule_date.split('T')[0].substring(0, 10);
+        }
+      }
+      
+      return result;
     } catch (error) {
       console.error('Schedule.findById error:', error);
       throw error;
     }
   }
 
-  // 建立排班記錄
+  // 建立排班記錄（使用 upsert 邏輯：如果已存在則更新，否則插入）
   static async create(scheduleData) {
-    const [schedule] = await knex('schedules')
-      .insert(scheduleData)
-      .returning('*');
-    return await this.findById(schedule.id);
+    // 檢查是否已存在相同的 user_id 和 schedule_date
+    const existing = await knex('schedules')
+      .where({
+        user_id: scheduleData.user_id,
+        schedule_date: scheduleData.schedule_date
+      })
+      .first();
+
+    if (existing) {
+      // 更新現有記錄
+      await knex('schedules')
+        .where('id', existing.id)
+        .update({
+          start_time: scheduleData.start_time,
+          end_time: scheduleData.end_time,
+          leave_type_id: scheduleData.leave_type_id,
+          is_morning_leave: scheduleData.is_morning_leave,
+          is_afternoon_leave: scheduleData.is_afternoon_leave,
+          updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,
+          updated_at: knex.fn.now()
+        });
+      return await this.findById(existing.id);
+    } else {
+      // 插入新記錄
+      const [schedule] = await knex('schedules')
+        .insert(scheduleData)
+        .returning('*');
+      return await this.findById(schedule.id);
+    }
   }
 
   // 批量建立排班記錄

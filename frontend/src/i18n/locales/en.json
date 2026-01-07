@@ -1172,7 +1172,11 @@
     "createSchedule": "Create Schedule",
     "success": "Success",
     "error": "Error",
-    "warning": "Warning"
+    "warning": "Warning",
+    "hour": "Hour",
+    "minute": "Minute",
+    "nextDay": "Next Day",
+    "endTimeHelper": "You can select 24-32 hours to indicate overnight time (e.g., 26:00 means 2:00 AM next day)"
   },
   "groupLeaveCalendar": {
     "title": "Group Leave Calendar",

@@ -139,9 +139,6 @@ class ScheduleController {
       res.status(201).json({ schedule, message: '排班記錄建立成功' });
     } catch (error) {
       console.error('Create schedule error:', error);
-      if (error.code === '23505') { // PostgreSQL unique constraint violation
-        return res.status(400).json({ message: '該日期已存在排班記錄' });
-      }
       res.status(500).json({ message: '建立排班記錄失敗', error: error.message });
     }
   }
