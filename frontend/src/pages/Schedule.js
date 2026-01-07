@@ -69,8 +69,6 @@ const Schedule = () => {
   const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
   const [selectedDates, setSelectedDates] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
-  const [batchMorningLeave, setBatchMorningLeave] = useState(false);
-  const [batchAfternoonLeave, setBatchAfternoonLeave] = useState(false);
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -78,9 +76,6 @@ const Schedule = () => {
   const [editEndTime, setEditEndTime] = useState(null);
   const [editEndHour, setEditEndHour] = useState(null);
   const [editEndMinute, setEditEndMinute] = useState(null);
-  const [editLeaveTypeId, setEditLeaveTypeId] = useState('');
-  const [editIsMorningLeave, setEditIsMorningLeave] = useState(false);
-  const [editIsAfternoonLeave, setEditIsAfternoonLeave] = useState(false);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -179,7 +174,9 @@ const Schedule = () => {
         user_id: s.user_id, 
         schedule_date: s.schedule_date, 
         type: typeof s.schedule_date,
-        isDate: s.schedule_date instanceof Date
+        isDate: s.schedule_date instanceof Date,
+        leave_type_name_zh: s.leave_type_name_zh,
+        leave_session: s.leave_session
       })));
       console.log('Date range:', { 
         start: startDate.format('YYYY-MM-DD'), 
@@ -415,9 +412,6 @@ const Schedule = () => {
         setEditEndTime(null);
       }
       
-      setEditLeaveTypeId(existingSchedule.leave_type_id || '');
-      setEditIsMorningLeave(existingSchedule.is_morning_leave || false);
-      setEditIsAfternoonLeave(existingSchedule.is_afternoon_leave || false);
     } else {
       setEditingSchedule({
         user_id: userId,
@@ -428,9 +422,6 @@ const Schedule = () => {
       setEditEndTime(null);
       setEditEndHour(null);
       setEditEndMinute(null);
-      setEditLeaveTypeId('');
-      setEditIsMorningLeave(false);
-      setEditIsAfternoonLeave(false);
     }
     setEditDialogOpen(true);
   };
@@ -475,10 +466,7 @@ const Schedule = () => {
         department_group_id: selectedGroupId,
         schedule_date: editingSchedule.schedule_date,
         start_time: editStartTime ? editStartTime.format('HH:mm:ss') : null,
-        end_time: endTimeValue,
-        leave_type_id: editLeaveTypeId || null,
-        is_morning_leave: editIsMorningLeave,
-        is_afternoon_leave: editIsAfternoonLeave
+        end_time: endTimeValue
       };
 
       if (editingSchedule.id) {
@@ -495,9 +483,6 @@ const Schedule = () => {
       setEditEndTime(null);
       setEditEndHour(null);
       setEditEndMinute(null);
-      setEditLeaveTypeId('');
-      setEditIsMorningLeave(false);
-      setEditIsAfternoonLeave(false);
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -528,19 +513,13 @@ const Schedule = () => {
     return endTime.toString().substring(0, 5);
   };
 
-  // 取得假期顯示文字
+  // 取得假期顯示文字（簡化：只顯示假期類型，不區分上下午）
   const getLeaveDisplayText = (schedule) => {
     if (!schedule) return null;
     
-    const isMorning = schedule.is_morning_leave;
-    const isAfternoon = schedule.is_afternoon_leave;
-    
-    if (isMorning && isAfternoon) {
-      return t('schedule.fullDayLeave');
-    } else if (isMorning) {
-      return t('schedule.morningLeave');
-    } else if (isAfternoon) {
-      return t('schedule.afternoonLeave');
+    // 如果有假期類型，就顯示假期
+    if (schedule.leave_type_name_zh || schedule.leave_type_name) {
+      return schedule.leave_type_name_zh || schedule.leave_type_name;
     }
     
     return null;
@@ -585,9 +564,7 @@ const Schedule = () => {
             schedulesData.push({
               user_id: userId,
               department_group_id: selectedGroupId,
-              schedule_date: dateStr,
-              is_morning_leave: batchMorningLeave,
-              is_afternoon_leave: batchAfternoonLeave
+              schedule_date: dateStr
             });
           });
         } catch (error) {
@@ -600,8 +577,6 @@ const Schedule = () => {
       setBatchEditDialogOpen(false);
       setSelectedUsers([]);
       setSelectedDates([]);
-      setBatchMorningLeave(false);
-      setBatchAfternoonLeave(false);
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -801,6 +776,16 @@ const Schedule = () => {
                       {dates.map(date => {
                         const schedule = getScheduleForUserAndDate(member.id, date);
                         const dateStr = date.format('YYYY-MM-DD');
+                        // 調試：檢查 schedule 資料
+                        if (schedule && schedule.leave_type_name_zh) {
+                          console.log('Schedule with leave:', {
+                            date: dateStr,
+                            user_id: member.id,
+                            leave_type_name_zh: schedule.leave_type_name_zh,
+                            leave_session: schedule.leave_session,
+                            has_session: !!schedule.leave_session
+                          });
+                        }
                         return (
                           <TableCell key={dateStr} align="center">
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -823,20 +808,20 @@ const Schedule = () => {
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
-                                      {schedule.leave_type_name_zh && (
+                                      {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
                                         <Chip 
-                                          label={schedule.leave_type_name_zh} 
+                                          label={
+                                            (() => {
+                                              const leaveTypeDisplay = i18n.language === 'en'
+                                                ? (schedule.leave_type_code || schedule.leave_type_name)
+                                                : (schedule.leave_type_name_zh || schedule.leave_type_name);
+                                              return schedule.leave_session 
+                                                ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+                                                : leaveTypeDisplay;
+                                            })()
+                                          }
                                           size="small" 
                                           color="primary"
-                                          sx={{ fontSize: '0.65rem', height: '20px', mb: 0.5 }}
-                                        />
-                                      )}
-                                      {/* 顯示假期時段（上午/下午/全天） */}
-                                      {getLeaveDisplayText(schedule) && (
-                                        <Chip 
-                                          label={getLeaveDisplayText(schedule)} 
-                                          size="small" 
-                                          color="warning"
                                           sx={{ fontSize: '0.65rem', height: '20px', mb: 0.5 }}
                                         />
                                       )}
@@ -861,25 +846,25 @@ const Schedule = () => {
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
-                                      {schedule.leave_type_name_zh && (
+                                      {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
                                         <Chip 
-                                          label={schedule.leave_type_name_zh} 
+                                          label={
+                                            (() => {
+                                              const leaveTypeDisplay = i18n.language === 'en'
+                                                ? (schedule.leave_type_code || schedule.leave_type_name)
+                                                : (schedule.leave_type_name_zh || schedule.leave_type_name);
+                                              return schedule.leave_session 
+                                                ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+                                                : leaveTypeDisplay;
+                                            })()
+                                          }
                                           size="small" 
                                           color="primary"
                                           sx={{ fontSize: '0.65rem', height: '20px', mb: 0.5 }}
                                         />
                                       )}
-                                      {/* 顯示假期時段（上午/下午/全天） */}
-                                      {getLeaveDisplayText(schedule) && (
-                                        <Chip 
-                                          label={getLeaveDisplayText(schedule)} 
-                                          size="small" 
-                                          color="warning"
-                                          sx={{ fontSize: '0.65rem', height: '20px' }}
-                                        />
-                                      )}
                                       {/* 如果沒有任何資訊，顯示 --- */}
-                                      {!schedule.start_time && !schedule.leave_type_name_zh && !getLeaveDisplayText(schedule) && (
+                                      {!schedule.start_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
                                         <Typography variant="caption" color="text.secondary">
                                           ---
                                         </Typography>
@@ -920,9 +905,6 @@ const Schedule = () => {
             setEditEndTime(null);
             setEditEndHour(null);
             setEditEndMinute(null);
-            setEditLeaveTypeId('');
-            setEditIsMorningLeave(false);
-            setEditIsAfternoonLeave(false);
           }}
           maxWidth="sm"
           fullWidth
@@ -994,83 +976,6 @@ const Schedule = () => {
                     </Typography>
                   </Box>
                 </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>{t('schedule.leaveType')}</InputLabel>
-                    <Select
-                      value={editLeaveTypeId}
-                      onChange={(e) => setEditLeaveTypeId(e.target.value)}
-                      label={t('schedule.leaveType')}
-                    >
-                      <MenuItem value="">
-                        <em>{t('common.none')}</em>
-                      </MenuItem>
-                      {leaveTypes.map(leaveType => (
-                        <MenuItem key={leaveType.id} value={leaveType.id}>
-                          {i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-                            ? leaveType.name_zh || leaveType.name
-                            : leaveType.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    {t('schedule.leavePeriod')}
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={editIsMorningLeave && !editIsAfternoonLeave}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditIsMorningLeave(true);
-                              setEditIsAfternoonLeave(false);
-                            } else {
-                              setEditIsMorningLeave(false);
-                            }
-                          }}
-                        />
-                      }
-                      label={t('schedule.morningLeave')}
-                    />
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={editIsAfternoonLeave && !editIsMorningLeave}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditIsAfternoonLeave(true);
-                              setEditIsMorningLeave(false);
-                            } else {
-                              setEditIsAfternoonLeave(false);
-                            }
-                          }}
-                        />
-                      }
-                      label={t('schedule.afternoonLeave')}
-                    />
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={editIsMorningLeave && editIsAfternoonLeave}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setEditIsMorningLeave(true);
-                              setEditIsAfternoonLeave(true);
-                            } else {
-                              setEditIsMorningLeave(false);
-                              setEditIsAfternoonLeave(false);
-                            }
-                          }}
-                        />
-                      }
-                      label={t('schedule.fullDayLeave')}
-                    />
-                  </Box>
-                </Grid>
               </Grid>
             </Box>
           </DialogContent>
@@ -1081,10 +986,7 @@ const Schedule = () => {
               setEditStartTime(null);
               setEditEndTime(null);
               setEditEndHour(null);
-            setEditEndMinute(null);
-              setEditLeaveTypeId('');
-              setEditIsMorningLeave(false);
-              setEditIsAfternoonLeave(false);
+              setEditEndMinute(null);
             }}>
               {t('common.cancel')}
             </Button>
@@ -1172,26 +1074,6 @@ const Schedule = () => {
                 ))}
               </Box>
 
-              <Box sx={{ mt: 3 }}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={batchMorningLeave}
-                      onChange={(e) => setBatchMorningLeave(e.target.checked)}
-                    />
-                  }
-                  label={t('schedule.morningLeave')}
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={batchAfternoonLeave}
-                      onChange={(e) => setBatchAfternoonLeave(e.target.checked)}
-                    />
-                  }
-                  label={t('schedule.afternoonLeave')}
-                />
-              </Box>
             </Box>
           </DialogContent>
           <DialogActions>

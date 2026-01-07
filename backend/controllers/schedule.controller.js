@@ -1,6 +1,8 @@
 const Schedule = require('../database/models/Schedule');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const User = require('../database/models/User');
+const LeaveApplication = require('../database/models/LeaveApplication');
+const knex = require('../config/database');
 
 class ScheduleController {
   // 取得排班列表
@@ -47,16 +49,77 @@ class ScheduleController {
         const filteredSchedules = allSchedules.filter(s => 
           groupIds.includes(s.department_group_id)
         );
-        return res.json({ schedules: filteredSchedules });
+        
+        // 獲取所有群組的成員
+        const allMembers = [];
+        for (const groupId of groupIds) {
+          const members = await DepartmentGroup.getMembers(groupId);
+          allMembers.push(...members);
+        }
+        // 去重
+        const uniqueMembers = Array.from(new Map(allMembers.map(m => [m.id, m])).values());
+        
+        // 獲取所有群組成員的假期申請
+        const leaveApplications = await this.getLeaveApplicationsForGroups(
+          groupIds,
+          filters.start_date,
+          filters.end_date
+        );
+        
+        // 生成完整的排班資料（使用第一個群組ID作為默認值）
+        const schedulesWithLeave = this.generateSchedulesForMembersAndDates(
+          uniqueMembers,
+          filters.start_date,
+          filters.end_date,
+          groupIds[0], // 使用第一個群組ID
+          filteredSchedules,
+          leaveApplications
+        );
+        
+        return res.json({ schedules: schedulesWithLeave });
       }
 
       console.log('Querying schedules with filters:', filters);
       const schedules = await Schedule.findAll(filters);
       console.log(`Found ${schedules.length} schedules`);
-      if (schedules.length > 0) {
-        console.log('Sample schedule:', schedules[0]);
+      
+      // 獲取群組所有成員
+      const members = await DepartmentGroup.getMembers(filters.department_group_id);
+      console.log(`Group has ${members.length} members`);
+      
+      // 獲取群組所有成員的假期申請
+      const leaveApplications = await this.getLeaveApplicationsForGroup(
+        filters.department_group_id,
+        filters.start_date,
+        filters.end_date
+      );
+      console.log(`Found ${leaveApplications.length} leave applications for group`);
+      
+      // 生成完整的排班資料：為每個成員、每個日期創建記錄
+      const schedulesWithLeave = this.generateSchedulesForMembersAndDates(
+        members,
+        filters.start_date,
+        filters.end_date,
+        filters.department_group_id,
+        schedules,
+        leaveApplications
+      );
+      
+      if (schedulesWithLeave.length > 0) {
+        // 找出有假期且有 session 的記錄作為示例
+        const sampleWithSession = schedulesWithLeave.find(s => s.leave_session);
+        if (sampleWithSession) {
+          console.log('Sample schedule with leave session:', {
+            id: sampleWithSession.id,
+            user_id: sampleWithSession.user_id,
+            schedule_date: sampleWithSession.schedule_date,
+            leave_type_name_zh: sampleWithSession.leave_type_name_zh,
+            leave_session: sampleWithSession.leave_session
+          });
+        }
+        console.log('Sample schedule with leave:', schedulesWithLeave[0]);
       }
-      res.json({ schedules });
+      res.json({ schedules: schedulesWithLeave });
     } catch (error) {
       console.error('Get schedules error:', error);
       console.error('Error stack:', error.stack);
@@ -74,6 +137,151 @@ class ScheduleController {
       });
     }
   }
+
+  // 輔助方法：為每個成員、每個日期生成排班記錄，並合併假期資料
+  generateSchedulesForMembersAndDates(members, startDate, endDate, departmentGroupId, existingSchedules, leaveApplications) {
+    if (!members || members.length === 0 || !startDate || !endDate) {
+      return existingSchedules || [];
+    }
+    
+    // 生成日期範圍
+    const dates = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const current = new Date(start);
+    
+    while (current <= end) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+      dates.push(dateStr);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    // 為每個成員、每個日期創建排班記錄
+    const allSchedules = [];
+    
+    for (const member of members) {
+      for (const dateStr of dates) {
+        // 查找是否已有排班記錄
+        const existingSchedule = existingSchedules.find(s => {
+          const sUserId = Number(s.user_id);
+          const sDate = this.formatDateString(s.schedule_date);
+          return sUserId === Number(member.id) && sDate === dateStr;
+        });
+        
+        if (existingSchedule) {
+          // 如果已有記錄，合併假期資料
+          const scheduleWithLeave = this.mergeLeaveForSchedule(existingSchedule, dateStr, leaveApplications);
+          allSchedules.push(scheduleWithLeave);
+        } else {
+          // 如果沒有記錄，創建新記錄（僅包含假期資料）
+          const scheduleWithLeave = this.createScheduleFromLeave(member, dateStr, departmentGroupId, leaveApplications);
+          if (scheduleWithLeave) {
+            allSchedules.push(scheduleWithLeave);
+          }
+        }
+      }
+    }
+    
+    return allSchedules;
+  }
+  
+  // 輔助方法：格式化日期為字符串
+  formatDateString(date) {
+    if (!date) return null;
+    if (date instanceof Date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+    if (typeof date === 'string') {
+      return date.split('T')[0].substring(0, 10);
+    }
+    return date;
+  }
+  
+  // 輔助方法：為現有排班記錄合併假期資料
+  mergeLeaveForSchedule(schedule, scheduleDateStr, leaveApplications) {
+    const userId = schedule.user_id;
+    
+    // 找到該用戶在該日期的假期申請
+    const leaveForDate = this.findLeaveForUserAndDate(userId, scheduleDateStr, leaveApplications);
+    
+    if (leaveForDate) {
+      // 判斷是上午假還是下午假
+      const leaveSession = this.getLeaveSessionForDate(scheduleDateStr, leaveForDate);
+      console.log('mergeLeaveForSchedule - leaveSession:', leaveSession, 'for schedule date:', scheduleDateStr);
+      
+      return {
+        ...schedule,
+        leave_type_id: leaveForDate.leave_type_id,
+        leave_type_code: leaveForDate.leave_type_code,
+        leave_type_name: leaveForDate.leave_type_name,
+        leave_type_name_zh: leaveForDate.leave_type_name_zh,
+        leave_session: leaveSession // 'AM', 'PM', 或 null（全天假）
+      };
+    }
+    
+    return schedule;
+  }
+  
+  // 輔助方法：從假期資料創建排班記錄
+  createScheduleFromLeave(member, scheduleDateStr, departmentGroupId, leaveApplications) {
+    const userId = member.id;
+    
+    // 找到該用戶在該日期的假期申請
+    const leaveForDate = this.findLeaveForUserAndDate(userId, scheduleDateStr, leaveApplications);
+    
+    if (leaveForDate) {
+      // 判斷是上午假還是下午假
+      const leaveSession = this.getLeaveSessionForDate(scheduleDateStr, leaveForDate);
+      
+      // 創建一個虛擬的排班記錄（沒有 id，只有假期資料）
+      return {
+        id: null,
+        user_id: userId,
+        department_group_id: departmentGroupId,
+        schedule_date: scheduleDateStr,
+        start_time: null,
+        end_time: null,
+        user_name: member.display_name || member.name,
+        user_name_zh: member.name_zh,
+        employee_number: member.employee_number,
+        leave_type_id: leaveForDate.leave_type_id,
+        leave_type_code: leaveForDate.leave_type_code,
+        leave_type_name: leaveForDate.leave_type_name,
+        leave_type_name_zh: leaveForDate.leave_type_name_zh,
+        leave_session: leaveSession // 'AM', 'PM', 或 null（全天假）
+      };
+    }
+    
+    return null;
+  }
+  
+  // 輔助方法：獲取指定日期的假期時段（AM/PM/null）
+  // 使用 LeaveApplication model 的靜態方法來計算
+  getLeaveSessionForDate(scheduleDateStr, leaveForDate) {
+    return LeaveApplication.getSessionForDate(leaveForDate, scheduleDateStr);
+  }
+  
+  // 輔助方法：查找用戶在指定日期的假期申請
+  findLeaveForUserAndDate(userId, scheduleDateStr, leaveApplications) {
+    return leaveApplications.find(leave => {
+      // 檢查用戶是否匹配
+      if (Number(leave.user_id) !== Number(userId)) {
+        return false;
+      }
+      
+      // 確保日期格式一致
+      let leaveStart = this.formatDateString(leave.start_date);
+      let leaveEnd = this.formatDateString(leave.end_date);
+      
+      // 檢查日期是否在假期範圍內
+      if (scheduleDateStr >= leaveStart && scheduleDateStr <= leaveEnd) {
+        return true;
+      }
+      
+      return false;
+    });
+  }
+  
 
   // 取得單一排班記錄
   async getSchedule(req, res) {
@@ -102,7 +310,7 @@ class ScheduleController {
   // 建立排班記錄（單筆）
   async createSchedule(req, res) {
     try {
-      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, is_morning_leave, is_afternoon_leave } = req.body;
+      const { user_id, department_group_id, schedule_date, start_time, end_time } = req.body;
       const userId = req.user.id;
 
       // 驗證必填欄位
@@ -128,9 +336,6 @@ class ScheduleController {
         schedule_date,
         start_time: start_time || null,
         end_time: end_time || null,
-        leave_type_id: leave_type_id || null,
-        is_morning_leave: is_morning_leave || false,
-        is_afternoon_leave: is_afternoon_leave || false,
         created_by_id: userId,
         updated_by_id: userId
       };
@@ -186,9 +391,6 @@ class ScheduleController {
         schedule_date: s.schedule_date,
         start_time: s.start_time || null,
         end_time: s.end_time || null,
-        leave_type_id: s.leave_type_id || null,
-        is_morning_leave: s.is_morning_leave || false,
-        is_afternoon_leave: s.is_afternoon_leave || false,
         created_by_id: userId,
         updated_by_id: userId
       }));
@@ -208,7 +410,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { start_time, end_time, leave_type_id, is_morning_leave, is_afternoon_leave } = req.body;
+      const { start_time, end_time } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -227,9 +429,6 @@ class ScheduleController {
       };
       if (start_time !== undefined) updateData.start_time = start_time || null;
       if (end_time !== undefined) updateData.end_time = end_time || null;
-      if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
-      if (is_morning_leave !== undefined) updateData.is_morning_leave = is_morning_leave;
-      if (is_afternoon_leave !== undefined) updateData.is_afternoon_leave = is_afternoon_leave;
 
       const updatedSchedule = await Schedule.update(id, updateData);
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });
@@ -295,6 +494,105 @@ class ScheduleController {
       console.error('Delete batch schedules error:', error);
       res.status(500).json({ message: '批量刪除排班記錄失敗', error: error.message });
     }
+  }
+
+  // 輔助方法：獲取指定群組所有成員的假期申請
+  async getLeaveApplicationsForGroup(departmentGroupId, startDate, endDate) {
+    if (!departmentGroupId) {
+      return [];
+    }
+    
+    if (!startDate || !endDate) {
+      return [];
+    }
+    
+    // 獲取群組的所有成員
+    const members = await DepartmentGroup.getMembers(departmentGroupId);
+    if (!members || members.length === 0) {
+      return [];
+    }
+    
+    const userIds = members.map(m => m.id);
+    console.log(`Group ${departmentGroupId} has ${userIds.length} members`);
+    
+    // 查詢已批核的假期申請（排除已銷假的）
+    const allLeaveApplications = await LeaveApplication.findAll({
+      status: 'approved',
+      start_date_from: startDate,
+      end_date_to: endDate
+    });
+    
+    // 過濾出群組成員的假期申請，並排除已銷假的
+    const leaveApplications = allLeaveApplications.filter(leave => {
+      // 檢查用戶是否為群組成員
+      if (!userIds.includes(Number(leave.user_id))) {
+        return false;
+      }
+      // 排除已銷假的假期
+      if (leave.is_reversed) {
+        return false;
+      }
+      // 排除銷假交易本身
+      if (leave.is_reversal_transaction) {
+        return false;
+      }
+      return true;
+    });
+    
+    return leaveApplications;
+  }
+
+  // 輔助方法：獲取多個群組所有成員的假期申請
+  async getLeaveApplicationsForGroups(departmentGroupIds, startDate, endDate) {
+    if (!departmentGroupIds || departmentGroupIds.length === 0) {
+      return [];
+    }
+    
+    if (!startDate || !endDate) {
+      return [];
+    }
+    
+    // 獲取所有群組的成員
+    const allUserIds = new Set();
+    for (const groupId of departmentGroupIds) {
+      const members = await DepartmentGroup.getMembers(groupId);
+      if (members && members.length > 0) {
+        members.forEach(m => allUserIds.add(m.id));
+      }
+    }
+    
+    if (allUserIds.size === 0) {
+      return [];
+    }
+    
+    const userIds = Array.from(allUserIds);
+    console.log(`Groups have ${userIds.length} total members`);
+    
+    // 查詢已批核的假期申請（排除已銷假的）
+    const allLeaveApplications = await LeaveApplication.findAll({
+      status: 'approved',
+      start_date_from: startDate,
+      end_date_to: endDate
+    });
+    
+    // 過濾出群組成員的假期申請，並排除已銷假的
+    const leaveApplications = allLeaveApplications.filter(leave => {
+      // 檢查用戶是否為群組成員
+      if (!userIds.includes(Number(leave.user_id))) {
+        return false;
+      }
+      // 排除已銷假的假期
+      if (leave.is_reversed) {
+        return false;
+      }
+      // 排除銷假交易本身
+      if (leave.is_reversal_transaction) {
+        return false;
+      }
+      return true;
+    });
+    
+    return leaveApplications;
   }
 
   // 輔助方法：檢查用戶是否可以查看群組排班

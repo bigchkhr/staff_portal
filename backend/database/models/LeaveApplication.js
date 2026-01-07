@@ -686,6 +686,81 @@ class LeaveApplication {
 
     return await this.findById(application.id);
   }
+
+  // 靜態方法：計算指定日期在假期申請中的時段（AM/PM/null）
+  // 對於單一申請：根據 start_session 和 end_session 判斷
+  // 對於跨日假期：第一天根據 start_session，最後一天根據 end_session，中間日期為全天假
+  static getSessionForDate(leaveApplication, targetDateStr) {
+    if (!leaveApplication || !targetDateStr) {
+      return null;
+    }
+
+    // 格式化日期字符串
+    const formatDate = (date) => {
+      if (!date) return null;
+      if (date instanceof Date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      }
+      if (typeof date === 'string') {
+        return date.split('T')[0].substring(0, 10);
+      }
+      return date;
+    };
+
+    const startDateStr = formatDate(leaveApplication.start_date);
+    const endDateStr = formatDate(leaveApplication.end_date);
+    const startSession = leaveApplication.start_session;
+    const endSession = leaveApplication.end_session;
+
+    // 確保目標日期在假期範圍內
+    if (targetDateStr < startDateStr || targetDateStr > endDateStr) {
+      return null;
+    }
+
+    // 單一申請（同一天）
+    if (startDateStr === endDateStr) {
+      // 如果 start_session 和 end_session 都是 'AM'，顯示上午假
+      if (startSession === 'AM' && endSession === 'AM') {
+        return 'AM';
+      }
+      // 如果 start_session 和 end_session 都是 'PM'，顯示下午假
+      if (startSession === 'PM' && endSession === 'PM') {
+        return 'PM';
+      }
+      // 其他情況（null-null 或 AM-PM）：全天假，不顯示 session
+      return null;
+    }
+
+    // 跨日假期（一連串假期）
+    if (targetDateStr === startDateStr) {
+      // 第一天：根據 start_session 判斷
+      // 如果 start_session 是 'AM'，顯示上午假
+      if (startSession === 'AM') {
+        return 'AM';
+      }
+      // 如果 start_session 是 'PM'，顯示下午假
+      if (startSession === 'PM') {
+        return 'PM';
+      }
+      // 如果 start_session 是 null，全天假，不顯示 session
+      return null;
+    } else if (targetDateStr === endDateStr) {
+      // 最後一天：根據 end_session 判斷
+      // 如果 end_session 是 'AM'，顯示上午假
+      if (endSession === 'AM') {
+        return 'AM';
+      }
+      // 如果 end_session 是 'PM'，顯示下午假
+      if (endSession === 'PM') {
+        return 'PM';
+      }
+      // 如果 end_session 是 null，全天假，不顯示 session
+      return null;
+    } else {
+      // 中間日期：全天假，不顯示 session
+      return null;
+    }
+  }
 }
 
 module.exports = LeaveApplication;

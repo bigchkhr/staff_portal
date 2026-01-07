@@ -8,10 +8,6 @@ exports.up = function(knex) {
     table.date('schedule_date').notNullable(); // 排班日期
     table.time('start_time').nullable(); // 開始時間
     table.string('end_time', 10).nullable(); // 結束時間（支援跨日格式，如26:00表示翌日凌晨2:00）
-    table.integer('leave_type_id').unsigned().nullable()
-      .references('id').inTable('leave_types').onDelete('SET NULL'); // 假期類別
-    table.boolean('is_morning_leave').defaultTo(false); // 是否上午假
-    table.boolean('is_afternoon_leave').defaultTo(false); // 是否下午假
     table.integer('created_by_id').unsigned().notNullable()
       .references('id').inTable('users').onDelete('RESTRICT');
     table.integer('updated_by_id').unsigned().nullable()

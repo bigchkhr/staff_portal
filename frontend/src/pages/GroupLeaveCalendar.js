@@ -347,6 +347,7 @@ const GroupLeaveCalendar = () => {
                     user_name_zh: member.name_zh,
                     schedule_date: currentDateStr,
                     leave_type_id: app.leave_type_id,
+                    leave_type_code: app.leave_type_code,
                     leave_type_name: app.leave_type_name,
                     leave_type_name_zh: app.leave_type_name_zh,
                     is_morning_leave: isMorning,
@@ -459,9 +460,9 @@ const GroupLeaveCalendar = () => {
     const isAfternoon = schedule.is_afternoon_leave === true || schedule.is_afternoon_leave === 1;
     
     // 獲取假期類型名稱
-    const leaveTypeName = i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-      ? schedule.leave_type_name_zh || schedule.leave_type_name
-      : schedule.leave_type_name;
+    const leaveTypeName = i18n.language === 'en'
+      ? (schedule.leave_type_code || schedule.leave_type_name)
+      : (schedule.leave_type_name_zh || schedule.leave_type_name);
     
     // 獲取時段文字
     let periodText = '';
@@ -488,9 +489,13 @@ const GroupLeaveCalendar = () => {
   const getLeaveTypeName = (schedule) => {
     if (!schedule) return null;
     
-    return i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-      ? schedule.leave_type_name_zh || schedule.leave_type_name
-      : schedule.leave_type_name;
+    if (i18n.language === 'en') {
+      // 英文環境下顯示 leave code
+      return schedule.leave_type_code || schedule.leave_type_name;
+    } else {
+      // 中文環境下顯示中文名稱
+      return schedule.leave_type_name_zh || schedule.leave_type_name;
+    }
   };
   
   const getLeavePeriodText = (schedule) => {
