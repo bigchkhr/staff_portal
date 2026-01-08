@@ -79,6 +79,7 @@ exports.seed = async function (knex) {
   await knex('form_library').del();
   await knex('employee_documents').del();
   await knex('external_links').del();
+  await knex('group_contacts').del();
   await knex('users').del();
   await knex('department_groups').del();
   await knex('delegation_groups').del();
@@ -690,6 +691,103 @@ exports.seed = async function (knex) {
     { code: 'SH', name: 'Public Holiday', name_zh: '法定假期', requires_balance: false, allow_schedule_input: true }
   ]);
 
+  // 建立群組聯絡人模板數據
+  // 獲取部門群組 ID
+  const departmentGroups = await knex('department_groups').select('*');
+  const accountingGroup = departmentGroups.find(g => g.name === 'Accounting');
+  const hrGroup = departmentGroups.find(g => g.name === 'Human Resources');
+  const itGroup = departmentGroups.find(g => g.name === 'IT');
+  const marketingGroup = departmentGroups.find(g => g.name === 'Marketing');
+  const retailGroup = departmentGroups.find(g => g.name === 'Retail');
+
+  // 為部分部門群組創建示例聯絡人
+  const groupContactsData = [];
+
+
+  if (hrGroup) {
+    groupContactsData.push(
+      {
+        department_group_id: hrGroup.id,
+        name: 'Group Medical Employer Hotline',
+        name_zh: '團體保險僱主熱線',
+        company_name: 'AIA',
+        company_name_zh: 'AIA',
+        phone: ['22006333'],
+        email: '',
+        address: '',
+        position: '',
+        notes: ''
+      },
+      {
+        department_group_id: hrGroup.id,
+        name: 'MPF Employer Hotline',
+        name_zh: '強積金僱主熱線',
+        company_name: 'AIA',
+        company_name_zh: 'AIA',
+        phone: ['21001888'],
+        email: '',
+        address: '',
+        position: '',
+        notes: ''
+      },
+    );
+  }
+
+  if (itGroup) {
+    groupContactsData.push(
+      {
+        department_group_id: itGroup.id,
+        name: 'Kasmine Yung',
+        name_zh: '容雪文',
+        company_name: 'HKT',
+        company_name_zh: '香港電訊',
+        phone: ['55277607', '28883537'],
+        email: 'tom.chen@bigchk.com',
+        address: 'Room 3001, 30/F, Big C Building, 123 Main Street, Central, Hong Kong',
+        position: 'IT Manager',
+        notes: ''
+      }
+    );
+  }
+
+  if (marketingGroup) {
+    groupContactsData.push(
+      {
+        department_group_id: marketingGroup.id,
+        name: 'Lisa Ng',
+        name_zh: '吳麗莎',
+        company_name: 'Big C Hong Kong Limited',
+        company_name_zh: 'Big C 香港有限公司',
+        phone: ['2123 7000'],
+        email: 'lisa.ng@bigchk.com',
+        address: 'Room 4001, 40/F, Big C Building, 123 Main Street, Central, Hong Kong',
+        position: 'Marketing Manager',
+        notes: '負責市場推廣活動策劃'
+      }
+    );
+  }
+
+  if (retailGroup) {
+    groupContactsData.push(
+      {
+        department_group_id: retailGroup.id,
+        name: 'Peter Lam',
+        name_zh: '林彼得',
+        company_name: 'Big C Hong Kong Limited',
+        company_name_zh: 'Big C 香港有限公司',
+        phone: ['2123 8000'],
+        email: 'peter.lam@bigchk.com',
+        address: 'Room 5001, 50/F, Big C Building, 123 Main Street, Central, Hong Kong',
+        position: 'Retail Operations Manager',
+        notes: '負責零售業務營運管理'
+      }
+    );
+  }
+
+  // 插入群組聯絡人數據
+  if (groupContactsData.length > 0) {
+    await knex('group_contacts').insert(groupContactsData);
+  }
 
   // 取得部門和職位 ID
   const departments = await knex('departments').select('*');

@@ -33,7 +33,8 @@ import {
   Edit as EditIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
-  Business as BusinessIcon
+  Business as BusinessIcon,
+  Remove as RemoveIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
@@ -59,7 +60,9 @@ const GroupContacts = ({ noLayout = false }) => {
   const [formData, setFormData] = useState({
     name: '',
     name_zh: '',
-    phone: '',
+    company_name: '',
+    company_name_zh: '',
+    phone: [''],
     email: '',
     address: '',
     position: '',
@@ -171,7 +174,9 @@ const GroupContacts = ({ noLayout = false }) => {
     setFormData({
       name: '',
       name_zh: '',
-      phone: '',
+      company_name: '',
+      company_name_zh: '',
+      phone: [''],
       email: '',
       address: '',
       position: '',
@@ -184,10 +189,24 @@ const GroupContacts = ({ noLayout = false }) => {
 
   const handleEdit = (contact) => {
     setEditingContact(contact);
+    // 處理 phone 數組
+    let phoneArray = [];
+    if (contact.phone) {
+      if (Array.isArray(contact.phone)) {
+        phoneArray = contact.phone.length > 0 ? contact.phone : [''];
+      } else {
+        phoneArray = [contact.phone];
+      }
+    } else {
+      phoneArray = [''];
+    }
+    
     setFormData({
       name: contact.name || '',
       name_zh: contact.name_zh || '',
-      phone: contact.phone || '',
+      company_name: contact.company_name || '',
+      company_name_zh: contact.company_name_zh || '',
+      phone: phoneArray,
       email: contact.email || '',
       address: contact.address || '',
       position: contact.position || '',
@@ -209,7 +228,13 @@ const GroupContacts = ({ noLayout = false }) => {
       setError('');
       setSuccess('');
 
-      await axios.post(`/api/groups/department/${selectedGroupId}/contacts`, formData);
+      // 過濾掉空的電話號碼
+      const dataToSubmit = {
+        ...formData,
+        phone: formData.phone.filter(p => p && p.trim() !== '')
+      };
+
+      await axios.post(`/api/groups/department/${selectedGroupId}/contacts`, dataToSubmit);
 
       Swal.fire({
         icon: 'success',
@@ -223,8 +248,11 @@ const GroupContacts = ({ noLayout = false }) => {
       setFormData({
         name: '',
         name_zh: '',
-        phone: '',
+        company_name: '',
+        company_name_zh: '',
+        phone: [''],
         email: '',
+        address: '',
         position: '',
         notes: ''
       });
@@ -248,7 +276,13 @@ const GroupContacts = ({ noLayout = false }) => {
       setError('');
       setSuccess('');
 
-      await axios.put(`/api/groups/department/${selectedGroupId}/contacts/${editingContact.id}`, formData);
+      // 過濾掉空的電話號碼
+      const dataToSubmit = {
+        ...formData,
+        phone: formData.phone.filter(p => p && p.trim() !== '')
+      };
+
+      await axios.put(`/api/groups/department/${selectedGroupId}/contacts/${editingContact.id}`, dataToSubmit);
 
       Swal.fire({
         icon: 'success',
@@ -454,6 +488,11 @@ const GroupContacts = ({ noLayout = false }) => {
                               </Typography>
                             )}
                           </Typography>
+                          {contact.company_name_zh || contact.company_name ? (
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                              {contact.company_name_zh || contact.company_name}
+                            </Typography>
+                          ) : null}
                           {contact.position && (
                             <Chip 
                               label={contact.position} 
@@ -463,12 +502,12 @@ const GroupContacts = ({ noLayout = false }) => {
                             />
                           )}
                           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 1 }}>
-                            {contact.phone && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {contact.phone && Array.isArray(contact.phone) && contact.phone.length > 0 && contact.phone.filter(p => p && p.trim() !== '').map((phoneNumber, index) => (
+                              <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <PhoneIcon fontSize="small" color="action" />
-                                <Typography variant="body2">{contact.phone}</Typography>
+                                <Typography variant="body2">{phoneNumber}</Typography>
                               </Box>
-                            )}
+                            ))}
                             {contact.email && (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                 <EmailIcon fontSize="small" color="action" />
@@ -586,6 +625,11 @@ const GroupContacts = ({ noLayout = false }) => {
                                   {contact.name}
                                 </Typography>
                               )}
+                              {contact.company_name_zh || contact.company_name ? (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                  {contact.company_name_zh || contact.company_name}
+                                </Typography>
+                              ) : null}
                               {contact.notes && !isTablet && (
                                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                                   {contact.notes}
@@ -600,10 +644,14 @@ const GroupContacts = ({ noLayout = false }) => {
                           )}
                           {!isTablet && (
                             <TableCell>
-                              {contact.phone ? (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  <PhoneIcon fontSize="small" color="action" />
-                                  {contact.phone}
+                              {contact.phone && Array.isArray(contact.phone) && contact.phone.length > 0 && contact.phone.filter(p => p && p.trim() !== '').length > 0 ? (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  {contact.phone.filter(p => p && p.trim() !== '').map((phoneNumber, index) => (
+                                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <PhoneIcon fontSize="small" color="action" />
+                                      <Typography variant="body2">{phoneNumber}</Typography>
+                                    </Box>
+                                  ))}
                                 </Box>
                               ) : '-'}
                             </TableCell>
@@ -692,11 +740,60 @@ const GroupContacts = ({ noLayout = false }) => {
                       fullWidth
                     />
                     <TextField
-                      label={t('groupContacts.phone')}
-                      value={formData.phone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      label={t('groupContacts.companyName')}
+                      value={formData.company_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_name: e.target.value }))}
                       fullWidth
                     />
+                    <TextField
+                      label={t('groupContacts.companyNameZh')}
+                      value={formData.company_name_zh}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_name_zh: e.target.value }))}
+                      fullWidth
+                    />
+                    {/* 電話號碼數組 */}
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                        {t('groupContacts.phone')}
+                      </Typography>
+                      {formData.phone.map((phoneNumber, index) => (
+                        <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                          <TextField
+                            value={phoneNumber}
+                            onChange={(e) => {
+                              const newPhones = [...formData.phone];
+                              newPhones[index] = e.target.value;
+                              setFormData(prev => ({ ...prev, phone: newPhones }));
+                            }}
+                            placeholder={t('groupContacts.phonePlaceholder')}
+                            fullWidth
+                            size="small"
+                          />
+                          {formData.phone.length > 1 && (
+                            <IconButton
+                              onClick={() => {
+                                const newPhones = formData.phone.filter((_, i) => i !== index);
+                                setFormData(prev => ({ ...prev, phone: newPhones.length > 0 ? newPhones : [''] }));
+                              }}
+                              color="error"
+                              size="small"
+                            >
+                              <RemoveIcon />
+                            </IconButton>
+                          )}
+                        </Box>
+                      ))}
+                      <Button
+                        startIcon={<AddIcon />}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, phone: [...prev.phone, ''] }));
+                        }}
+                        size="small"
+                        variant="outlined"
+                      >
+                        {t('groupContacts.addPhone')}
+                      </Button>
+                    </Box>
                     <TextField
                       label={t('groupContacts.email')}
                       type="email"
@@ -799,11 +896,60 @@ const GroupContacts = ({ noLayout = false }) => {
                       fullWidth
                     />
                     <TextField
-                      label={t('groupContacts.phone')}
-                      value={formData.phone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                      label={t('groupContacts.companyName')}
+                      value={formData.company_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_name: e.target.value }))}
                       fullWidth
                     />
+                    <TextField
+                      label={t('groupContacts.companyNameZh')}
+                      value={formData.company_name_zh}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_name_zh: e.target.value }))}
+                      fullWidth
+                    />
+                    {/* 電話號碼數組 */}
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                        {t('groupContacts.phone')}
+                      </Typography>
+                      {formData.phone.map((phoneNumber, index) => (
+                        <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                          <TextField
+                            value={phoneNumber}
+                            onChange={(e) => {
+                              const newPhones = [...formData.phone];
+                              newPhones[index] = e.target.value;
+                              setFormData(prev => ({ ...prev, phone: newPhones }));
+                            }}
+                            placeholder={t('groupContacts.phonePlaceholder')}
+                            fullWidth
+                            size="small"
+                          />
+                          {formData.phone.length > 1 && (
+                            <IconButton
+                              onClick={() => {
+                                const newPhones = formData.phone.filter((_, i) => i !== index);
+                                setFormData(prev => ({ ...prev, phone: newPhones.length > 0 ? newPhones : [''] }));
+                              }}
+                              color="error"
+                              size="small"
+                            >
+                              <RemoveIcon />
+                            </IconButton>
+                          )}
+                        </Box>
+                      ))}
+                      <Button
+                        startIcon={<AddIcon />}
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, phone: [...prev.phone, ''] }));
+                        }}
+                        size="small"
+                        variant="outlined"
+                      >
+                        {t('groupContacts.addPhone')}
+                      </Button>
+                    </Box>
                     <TextField
                       label={t('groupContacts.email')}
                       type="email"

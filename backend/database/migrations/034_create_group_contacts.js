@@ -5,7 +5,9 @@ exports.up = function(knex) {
       .references('id').inTable('department_groups').onDelete('CASCADE');
     table.string('name', 100).notNullable();
     table.string('name_zh', 100);
-    table.string('phone', 50);
+    table.string('company_name', 200);
+    table.string('company_name_zh', 200);
+    table.specificType('phone', 'text[]').defaultTo('{}');
     table.string('email', 255);
     table.string('address', 500);
     table.string('position', 100);

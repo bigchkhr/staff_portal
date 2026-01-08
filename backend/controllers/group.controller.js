@@ -529,14 +529,24 @@ class GroupController {
       }
 
       // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'phone', 'email', 'address', 'position', 'notes'];
+      const allowedFields = ['name', 'name_zh', 'company_name', 'company_name_zh', 'phone', 'email', 'address', 'position', 'notes'];
       const filteredData = {
         department_group_id: Number(departmentGroupId)
       };
 
       for (const key of allowedFields) {
         if (key in contactData) {
-          filteredData[key] = contactData[key] === '' ? null : contactData[key];
+          if (key === 'phone') {
+            // 處理電話號碼數組
+            if (Array.isArray(contactData[key])) {
+              const phoneArray = contactData[key].filter(p => p && p.trim() !== '');
+              filteredData[key] = phoneArray.length > 0 ? phoneArray : null;
+            } else {
+              filteredData[key] = contactData[key] === '' ? null : contactData[key];
+            }
+          } else {
+            filteredData[key] = contactData[key] === '' ? null : contactData[key];
+          }
         }
       }
 
@@ -578,12 +588,22 @@ class GroupController {
       }
 
       // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'phone', 'email', 'address', 'position', 'notes'];
+      const allowedFields = ['name', 'name_zh', 'company_name', 'company_name_zh', 'phone', 'email', 'address', 'position', 'notes'];
       const filteredData = {};
 
       for (const key of allowedFields) {
         if (key in contactData) {
-          filteredData[key] = contactData[key] === '' ? null : contactData[key];
+          if (key === 'phone') {
+            // 處理電話號碼數組
+            if (Array.isArray(contactData[key])) {
+              const phoneArray = contactData[key].filter(p => p && p.trim() !== '');
+              filteredData[key] = phoneArray.length > 0 ? phoneArray : null;
+            } else {
+              filteredData[key] = contactData[key] === '' ? null : contactData[key];
+            }
+          } else {
+            filteredData[key] = contactData[key] === '' ? null : contactData[key];
+          }
         }
       }
 

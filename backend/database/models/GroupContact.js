@@ -2,28 +2,50 @@ const knex = require('../../config/database');
 
 class GroupContact {
   static async findAll(departmentGroupId) {
-    return await knex('group_contacts')
+    const contacts = await knex('group_contacts')
       .where('department_group_id', departmentGroupId)
       .orderBy('name');
+    return contacts.map(contact => this.formatContactRecord(contact));
   }
 
   static async findById(id) {
-    return await knex('group_contacts')
+    const contact = await knex('group_contacts')
       .where('id', id)
       .first();
+    return this.formatContactRecord(contact);
   }
 
   static async create(contactData) {
+    // 處理 phone 數組
+    const dataToInsert = { ...contactData };
+    if (dataToInsert.phone && Array.isArray(dataToInsert.phone)) {
+      // 過濾空值並轉換為數組格式
+      const phoneArray = dataToInsert.phone.filter(p => p && p.trim() !== '');
+      dataToInsert.phone = phoneArray.length > 0 ? phoneArray : null;
+    } else if (dataToInsert.phone === '' || dataToInsert.phone === null) {
+      dataToInsert.phone = null;
+    }
+
     const [contact] = await knex('group_contacts')
-      .insert(contactData)
+      .insert(dataToInsert)
       .returning('*');
-    return contact;
+    return this.formatContactRecord(contact);
   }
 
   static async update(id, contactData) {
+    // 處理 phone 數組
+    const dataToUpdate = { ...contactData };
+    if (dataToUpdate.phone && Array.isArray(dataToUpdate.phone)) {
+      // 過濾空值並轉換為數組格式
+      const phoneArray = dataToUpdate.phone.filter(p => p && p.trim() !== '');
+      dataToUpdate.phone = phoneArray.length > 0 ? phoneArray : null;
+    } else if (dataToUpdate.phone === '' || dataToUpdate.phone === null) {
+      dataToUpdate.phone = null;
+    }
+
     await knex('group_contacts')
       .where('id', id)
-      .update(contactData);
+      .update(dataToUpdate);
     return await this.findById(id);
   }
 
@@ -50,6 +72,34 @@ class GroupContact {
         .filter((v) => !Number.isNaN(v));
     }
     return [];
+  }
+
+  // 解析 phone 數組的輔助函數
+  static parseStringArray(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v)).filter((v) => v !== '');
+    }
+    if (typeof value === 'string') {
+      return value
+        .replace(/[{}]/g, '')
+        .replace(/"/g, '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter((v) => v !== '');
+    }
+    return [];
+  }
+
+  // 格式化聯絡人記錄，解析數組欄位
+  static formatContactRecord(record) {
+    if (!record) {
+      return record;
+    }
+    return {
+      ...record,
+      phone: this.parseStringArray(record.phone)
+    };
   }
 
   // 檢查使用者是否屬於部門群組
