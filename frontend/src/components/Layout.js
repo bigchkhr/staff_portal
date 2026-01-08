@@ -42,6 +42,7 @@ import {
   Link as LinkIcon,
   Build as BuildIcon,
   CalendarToday as CalendarTodayIcon,
+  AccessTime as AccessTimeIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -101,6 +102,7 @@ const Layout = ({ children }) => {
       show: true 
     },
     { key: 'schedule', icon: <CalendarTodayIcon />, path: '/schedule', show: true },
+    { key: 'attendance', icon: <AccessTimeIcon />, path: '/attendance', show: true },
     { key: 'groupLeaveCalendar', icon: <EventNoteIcon />, path: '/group-leave-calendar', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },

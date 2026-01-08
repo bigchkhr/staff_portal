@@ -410,6 +410,8 @@ class ScheduleController {
         schedule_date: s.schedule_date,
         start_time: s.start_time || null,
         end_time: s.end_time || null,
+        leave_type_id: s.leave_type_id !== undefined && s.leave_type_id !== null && s.leave_type_id !== '' ? Number(s.leave_type_id) : null,
+        leave_session: s.leave_session !== undefined && s.leave_session !== null && s.leave_session !== '' ? s.leave_session : null,
         created_by_id: userId,
         updated_by_id: userId
       }));
@@ -654,6 +656,33 @@ class ScheduleController {
     }
 
     return false;
+  }
+
+  // 獲取用戶有權限查看的排班群組列表（僅顯示用戶直接所屬的群組）
+  async getAccessibleScheduleGroups(req, res) {
+    try {
+      const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      const User = require('../database/models/User');
+      const DepartmentGroup = require('../database/models/DepartmentGroup');
+      
+      // 系統管理員可以查看所有群組
+      if (isSystemAdmin) {
+        const allGroups = await DepartmentGroup.findAll({ closed: false });
+        return res.json({ groups: allGroups });
+      }
+
+      // 只獲取用戶直接所屬的部門群組（不包括通過批核權限可以訪問的群組）
+      const directDepartmentGroups = await User.getDepartmentGroups(userId);
+      
+      // 只返回未關閉的群組
+      const openGroups = directDepartmentGroups.filter(group => !group.closed);
+      
+      res.json({ groups: openGroups });
+    } catch (error) {
+      console.error('Get accessible schedule groups error:', error);
+      res.status(500).json({ message: '獲取可訪問的排班群組列表時發生錯誤', error: error.message });
+    }
   }
 }
 

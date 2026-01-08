@@ -196,8 +196,26 @@ class DocumentController {
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(downloadFileName)}"`);
         
+        // 設置緩存控制頭（可選，有助於瀏覽器緩存）
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        
         // 讀取並發送文件
         const fileStream = fs.createReadStream(filePath);
+        
+        // 處理文件流錯誤
+        fileStream.on('error', (err) => {
+          console.error('File stream error:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ message: '讀取文件時發生錯誤' });
+          }
+        });
+        
+        // 處理響應錯誤
+        res.on('error', (err) => {
+          console.error('Response error:', err);
+          fileStream.destroy();
+        });
+        
         fileStream.pipe(res);
       } else {
         // 使用 res.download 自動處理文件下載（設置正確的Content-Disposition和Content-Type）

@@ -101,7 +101,7 @@ const corsOptions = {
   credentials: true, // 允許發送 cookies
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Type', 'Content-Disposition']
 };
 
 // Middleware
@@ -136,6 +136,7 @@ const announcementRoutes = require('./routes/announcement.routes');
 const publicHolidayRoutes = require('./routes/publicHoliday.routes');
 const externalLinkRoutes = require('./routes/externalLink.routes');
 const scheduleRoutes = require('./routes/schedule.routes');
+const attendanceRoutes = require('./routes/attendance.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -155,6 +156,7 @@ app.use('/api/announcements', announcementRoutes);
 app.use('/api/public-holidays', publicHolidayRoutes);
 app.use('/api/external-links', externalLinkRoutes);
 app.use('/api/schedules', scheduleRoutes);
+app.use('/api/attendances', attendanceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -105,35 +105,82 @@ const EmployeeDocuments = () => {
       setLoadingFile(true);
       setViewingFile(doc);
       setFileDialogOpen(true);
+      setError(''); // 清除之前的錯誤
 
       const isImage = doc.file_type && doc.file_type.startsWith('image/');
       const isPDF = doc.file_type === 'application/pdf' || doc.file_name?.toLowerCase().endsWith('.pdf');
       const url = `/api/documents/${doc.id}/download${isImage || isPDF ? '?view=true' : ''}`;
       
-      // 使用 axios 下載文件，確保認證 header 被包含
+      // 使用 axios 下載文件（axios 攔截器會自動添加 Authorization header）
       const response = await axios.get(url, {
-        responseType: 'blob',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        responseType: 'blob'
       });
       
+      // 檢查響應是否為錯誤（blob 響應即使是錯誤也可能返回 blob）
+      if (response.data instanceof Blob && response.data.size === 0) {
+        throw new Error('文件為空或無法讀取');
+      }
+      
+      // 檢查響應的 Content-Type 是否為 JSON（表示錯誤）
+      const contentType = response.headers['content-type'] || '';
+      if (contentType.includes('application/json')) {
+        // 如果是 JSON 響應，可能是錯誤訊息
+        const text = await response.data.text();
+        try {
+          const errorData = JSON.parse(text);
+          throw new Error(errorData.message || '無法開啟檔案');
+        } catch (parseError) {
+          throw new Error('無法開啟檔案');
+        }
+      }
+      
       // 從響應中獲取正確的 MIME 類型
-      const contentType = response.headers['content-type'] || doc.file_type || 'application/octet-stream';
+      const finalContentType = contentType || doc.file_type || 'application/octet-stream';
       
       // 創建 blob URL（使用正確的 MIME 類型）
-      const blob = new Blob([response.data], { type: contentType });
+      const blob = new Blob([response.data], { type: finalContentType });
       const blobUrl = window.URL.createObjectURL(blob);
       setFileBlobUrl(blobUrl);
     } catch (error) {
       console.error('查看文件錯誤:', error);
+      
+      // 關閉對話框並清除狀態
+      if (fileBlobUrl) {
+        window.URL.revokeObjectURL(fileBlobUrl);
+        setFileBlobUrl(null);
+      }
       setFileDialogOpen(false);
       setViewingFile(null);
       
+      // 構建錯誤訊息
       let errorMessage = t('employeeDocuments.cannotOpenFile') || '無法開啟檔案';
-      if (error.response?.status === 403 || error.response?.status === 401) {
-        errorMessage = t('employeeDocuments.noPermissionFile') || '您沒有權限查看此文件';
+      
+      if (error.response) {
+        // 處理 HTTP 錯誤響應
+        if (error.response.status === 403 || error.response.status === 401) {
+          errorMessage = t('employeeDocuments.noPermissionFile') || '您沒有權限查看此文件';
+        } else if (error.response.status === 404) {
+          errorMessage = '文件不存在';
+        } else if (error.response.status >= 500) {
+          errorMessage = '伺服器錯誤，請稍後再試';
+        } else if (error.response.data) {
+          // 嘗試從響應中獲取錯誤訊息
+          if (typeof error.response.data === 'string') {
+            try {
+              const errorData = JSON.parse(error.response.data);
+              errorMessage = errorData.message || errorMessage;
+            } catch {
+              errorMessage = error.response.data || errorMessage;
+            }
+          } else if (error.response.data.message) {
+            errorMessage = error.response.data.message;
+          }
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
       }
+      
+      setError(errorMessage);
       
       await Swal.fire({
         icon: 'error',

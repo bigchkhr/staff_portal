@@ -153,7 +153,11 @@ const helmetConfig = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      frameSrc: ["'self'", "blob:"], // 允許 blob URL 用於 iframe（顯示 PDF）
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "blob:"],
+      connectSrc: ["'self'", "https:"],
     },
   },
   hsts: {
@@ -161,7 +165,7 @@ const helmetConfig = helmet({
     includeSubDomains: true,
     preload: true
   },
-  frameguard: { action: 'deny' },
+  frameguard: { action: 'sameorigin' }, // 改為 sameorigin 以允許同源 iframe（用於顯示 PDF）
   noSniff: true,
   xssFilter: true,
 });

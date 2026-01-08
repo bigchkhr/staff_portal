@@ -6,6 +6,9 @@ const { authenticate } = require('../middleware/auth');
 // 所有路由都需要認證
 router.use(authenticate);
 
+// 獲取用戶有權限查看的排班群組列表
+router.get('/accessible-groups', scheduleController.getAccessibleScheduleGroups.bind(scheduleController));
+
 // 取得排班列表
 router.get('/', scheduleController.getSchedules.bind(scheduleController));
 
