@@ -26,7 +26,12 @@ import {
   IconButton,
   Tooltip,
   Alert,
-  FormControlLabel
+  FormControlLabel,
+  Card,
+  CardContent,
+  Divider,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
@@ -57,6 +62,8 @@ dayjs.tz.setDefault('Asia/Hong_Kong');
 const Schedule = () => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [departmentGroups, setDepartmentGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
@@ -73,9 +80,9 @@ const Schedule = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [editStartTime, setEditStartTime] = useState(null);
-  const [editEndTime, setEditEndTime] = useState(null);
-  const [editEndHour, setEditEndHour] = useState(null);
-  const [editEndMinute, setEditEndMinute] = useState(null);
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editLeaveTypeId, setEditLeaveTypeId] = useState(null);
+  const [editLeaveSession, setEditLeaveSession] = useState(null);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -134,7 +141,9 @@ const Schedule = () => {
   const fetchLeaveTypes = async () => {
     try {
       const response = await axios.get('/api/leave-types');
-      setLeaveTypes(response.data.leaveTypes || []);
+      // 只保留允許在排班表中輸入的假期類型
+      const allowedLeaveTypes = (response.data.leaveTypes || []).filter(lt => lt.allow_schedule_input);
+      setLeaveTypes(allowedLeaveTypes);
     } catch (error) {
       console.error('Fetch leave types error:', error);
     }
@@ -380,37 +389,23 @@ const Schedule = () => {
       setEditingSchedule(existingSchedule);
       setEditStartTime(existingSchedule.start_time ? dayjs(existingSchedule.start_time, 'HH:mm:ss') : null);
       
-      // 處理結束時間，支援26:00格式
+      // 處理結束時間，支援26:00格式（0-32小時）
       if (existingSchedule.end_time) {
         const endTimeStr = existingSchedule.end_time;
-        // 解析時間字符串
+        // 解析時間字符串，提取HH:mm部分
         const timeMatch = endTimeStr.match(/^(\d{1,2}):(\d{2})/);
         if (timeMatch) {
-          const hours = parseInt(timeMatch[1], 10);
-          const minutes = parseInt(timeMatch[2], 10);
-          setEditEndHour(hours);
-          setEditEndMinute(minutes);
-          // 轉換為dayjs對象用於內部處理
-          if (hours >= 24) {
-            // 跨日時間
-            const baseTime = dayjs().startOf('day').add(24, 'hour');
-            const time = baseTime.add(hours - 24, 'hour').add(minutes, 'minute');
-            setEditEndTime(time);
-          } else {
-            // 正常時間
-            const time = dayjs().startOf('day').hour(hours).minute(minutes);
-            setEditEndTime(time);
-          }
+          setEditEndTime(endTimeStr.substring(0, 5)); // 只取HH:mm部分
         } else {
-          setEditEndHour(null);
-          setEditEndMinute(null);
-          setEditEndTime(null);
+          setEditEndTime('');
         }
       } else {
-        setEditEndHour(null);
-        setEditEndMinute(null);
-        setEditEndTime(null);
+        setEditEndTime('');
       }
+      
+      // 設置假期類型
+      setEditLeaveTypeId(existingSchedule.leave_type_id || null);
+      setEditLeaveSession(existingSchedule.leave_session || null);
       
     } else {
       setEditingSchedule({
@@ -419,31 +414,66 @@ const Schedule = () => {
         id: null
       });
       setEditStartTime(null);
-      setEditEndTime(null);
-      setEditEndHour(null);
-      setEditEndMinute(null);
+      setEditEndTime('');
+      setEditLeaveTypeId(null);
+      setEditLeaveSession(null);
     }
     setEditDialogOpen(true);
   };
 
-  // 從選擇器更新結束時間
-  const updateEndTimeFromSelect = (hour, minute) => {
-    if (hour !== null && minute !== null) {
-      // 格式化為 HH:mm
-      const endTimeValue = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-      // 轉換為dayjs對象用於內部處理
-      if (hour >= 24) {
-        // 跨日時間
-        const baseTime = dayjs().startOf('day').add(24, 'hour');
-        const time = baseTime.add(hour - 24, 'hour').add(minute, 'minute');
-        setEditEndTime(time);
+  // 處理結束時間輸入（支援0-32小時格式）
+  const handleEndTimeChange = (e) => {
+    const value = e.target.value;
+    // 允許輸入格式：HH:mm 或 H:mm，小時範圍0-32
+    if (value === '') {
+      setEditEndTime('');
+      return;
+    }
+    
+    // 允許輸入數字和冒號
+    if (!/^[\d:]*$/.test(value)) {
+      return; // 只允許數字和冒號
+    }
+    
+    // 限制長度（最多5個字符：HH:mm）
+    if (value.length > 5) {
+      return;
+    }
+    
+    // 驗證格式：允許部分輸入，但必須符合 HH:mm 或 H:mm 格式
+    const parts = value.split(':');
+    
+    if (parts.length === 1) {
+      // 只有小時部分
+      const hours = parseInt(parts[0], 10);
+      if (isNaN(hours) || hours < 0 || hours > 32) {
+        return; // 小時超出範圍
+      }
+      setEditEndTime(value);
+    } else if (parts.length === 2) {
+      // 有小時和分鐘
+      const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
+      const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
+      
+      // 驗證小時範圍（0-32）
+      if (hours !== -1 && (hours < 0 || hours > 32)) {
+        return;
+      }
+      
+      // 驗證分鐘範圍（0-59）或允許部分輸入
+      if (minutes !== -1 && (minutes < 0 || minutes > 59)) {
+        return;
+      }
+      
+      // 如果分鐘部分超過2位數，截斷
+      if (parts[1].length > 2) {
+        setEditEndTime(`${parts[0]}:${parts[1].substring(0, 2)}`);
       } else {
-        // 正常時間
-        const time = dayjs().startOf('day').hour(hour).minute(minute);
-        setEditEndTime(time);
+        setEditEndTime(value);
       }
     } else {
-      setEditEndTime(null);
+      // 多個冒號，不允許
+      return;
     }
   };
 
@@ -451,14 +481,34 @@ const Schedule = () => {
     if (!editingSchedule) return;
 
     try {
-      // 處理結束時間，使用選擇器的值（支援24-32小時格式）
+      // 處理結束時間，支援0-32小時格式
       let endTimeValue = null;
-      if (editEndHour !== null && editEndMinute !== null) {
-        // 使用選擇器的值
-        endTimeValue = `${String(editEndHour).padStart(2, '0')}:${String(editEndMinute).padStart(2, '0')}`;
-      } else if (editEndTime) {
-        // 如果選擇器為空，使用TimePicker的值（正常時間）
-        endTimeValue = editEndTime.format('HH:mm');
+      if (editEndTime && editEndTime.trim() !== '') {
+        // 驗證格式
+        const timeMatch = editEndTime.match(/^(\d{1,2}):(\d{2})$/);
+        if (timeMatch) {
+          const hours = parseInt(timeMatch[1], 10);
+          const minutes = parseInt(timeMatch[2], 10);
+          
+          // 驗證範圍
+          if (hours >= 0 && hours <= 32 && minutes >= 0 && minutes <= 59) {
+            endTimeValue = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: t('schedule.error'),
+              text: t('schedule.invalidEndTime') || '結束時間格式不正確（小時範圍：0-32，分鐘範圍：0-59）'
+            });
+            return;
+          }
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: t('schedule.error'),
+            text: t('schedule.invalidEndTimeFormat') || '結束時間格式不正確，請使用 HH:mm 格式（例如：26:00）'
+          });
+          return;
+        }
       }
       
       const scheduleData = {
@@ -466,7 +516,9 @@ const Schedule = () => {
         department_group_id: selectedGroupId,
         schedule_date: editingSchedule.schedule_date,
         start_time: editStartTime ? editStartTime.format('HH:mm:ss') : null,
-        end_time: endTimeValue
+        end_time: endTimeValue,
+        leave_type_id: editLeaveTypeId || null,
+        leave_session: editLeaveSession || null
       };
 
       if (editingSchedule.id) {
@@ -480,9 +532,9 @@ const Schedule = () => {
       setEditDialogOpen(false);
       setEditingSchedule(null);
       setEditStartTime(null);
-      setEditEndTime(null);
-      setEditEndHour(null);
-      setEditEndMinute(null);
+      setEditEndTime('');
+      setEditLeaveTypeId(null);
+      setEditLeaveSession(null);
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -523,6 +575,236 @@ const Schedule = () => {
     }
     
     return null;
+  };
+
+  // 渲染週曆視圖（手機版）- 每個人一行，日期作為列
+  const renderWeekCalendarView = () => {
+    return (
+      <Box
+        sx={{
+          overflowX: 'auto',
+          maxWidth: '100%',
+          '&::-webkit-scrollbar': {
+            height: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            backgroundColor: 'rgba(0,0,0,0.1)',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            borderRadius: '4px',
+            '&:hover': {
+              backgroundColor: 'rgba(0,0,0,0.5)',
+            },
+          },
+        }}
+      >
+        <TableContainer>
+          <Table size="small" sx={{ minWidth: 600 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell
+                  sx={{
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 3,
+                    backgroundColor: 'background.paper',
+                    minWidth: 120,
+                    maxWidth: 120,
+                    boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  {t('schedule.employee')}
+                </TableCell>
+                {dates.map(date => (
+                  <TableCell
+                    key={date.format('YYYY-MM-DD')}
+                    align="center"
+                    sx={{
+                      minWidth: 80,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem' }}>
+                        {date.format('MM/DD')}
+                      </Typography>
+                      <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem' }}>
+                        {date.format('ddd')}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {groupMembers.map(member => (
+                <TableRow key={member.id}>
+                  <TableCell
+                    sx={{
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 2,
+                      backgroundColor: 'background.paper',
+                      minWidth: 120,
+                      maxWidth: 120,
+                      boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <Typography
+                        variant="body2"
+                        fontWeight="bold"
+                        sx={{
+                          fontSize: '0.75rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {member.employee_number}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          fontSize: '0.65rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          display: 'block',
+                        }}
+                      >
+                        {member.display_name || member.name_zh || member.name}
+                      </Typography>
+                      {member.position_name || member.position_name_zh ? (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{
+                            display: 'block',
+                            fontSize: '0.6rem',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {i18n.language === 'en'
+                            ? (member.position_name || member.position_name_zh)
+                            : (member.position_name_zh || member.position_name)}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                  </TableCell>
+                  {dates.map(date => {
+                    const schedule = getScheduleForUserAndDate(member.id, date);
+                    const dateStr = date.format('YYYY-MM-DD');
+                    return (
+                      <TableCell
+                        key={dateStr}
+                        align="center"
+                        sx={{
+                          minWidth: 80,
+                          whiteSpace: 'nowrap',
+                          p: 0.5,
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                          {editMode && canEdit ? (
+                            <>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleOpenEditDialog(member.id, date)}
+                                sx={{ minWidth: 'auto', p: 0.3 }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </Button>
+                              {schedule && (
+                                <>
+                                  {(schedule.start_time || schedule.end_time) && (
+                                    <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', mb: 0.5, color: 'primary.main', fontWeight: 500 }}>
+                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                    </Typography>
+                                  )}
+                                  {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                    <Chip
+                                      label={
+                                        (() => {
+                                          const leaveTypeDisplay = i18n.language === 'en'
+                                            ? (schedule.leave_type_code || schedule.leave_type_name)
+                                            : (schedule.leave_type_name_zh || schedule.leave_type_name);
+                                          return schedule.leave_session
+                                            ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+                                            : leaveTypeDisplay;
+                                        })()
+                                      }
+                                      size="small"
+                                      color="primary"
+                                      sx={{ fontSize: '0.6rem', height: '18px', mb: 0.5 }}
+                                    />
+                                  )}
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleDeleteSchedule(schedule.id)}
+                                    color="error"
+                                    sx={{ p: 0.3 }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {schedule ? (
+                                <>
+                                  {(schedule.start_time || schedule.end_time) && (
+                                    <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', mb: 0.5, color: 'primary.main', fontWeight: 500 }}>
+                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                    </Typography>
+                                  )}
+                                  {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                    <Chip
+                                      label={
+                                        (() => {
+                                          const leaveTypeDisplay = i18n.language === 'en'
+                                            ? (schedule.leave_type_code || schedule.leave_type_name)
+                                            : (schedule.leave_type_name_zh || schedule.leave_type_name);
+                                          return schedule.leave_session
+                                            ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+                                            : leaveTypeDisplay;
+                                        })()
+                                      }
+                                      size="small"
+                                      color="primary"
+                                      sx={{ fontSize: '0.6rem', height: '18px', mb: 0.5 }}
+                                    />
+                                  )}
+                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                      ---
+                                    </Typography>
+                                  )}
+                                </>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                  ---
+                                </Typography>
+                              )}
+                            </>
+                          )}
+                        </Box>
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    );
   };
 
   const handleBatchEdit = () => {
@@ -739,6 +1021,9 @@ const Schedule = () => {
               <Typography>{t('common.loading')}</Typography>
             </Box>
           ) : selectedGroupId ? (
+            isMobile ? (
+              renderWeekCalendarView()
+            ) : (
             <TableContainer>
               <Table size="small" stickyHeader>
                 <TableHead>
@@ -767,10 +1052,15 @@ const Schedule = () => {
                             {member.employee_number}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-                              ? member.name_zh || member.name
-                              : member.name}
+                            {member.display_name || member.name_zh || member.name}
                           </Typography>
+                          {member.position_name || member.position_name_zh ? (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                              {i18n.language === 'en'
+                                ? (member.position_name || member.position_name_zh)
+                                : (member.position_name_zh || member.position_name)}
+                            </Typography>
+                          ) : null}
                         </Box>
                       </TableCell>
                       {dates.map(date => {
@@ -801,10 +1091,10 @@ const Schedule = () => {
                                   </Button>
                                   {schedule && (
                                     <>
-                                      {/* 顯示工作時間 */}
-                                      {schedule.start_time && schedule.end_time && (
-                                        <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
-                                          {schedule.start_time.substring(0, 5)} - {formatEndTimeForDisplay(schedule.end_time)}
+                                      {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
+                                      {(schedule.start_time || schedule.end_time) && (
+                                        <Typography variant="caption" display="block" sx={{ mb: 0.5, color: 'primary.main', fontWeight: 500 }}>
+                                          {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
@@ -825,13 +1115,15 @@ const Schedule = () => {
                                           sx={{ fontSize: '0.65rem', height: '20px', mb: 0.5 }}
                                         />
                                       )}
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleDeleteSchedule(schedule.id)}
-                                        color="error"
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
+                                      {schedule.id && (
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => handleDeleteSchedule(schedule.id)}
+                                          color="error"
+                                        >
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      )}
                                     </>
                                   )}
                                 </>
@@ -839,10 +1131,10 @@ const Schedule = () => {
                                 <>
                                   {schedule ? (
                                     <>
-                                      {/* 顯示工作時間 */}
-                                      {schedule.start_time && schedule.end_time && (
-                                        <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
-                                          {schedule.start_time.substring(0, 5)} - {formatEndTimeForDisplay(schedule.end_time)}
+                                      {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
+                                      {(schedule.start_time || schedule.end_time) && (
+                                        <Typography variant="caption" display="block" sx={{ mb: 0.5, color: 'primary.main', fontWeight: 500 }}>
+                                          {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
@@ -864,7 +1156,7 @@ const Schedule = () => {
                                         />
                                       )}
                                       {/* 如果沒有任何資訊，顯示 --- */}
-                                      {!schedule.start_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
+                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
                                         <Typography variant="caption" color="text.secondary">
                                           ---
                                         </Typography>
@@ -886,6 +1178,7 @@ const Schedule = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+            )
           ) : (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography color="text.secondary">
@@ -902,9 +1195,9 @@ const Schedule = () => {
             setEditDialogOpen(false);
             setEditingSchedule(null);
             setEditStartTime(null);
-            setEditEndTime(null);
-            setEditEndHour(null);
-            setEditEndMinute(null);
+            setEditEndTime('');
+            setEditLeaveTypeId(null);
+            setEditLeaveSession(null);
           }}
           maxWidth="sm"
           fullWidth
@@ -918,64 +1211,65 @@ const Schedule = () => {
                     label={t('schedule.startTime')}
                     value={editStartTime}
                     onChange={(newValue) => setEditStartTime(newValue)}
+                    ampm={false}
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
                 <Grid item xs={6}>
-                  <Box>
-                    <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
-                      {t('schedule.endTime')}
-                    </Typography>
-                    <Grid container spacing={1}>
-                      <Grid item xs={5}>
-                        <FormControl fullWidth>
-                          <InputLabel>{t('schedule.hour')}</InputLabel>
-                          <Select
-                            value={editEndHour !== null ? editEndHour : ''}
-                            onChange={(e) => {
-                              const hour = e.target.value === '' ? null : Number(e.target.value);
-                              setEditEndHour(hour);
-                              updateEndTimeFromSelect(hour, editEndMinute);
-                            }}
-                            label={t('schedule.hour')}
-                          >
-                            {Array.from({ length: 33 }, (_, i) => i).map(hour => (
-                              <MenuItem key={hour} value={hour}>
-                                {String(hour).padStart(2, '0')} {hour >= 24 ? `(${t('schedule.nextDay')}${String(hour - 24).padStart(2, '0')}:00)` : ''}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid item xs={1} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Typography>:</Typography>
-                      </Grid>
-                      <Grid item xs={5}>
-                        <FormControl fullWidth>
-                          <InputLabel>{t('schedule.minute')}</InputLabel>
-                          <Select
-                            value={editEndMinute !== null ? editEndMinute : ''}
-                            onChange={(e) => {
-                              const minute = e.target.value === '' ? null : Number(e.target.value);
-                              setEditEndMinute(minute);
-                              updateEndTimeFromSelect(editEndHour, minute);
-                            }}
-                            label={t('schedule.minute')}
-                          >
-                            {Array.from({ length: 60 }, (_, i) => i).map(minute => (
-                              <MenuItem key={minute} value={minute}>
-                                {String(minute).padStart(2, '0')}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                    </Grid>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                      {t('schedule.endTimeHelper')}
-                    </Typography>
-                  </Box>
+                  <TextField
+                    label={t('schedule.endTime')}
+                    value={editEndTime}
+                    onChange={handleEndTimeChange}
+                    placeholder="HH:mm (0-32:00-59)"
+                    fullWidth
+                    helperText={t('schedule.endTimeHelper') || '可輸入0-32小時，例如：26:00表示次日凌晨2:00'}
+                  />
                 </Grid>
+              </Grid>
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.leaveType')}</InputLabel>
+                    <Select
+                      value={editLeaveTypeId || ''}
+                      onChange={(e) => {
+                        setEditLeaveTypeId(e.target.value || null);
+                        // 如果清空假期類型，也清空時段
+                        if (!e.target.value) {
+                          setEditLeaveSession(null);
+                        }
+                      }}
+                      label={t('schedule.leaveType')}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {leaveTypes.map(lt => (
+                        <MenuItem key={lt.id} value={lt.id}>
+                          {i18n.language === 'en' ? lt.name : (lt.name_zh || lt.name)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {editLeaveTypeId && (
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>{t('schedule.leavePeriod')}</InputLabel>
+                      <Select
+                        value={editLeaveSession || ''}
+                        onChange={(e) => setEditLeaveSession(e.target.value || null)}
+                        label={t('schedule.leavePeriod')}
+                      >
+                        <MenuItem value="">
+                          <em>{t('schedule.fullDayLeave')}</em>
+                        </MenuItem>
+                        <MenuItem value="AM">{t('schedule.morningLeave')}</MenuItem>
+                        <MenuItem value="PM">{t('schedule.afternoonLeave')}</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
               </Grid>
             </Box>
           </DialogContent>
@@ -984,9 +1278,9 @@ const Schedule = () => {
               setEditDialogOpen(false);
               setEditingSchedule(null);
               setEditStartTime(null);
-              setEditEndTime(null);
-              setEditEndHour(null);
-              setEditEndMinute(null);
+              setEditEndTime('');
+              setEditLeaveTypeId(null);
+              setEditLeaveSession(null);
             }}>
               {t('common.cancel')}
             </Button>
@@ -1023,9 +1317,14 @@ const Schedule = () => {
                       }}
                     />
                     <Typography variant="body2">
-                      {member.employee_number} - {i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-                        ? member.name_zh || member.name
-                        : member.name}
+                      {member.employee_number} - {member.display_name || member.name_zh || member.name}
+                      {member.position_name || member.position_name_zh ? (
+                        <span style={{ color: '#666', fontSize: '0.85em' }}>
+                          {' '}({i18n.language === 'en'
+                            ? (member.position_name || member.position_name_zh)
+                            : (member.position_name_zh || member.position_name)})
+                        </span>
+                      ) : null}
                     </Typography>
                   </Box>
                 ))}

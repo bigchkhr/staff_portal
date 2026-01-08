@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
 import FormLibrary from './FormLibrary';
 import ExternalLinks from './ExternalLinks';
+import GroupContacts from './GroupContacts';
 
 const Tools = () => {
   const { t } = useTranslation();
@@ -91,6 +92,7 @@ const Tools = () => {
             scrollButtons={isMobile ? false : "auto"}
             allowScrollButtonsMobile={false}
           >
+            <Tab label={t('tools.groupContacts')} />
             <Tab label={t('tools.formLibrary')} />
             <Tab label={t('tools.externalLinks')} />
           </Tabs>
@@ -100,8 +102,9 @@ const Tools = () => {
           width: '100%',
           minHeight: { xs: '400px', sm: '500px' }
         }}>
-          {tabValue === 0 && <FormLibrary />}
-          {tabValue === 1 && <ExternalLinks />}
+          {tabValue === 0 && <GroupContacts noLayout={true} />}
+          {tabValue === 1 && <FormLibrary />}
+          {tabValue === 2 && <ExternalLinks />}
         </Box>
       </Box>
     </Layout>

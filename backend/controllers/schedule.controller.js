@@ -173,11 +173,12 @@ class ScheduleController {
           const scheduleWithLeave = this.mergeLeaveForSchedule(existingSchedule, dateStr, leaveApplications);
           allSchedules.push(scheduleWithLeave);
         } else {
-          // 如果沒有記錄，創建新記錄（僅包含假期資料）
+          // 如果沒有記錄，檢查是否有假期申請
           const scheduleWithLeave = this.createScheduleFromLeave(member, dateStr, departmentGroupId, leaveApplications);
           if (scheduleWithLeave) {
             allSchedules.push(scheduleWithLeave);
           }
+          // 注意：如果沒有排班記錄也沒有假期申請，不創建記錄（這樣前端會顯示 ---）
         }
       }
     }
@@ -310,7 +311,7 @@ class ScheduleController {
   // 建立排班記錄（單筆）
   async createSchedule(req, res) {
     try {
-      const { user_id, department_group_id, schedule_date, start_time, end_time } = req.body;
+      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, leave_session } = req.body;
       const userId = req.user.id;
 
       // 驗證必填欄位
@@ -330,12 +331,30 @@ class ScheduleController {
         return res.status(400).json({ message: '該用戶不屬於指定的群組' });
       }
 
+      // 如果提供了leave_type_id，驗證該假期類型是否允許在排班表中輸入
+      if (leave_type_id) {
+        const LeaveType = require('../database/models/LeaveType');
+        const leaveType = await LeaveType.findById(leave_type_id);
+        if (!leaveType) {
+          return res.status(400).json({ message: '無效的假期類型' });
+        }
+        if (!leaveType.allow_schedule_input) {
+          return res.status(400).json({ message: '此假期類型不允許在排班表中手動輸入' });
+        }
+        // 驗證leave_session（如果提供）
+        if (leave_session && leave_session !== 'AM' && leave_session !== 'PM') {
+          return res.status(400).json({ message: '假期時段必須是 AM 或 PM' });
+        }
+      }
+
       const scheduleData = {
         user_id,
         department_group_id,
         schedule_date,
         start_time: start_time || null,
         end_time: end_time || null,
+        leave_type_id: leave_type_id || null,
+        leave_session: leave_session || null,
         created_by_id: userId,
         updated_by_id: userId
       };
@@ -410,7 +429,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { start_time, end_time } = req.body;
+      const { start_time, end_time, leave_type_id, leave_session } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -424,11 +443,31 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限編輯此排班記錄' });
       }
 
+      // 如果提供了leave_type_id，驗證該假期類型是否允許在排班表中輸入
+      if (leave_type_id !== undefined) {
+        if (leave_type_id) {
+          const LeaveType = require('../database/models/LeaveType');
+          const leaveType = await LeaveType.findById(leave_type_id);
+          if (!leaveType) {
+            return res.status(400).json({ message: '無效的假期類型' });
+          }
+          if (!leaveType.allow_schedule_input) {
+            return res.status(400).json({ message: '此假期類型不允許在排班表中手動輸入' });
+          }
+          // 驗證leave_session（如果提供）
+          if (leave_session && leave_session !== 'AM' && leave_session !== 'PM') {
+            return res.status(400).json({ message: '假期時段必須是 AM 或 PM' });
+          }
+        }
+      }
+
       const updateData = {
         updated_by_id: userId
       };
       if (start_time !== undefined) updateData.start_time = start_time || null;
       if (end_time !== undefined) updateData.end_time = end_time || null;
+      if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
+      if (leave_session !== undefined) updateData.leave_session = leave_session || null;
 
       const updatedSchedule = await Schedule.update(id, updateData);
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });

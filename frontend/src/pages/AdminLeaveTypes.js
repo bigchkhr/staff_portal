@@ -44,7 +44,8 @@ const AdminLeaveTypes = () => {
     name: '',
     name_zh: '',
     requires_balance: true,
-    is_active: true
+    is_active: true,
+    allow_schedule_input: false
   });
 
   useEffect(() => {
@@ -67,7 +68,8 @@ const AdminLeaveTypes = () => {
       name: '',
       name_zh: '',
       requires_balance: true,
-      is_active: true
+      is_active: true,
+      allow_schedule_input: false
     });
     setOpen(true);
   };
@@ -79,7 +81,8 @@ const AdminLeaveTypes = () => {
       name: leaveType.name,
       name_zh: leaveType.name_zh,
       requires_balance: leaveType.requires_balance,
-      is_active: leaveType.is_active !== undefined ? leaveType.is_active : true
+      is_active: leaveType.is_active !== undefined ? leaveType.is_active : true,
+      allow_schedule_input: leaveType.allow_schedule_input !== undefined ? leaveType.allow_schedule_input : false
     });
     setOpen(true);
   };
@@ -213,6 +216,17 @@ const AdminLeaveTypes = () => {
                         sx={{ mt: 0.5 }}
                       />
                     </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {t('adminLeaveTypes.allowScheduleInput')}
+                      </Typography>
+                      <Chip
+                        label={lt.allow_schedule_input ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
+                        color={lt.allow_schedule_input ? 'success' : 'default'}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    </Grid>
                   </Grid>
 
                   <Divider sx={{ my: 1.5 }} />
@@ -263,6 +277,7 @@ const AdminLeaveTypes = () => {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.name')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.chineseName')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.requiresBalance')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.allowScheduleInput')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.status')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.actions')}</TableCell>
                 </TableRow>
@@ -297,6 +312,14 @@ const AdminLeaveTypes = () => {
                         <Chip
                           label={lt.requires_balance ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
                           color={lt.requires_balance ? 'primary' : 'default'}
+                          size="small"
+                          sx={{ fontWeight: 500 }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <Chip
+                          label={lt.allow_schedule_input ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
+                          color={lt.allow_schedule_input ? 'success' : 'default'}
                           size="small"
                           sx={{ fontWeight: 500 }}
                         />
@@ -387,6 +410,15 @@ const AdminLeaveTypes = () => {
                 />
               }
               label={t('adminLeaveTypes.requiresBalance')}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.allow_schedule_input}
+                  onChange={(e) => setFormData(prev => ({ ...prev, allow_schedule_input: e.target.checked }))}
+                />
+              }
+              label={t('adminLeaveTypes.allowScheduleInput')}
             />
             <FormControlLabel
               control={

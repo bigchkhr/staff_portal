@@ -41,7 +41,7 @@ import {
   Notifications as NotificationsIcon,
   Link as LinkIcon,
   Build as BuildIcon,
-  CalendarToday as CalendarTodayIcon
+  CalendarToday as CalendarTodayIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';

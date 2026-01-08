@@ -33,4 +33,14 @@ router.delete('/delegation/:id/members/:userId', authenticate, groupController.r
 // ========== User Groups ==========
 router.get('/my-groups', authenticate, groupController.getUserGroups);
 
+// ========== Group Contacts ==========
+// 獲取用戶可以瀏覽聯絡人的部門群組列表
+router.get('/department/contacts/accessible-groups', authenticate, groupController.getAccessibleDepartmentGroupsForContacts);
+// 群組聯絡人路由（需要指定部門群組 ID）
+router.get('/department/:departmentGroupId/contacts', authenticate, groupController.getGroupContacts);
+router.get('/department/:departmentGroupId/contacts/:id', authenticate, groupController.getGroupContact);
+router.post('/department/:departmentGroupId/contacts', authenticate, groupController.createGroupContact);
+router.put('/department/:departmentGroupId/contacts/:id', authenticate, groupController.updateGroupContact);
+router.delete('/department/:departmentGroupId/contacts/:id', authenticate, groupController.deleteGroupContact);
+
 module.exports = router;

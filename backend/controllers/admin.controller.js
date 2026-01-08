@@ -116,7 +116,7 @@ class AdminController {
 
   async createLeaveType(req, res) {
     try {
-      const { code, name, name_zh, requires_balance } = req.body;
+      const { code, name, name_zh, requires_balance, allow_schedule_input, is_active } = req.body;
 
       if (!code || !name || !name_zh) {
         return res.status(400).json({ message: '請填寫所有必填欄位' });
@@ -131,7 +131,9 @@ class AdminController {
         code,
         name,
         name_zh,
-        requires_balance: requires_balance !== undefined ? requires_balance : true
+        requires_balance: requires_balance !== undefined ? requires_balance : true,
+        allow_schedule_input: allow_schedule_input !== undefined ? allow_schedule_input : false,
+        is_active: is_active !== undefined ? is_active : true
       });
 
       res.status(201).json({

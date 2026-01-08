@@ -672,20 +672,22 @@ exports.seed = async function (knex) {
 
   // 建立假期類型
   await knex('leave_types').insert([
-    { code: 'AL', name: 'Annual Leave', name_zh: '年假', requires_balance: true },
-    { code: 'BL', name: 'Birthday Leave', name_zh: '生日假', requires_balance: true },
-    { code: 'CL', name: 'Compensatory Leave', name_zh: '補假', requires_balance: true },
-    { code: 'FPSL', name: 'Full Paid Sick Leave', name_zh: '全薪病假', requires_balance: true },
-    { code: 'SAL', name: 'Sick Leave (Sickness Allowance)', name_zh: '病假 (疾病津貼)', requires_balance: false },
-    { code: 'MGL', name: 'Marriage Leave', name_zh: '婚假', requires_balance: false },
-    { code: 'MTL', name: 'Maternity Leave', name_zh: '產假', requires_balance: false },
-    { code: 'PTL', name: 'Paternity Leave', name_zh: '侍產假', requires_balance: false },
-    { code: 'JSL', name: 'Jury Service Leave', name_zh: '陪審團假', requires_balance: false },
-    { code: 'CPL', name: 'Compassionate Leave', name_zh: '恩恤假', requires_balance: false },
-    { code: 'NPSL', name: 'No Pay Sick Leave', name_zh: '無薪病假', requires_balance: false },
-    { code: 'NPL', name: 'No Pay Personal Leave', name_zh: '無薪事假', requires_balance: false },
-    { code: 'IL', name: 'Work Injury Leave', name_zh: '工傷病假', requires_balance: false },
-    { code: 'SPL', name: 'Special Leave', name_zh: '特別假期', requires_balance: false }
+    { code: 'AL', name: 'Annual Leave', name_zh: '年假', requires_balance: true, allow_schedule_input: false },
+    { code: 'BL', name: 'Birthday Leave', name_zh: '生日假', requires_balance: true, allow_schedule_input: false },
+    { code: 'CL', name: 'Compensatory Leave', name_zh: '補假', requires_balance: true, allow_schedule_input: false },
+    { code: 'FPSL', name: 'Full Paid Sick Leave', name_zh: '全薪病假', requires_balance: true, allow_schedule_input: false },
+    { code: 'SAL', name: 'Sick Leave (Sickness Allowance)', name_zh: '病假 (疾病津貼)', requires_balance: false, allow_schedule_input: false },
+    { code: 'MGL', name: 'Marriage Leave', name_zh: '婚假', requires_balance: false, allow_schedule_input: false },
+    { code: 'MTL', name: 'Maternity Leave', name_zh: '產假', requires_balance: false, allow_schedule_input: false },
+    { code: 'PTL', name: 'Paternity Leave', name_zh: '侍產假', requires_balance: false, allow_schedule_input: false },
+    { code: 'JSL', name: 'Jury Service Leave', name_zh: '陪審團假', requires_balance: false, allow_schedule_input: false },
+    { code: 'CPL', name: 'Compassionate Leave', name_zh: '恩恤假', requires_balance: false, allow_schedule_input: false },
+    { code: 'NPSL', name: 'No Pay Sick Leave', name_zh: '無薪病假', requires_balance: false, allow_schedule_input: false },
+    { code: 'NPL', name: 'No Pay Personal Leave', name_zh: '無薪事假', requires_balance: false, allow_schedule_input: false },
+    { code: 'IL', name: 'Work Injury Leave', name_zh: '工傷病假', requires_balance: false, allow_schedule_input: false },
+    { code: 'SPL', name: 'Special Leave', name_zh: '特別假期', requires_balance: false, allow_schedule_input: false },
+    { code: 'RD', name: 'Rest Day', name_zh: '例假', requires_balance: false, allow_schedule_input: true },
+    { code: 'SH', name: 'Public Holiday', name_zh: '法定假期', requires_balance: false, allow_schedule_input: true }
   ]);
 
 

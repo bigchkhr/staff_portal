@@ -6,6 +6,7 @@ exports.up = function(knex) {
     table.string('name_zh').notNullable();
     table.boolean('requires_balance').defaultTo(true);
     table.boolean('is_active').defaultTo(true);
+    table.boolean('allow_schedule_input').defaultTo(false);
     table.timestamps(true, true);
   });
 };
