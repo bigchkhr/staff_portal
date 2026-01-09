@@ -186,11 +186,35 @@ class GroupController {
   async getDepartmentGroupMembers(req, res) {
     try {
       const { id } = req.params;
+      console.log(`[getDepartmentGroupMembers] 請求獲取群組 ID ${id} 的成員`);
+      
+      if (!id || isNaN(Number(id))) {
+        return res.status(400).json({ 
+          message: '無效的群組 ID',
+          error: 'Invalid group ID'
+        });
+      }
+
       const members = await DepartmentGroup.getMembers(id);
+      console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員`);
       res.json({ members });
     } catch (error) {
-      console.error('Get department group members error:', error);
-      res.status(500).json({ message: '獲取部門群組成員時發生錯誤' });
+      console.error('[getDepartmentGroupMembers] 獲取部門群組成員時發生錯誤:', error);
+      console.error('錯誤訊息:', error.message);
+      console.error('錯誤堆疊:', error.stack);
+      
+      // 在開發環境中返回詳細錯誤信息
+      const errorResponse = {
+        message: '獲取部門群組成員時發生錯誤',
+        error: error.message
+      };
+      
+      if (process.env.NODE_ENV === 'development') {
+        errorResponse.stack = error.stack;
+        errorResponse.details = error.toString();
+      }
+      
+      res.status(500).json(errorResponse);
     }
   }
 

@@ -55,8 +55,9 @@
     "announcements": "公告欄",
     "myApplications": "我的申請",
     "myApprovals": "我的批核",
-    "schedule": "排班表",
-    "attendance": "考勤管理",
+    "schedule": "編更",
+    "attendance": "打卡管理",
+    "shiftManagement": "更表",
     "groupLeaveCalendar": "群組假期週曆",
     "systemMaintenance": "系統維護",
     "manualApproval": "人手批核",
@@ -708,6 +709,11 @@
     "externalLinks": "外部連結",
     "groupContacts": "群組聯絡人"
   },
+  "shiftManagement": {
+    "title": "更表",
+    "schedule": "編更",
+    "attendance": "打卡管理"
+  },
   "groupContacts": {
     "title": "群組聯絡人",
     "pageDescription": "瀏覽和管理群組聯絡人資訊",
@@ -1005,7 +1011,7 @@
     "givenName": "名字",
     "alias": "別名",
     "chineseName": "中文姓名",
-    "displayName": "Display Name",
+    "displayName": "顯示名稱",
     "newPassword": "新密碼（留空則不更改）",
     "password": "密碼",
     "accountDeactivated": "帳戶已停用（無法登入）",
@@ -1014,7 +1020,12 @@
     "operationFailed": "操作失敗",
     "forcePasswordChange": "強制更改密碼",
     "forcePasswordChangeEnabled": "已啟用強制更改密碼",
-    "forcePasswordChangeDisabled": "未啟用強制更改密碼"
+    "forcePasswordChangeDisabled": "未啟用強制更改密碼",
+    "filter": {
+      "all": "全部",
+      "active": "啟用中",
+      "deactivated": "已停用"
+    }
   },
   "adminLeaveTypes": {
     "title": "假期類型管理",

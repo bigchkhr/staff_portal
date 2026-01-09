@@ -21,7 +21,9 @@ import {
   useMediaQuery,
   Switch,
   FormControlLabel,
-  Tooltip
+  Tooltip,
+  Tabs,
+  Tab
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Search as SearchIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -39,7 +41,6 @@ const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t,
   const positionName = i18n.language === 'en' 
     ? (user.position_name || user.position_name_zh || '-')
     : (user.position_name_zh || user.position_name || '-');
-  const hireDate = formatDate(user.hire_date);
   const statusText = user.deactivated ? t('adminUsers.deactivated') : t('adminUsers.active');
   
   const handleForcePasswordChangeToggle = async (e) => {
@@ -82,14 +83,6 @@ const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t,
                 {displayName}
               </Typography>
             </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('adminUsers.email')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {user.email}
-              </Typography>
-            </Grid>
             <Grid item xs={6}>
               <Typography variant="caption" color="text.secondary" display="block">
                 {t('adminUsers.department')}
@@ -104,14 +97,6 @@ const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t,
               </Typography>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 {positionName}
-              </Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                {t('adminUsers.hireDate')}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                {hireDate}
               </Typography>
             </Grid>
           </Grid>
@@ -161,10 +146,15 @@ const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t,
     >
       <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{user.employee_number}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{displayName}</TableCell>
-      <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{user.email}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{departmentName}</TableCell>
-      <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{positionName}</TableCell>
-      <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{hireDate}</TableCell>
+      <TableCell sx={{ 
+        whiteSpace: 'nowrap', 
+        color: 'text.secondary', 
+        width: '15%',
+        maxWidth: '15%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      }}>{positionName}</TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
         <Chip
           label={statusText}
@@ -174,38 +164,20 @@ const UserTableRow = memo(({ user, onEdit, onToggleForcePasswordChange, i18n, t,
         />
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {isHRMember && (
-            <Tooltip title={user.force_password_change ? t('adminUsers.forcePasswordChangeEnabled') : t('adminUsers.forcePasswordChangeDisabled')}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={!!user.force_password_change}
-                    onChange={handleForcePasswordChangeToggle}
-                    size="small"
-                    color="warning"
-                  />
-                }
-                label=""
-                sx={{ m: 0 }}
-              />
-            </Tooltip>
-          )}
-          <IconButton 
-            size="small" 
-            onClick={() => onEdit(user)}
-            color="primary"
-            sx={{
-              '&:hover': {
-                backgroundColor: 'primary.light',
-                color: 'white'
-              },
-              transition: 'all 0.2s'
-            }}
-          >
-            <EditIcon fontSize="small" />
-          </IconButton>
-        </Box>
+        <IconButton 
+          size="small" 
+          onClick={() => onEdit(user)}
+          color="primary"
+          sx={{
+            '&:hover': {
+              backgroundColor: 'primary.light',
+              color: 'white'
+            },
+            transition: 'all 0.2s'
+          }}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
       </TableCell>
     </TableRow>
   );
@@ -271,19 +243,22 @@ const UsersTable = memo(({ users, onEdit, onToggleForcePasswordChange, i18n, t, 
             }}>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.employeeNumber')}</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.name')}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.email')}</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.department')}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.position')}</TableCell>
-              <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.hireDate')}</TableCell>
+              <TableCell sx={{ 
+                whiteSpace: 'nowrap', 
+                width: '15%',
+                maxWidth: '15%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>{t('adminUsers.position')}</TableCell>
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.accountStatus')}</TableCell>
-              {isHRMember && <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.forcePasswordChange')}</TableCell>}
               <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminUsers.actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isHRMember ? 9 : 8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography variant="body2" color="text.secondary">
                     {t('adminUsers.noUsers')}
                   </Typography>
@@ -326,16 +301,27 @@ const AdminUsers = () => {
   const [editingUserData, setEditingUserData] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active'); // 'all', 'active', 'deactivated'
 
   const filteredUsers = useMemo(() => {
+    let filtered = users;
+
+    // 狀態過濾
+    if (statusFilter === 'active') {
+      filtered = filtered.filter(u => !u.deactivated);
+    } else if (statusFilter === 'deactivated') {
+      filtered = filtered.filter(u => u.deactivated);
+    }
+    // statusFilter === 'all' 時不過濾
+
+    // 搜尋過濾
     const trimmedSearch = searchKeyword.trim();
-    const normalizedSearch = trimmedSearch.toLowerCase();
-    
     if (!trimmedSearch) {
-      return users;
+      return filtered;
     }
 
-    return users.filter((u) => {
+    const normalizedSearch = trimmedSearch.toLowerCase();
+    return filtered.filter((u) => {
       const englishFullName = `${u.given_name || ''} ${u.surname || ''}`.trim();
       const reversedEnglishFullName = `${u.surname || ''} ${u.given_name || ''}`.trim();
 
@@ -359,7 +345,7 @@ const AdminUsers = () => {
         );
       });
     });
-  }, [users, searchKeyword]);
+  }, [users, searchKeyword, statusFilter]);
 
   const handleSearch = useCallback(() => {
     setSearchKeyword(searchTerm);
@@ -525,6 +511,41 @@ const AdminUsers = () => {
         </Box>
       </Paper>
 
+      <Paper 
+        elevation={2}
+        sx={{ 
+          mb: 3,
+          borderRadius: 2,
+          overflow: 'hidden'
+        }}
+      >
+        <Tabs
+          value={statusFilter}
+          onChange={(e, newValue) => setStatusFilter(newValue)}
+          sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: 48, sm: 64 },
+              padding: { xs: '12px 16px', sm: '16px 24px' },
+              '&.Mui-selected': {
+                fontWeight: 600
+              }
+            },
+            '& .MuiTabs-indicator': {
+              height: 3
+            }
+          }}
+        >
+          <Tab value="all" label={t('adminUsers.filter.all') || '全部'} />
+          <Tab value="active" label={t('adminUsers.filter.active') || '啟用中'} />
+          <Tab value="deactivated" label={t('adminUsers.filter.deactivated') || '已停用'} />
+        </Tabs>
+      </Paper>
+
       <UsersTable 
         users={filteredUsers} 
         onEdit={handleEdit}
@@ -542,6 +563,8 @@ const AdminUsers = () => {
         initialData={editingUserData}
         onClose={handleClose}
         onSuccess={handleSuccess}
+        isHRMember={isHRMember}
+        onToggleForcePasswordChange={handleToggleForcePasswordChange}
       />
     </Box>
   );

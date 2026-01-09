@@ -481,6 +481,158 @@ class User {
     }
     return false;
   }
+
+  // 檢查用戶是否可以查看額外工作時數申請（包括批核歷史）
+  static async canViewExtraWorkingHoursApplication(userId, applicationId) {
+    const application = await knex('extra_working_hours_applications')
+      .where('id', applicationId)
+      .first();
+    
+    if (!application) {
+      return false;
+    }
+
+    // 檢查是否為 HR 成員
+    const isHRMember = await this.isHRMember(userId);
+    if (isHRMember) {
+      return true;
+    }
+
+    // 檢查是否為申請人
+    if (application.user_id === userId) {
+      return true;
+    }
+
+    // 檢查是否為直接批核者（checker、approver1、approver2、approver3）
+    const isDirectApprover = [
+      application.checker_id,
+      application.approver_1_id,
+      application.approver_2_id,
+      application.approver_3_id
+    ].includes(userId);
+
+    if (isDirectApprover) {
+      return true;
+    }
+
+    // 檢查是否屬於批核流程中任何階段的授權群組
+    const DepartmentGroup = require('./DepartmentGroup');
+    const userDelegationGroups = await this.getDelegationGroups(userId);
+    const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+    if (userDelegationGroupIds.length === 0) {
+      return false;
+    }
+
+    // 獲取申請人所屬的部門群組
+    const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
+    
+    if (departmentGroups && departmentGroups.length > 0) {
+      const deptGroup = departmentGroups[0];
+      const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+      
+      // 檢查用戶是否屬於批核流程中任何階段的授權群組，且該階段已設置
+      for (const step of approvalFlow) {
+        if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+          // 檢查該階段是否已設置（有對應的 approver_id）
+          let stepIsSet = false;
+          
+          if (step.level === 'checker') {
+            stepIsSet = !!(application.checker_id);
+          } else if (step.level === 'approver_1') {
+            stepIsSet = !!(application.approver_1_id);
+          } else if (step.level === 'approver_2') {
+            stepIsSet = !!(application.approver_2_id);
+          } else if (step.level === 'approver_3') {
+            stepIsSet = !!(application.approver_3_id);
+          }
+          
+          // 如果用戶屬於該階段的授權群組，且該階段已設置，允許查看
+          if (stepIsSet) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  // 檢查用戶是否可以查看外勤工作申請（包括批核歷史）
+  static async canViewOutdoorWorkApplication(userId, applicationId) {
+    const application = await knex('outdoor_work_applications')
+      .where('id', applicationId)
+      .first();
+    
+    if (!application) {
+      return false;
+    }
+
+    // 檢查是否為 HR 成員
+    const isHRMember = await this.isHRMember(userId);
+    if (isHRMember) {
+      return true;
+    }
+
+    // 檢查是否為申請人
+    if (application.user_id === userId) {
+      return true;
+    }
+
+    // 檢查是否為直接批核者（checker、approver1、approver2、approver3）
+    const isDirectApprover = [
+      application.checker_id,
+      application.approver_1_id,
+      application.approver_2_id,
+      application.approver_3_id
+    ].includes(userId);
+
+    if (isDirectApprover) {
+      return true;
+    }
+
+    // 檢查是否屬於批核流程中任何階段的授權群組
+    const DepartmentGroup = require('./DepartmentGroup');
+    const userDelegationGroups = await this.getDelegationGroups(userId);
+    const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+    if (userDelegationGroupIds.length === 0) {
+      return false;
+    }
+
+    // 獲取申請人所屬的部門群組
+    const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
+    
+    if (departmentGroups && departmentGroups.length > 0) {
+      const deptGroup = departmentGroups[0];
+      const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+      
+      // 檢查用戶是否屬於批核流程中任何階段的授權群組，且該階段已設置
+      for (const step of approvalFlow) {
+        if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+          // 檢查該階段是否已設置（有對應的 approver_id）
+          let stepIsSet = false;
+          
+          if (step.level === 'checker') {
+            stepIsSet = !!(application.checker_id);
+          } else if (step.level === 'approver_1') {
+            stepIsSet = !!(application.approver_1_id);
+          } else if (step.level === 'approver_2') {
+            stepIsSet = !!(application.approver_2_id);
+          } else if (step.level === 'approver_3') {
+            stepIsSet = !!(application.approver_3_id);
+          }
+          
+          // 如果用戶屬於該階段的授權群組，且該階段已設置，允許查看
+          if (stepIsSet) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
 }
 
 module.exports = User;

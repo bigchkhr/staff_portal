@@ -198,6 +198,10 @@ class ExtraWorkingHoursApplication {
   static async getPendingApprovals(userId) {
     const DepartmentGroup = require('./DepartmentGroup');
     const DelegationGroup = require('./DelegationGroup');
+    const User = require('./User');
+
+    // 檢查是否為 HR Group 成員
+    const isHRMember = await User.isHRMember(userId);
 
     // 獲取所有待批核的申請
     const allApplications = await knex('extra_working_hours_applications')
@@ -215,6 +219,19 @@ class ExtraWorkingHoursApplication {
       .where('extra_working_hours_applications.status', 'pending')
       .orderBy('extra_working_hours_applications.created_at', 'asc');
 
+    // 如果是 HR Group 成員，使用 canViewExtraWorkingHoursApplication 來檢查權限（可以看到所有有權限的申請）
+    if (isHRMember) {
+      const filteredApplications = [];
+      for (const app of allApplications) {
+        const canView = await User.canViewExtraWorkingHoursApplication(userId, app.id);
+        if (canView) {
+          filteredApplications.push(app);
+        }
+      }
+      return filteredApplications.map(formatApplication);
+    }
+
+    // 非 HR 成員：只返回當前階段輪到該用戶批核的申請
     // 獲取當前用戶所屬的所有授權群組 ID
     const userDelegationGroups = await knex('delegation_groups')
       .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
@@ -222,20 +239,35 @@ class ExtraWorkingHoursApplication {
 
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 
-    // 過濾出當前用戶有權限批核的申請
+    // 過濾出當前階段輪到該用戶批核的申請
     const filteredApplications = [];
 
     for (const app of allApplications) {
+      // 確定當前批核階段
+      let currentStage = app.current_approval_stage;
+      if (!currentStage || currentStage === 'completed') {
+        currentStage = determineCurrentApprovalStage(app);
+      }
+
+      // 如果已經完成所有批核階段，跳過
+      if (currentStage === 'completed') {
+        continue;
+      }
+
       let canApprove = false;
 
-      // 方法1：檢查是否直接設置為批核者
-      if (app.checker_id === userId ||
-          app.approver_1_id === userId ||
-          app.approver_2_id === userId ||
-          app.approver_3_id === userId) {
+      // 方法1：檢查是否直接設置為當前階段的批核者，且該階段尚未批核
+      if (currentStage === 'checker' && app.checker_id === userId && !app.checker_at) {
         canApprove = true;
-      } 
-      // 方法2：檢查是否屬於對應的授權群組
+      } else if (currentStage === 'approver_1' && app.approver_1_id === userId && !app.approver_1_at) {
+        canApprove = true;
+      } else if (currentStage === 'approver_2' && app.approver_2_id === userId && !app.approver_2_at) {
+        canApprove = true;
+      } else if (currentStage === 'approver_3' && app.approver_3_id === userId && !app.approver_3_at) {
+        canApprove = true;
+      }
+      
+      // 方法2：檢查是否通過授權群組屬於當前階段的批核者
       if (!canApprove) {
         const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
         
@@ -243,24 +275,25 @@ class ExtraWorkingHoursApplication {
           const deptGroup = departmentGroups[0];
           const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
           
-          for (const step of approvalFlow) {
-            if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
-              let stepIsSet = false;
-              
-              if (step.level === 'checker') {
-                stepIsSet = !!(app.checker_id);
-              } else if (step.level === 'approver_1') {
-                stepIsSet = !!(app.approver_1_id);
-              } else if (step.level === 'approver_2') {
-                stepIsSet = !!(app.approver_2_id);
-              } else if (step.level === 'approver_3') {
-                stepIsSet = !!(app.approver_3_id);
-              }
+          // 找到當前階段的配置
+          const currentStep = approvalFlow.find(step => step.level === currentStage);
+          
+          if (currentStep && currentStep.delegation_group_id && userDelegationGroupIds.includes(Number(currentStep.delegation_group_id))) {
+            // 檢查該階段是否尚未批核
+            let stepIsPending = false;
+            
+            if (currentStage === 'checker') {
+              stepIsPending = !!(app.checker_id && !app.checker_at);
+            } else if (currentStage === 'approver_1') {
+              stepIsPending = !!(app.approver_1_id && !app.approver_1_at);
+            } else if (currentStage === 'approver_2') {
+              stepIsPending = !!(app.approver_2_id && !app.approver_2_at);
+            } else if (currentStage === 'approver_3') {
+              stepIsPending = !!(app.approver_3_id && !app.approver_3_at);
+            }
 
-              if (stepIsSet) {
-                canApprove = true;
-                break;
-              }
+            if (stepIsPending) {
+              canApprove = true;
             }
           }
         }

@@ -180,12 +180,10 @@ class OutdoorWorkController {
         return res.status(404).json({ message: '申請不存在' });
       }
 
-      // 檢查權限
-      const isApplicant = application.user_id === req.user.id;
-      const canApprove = await User.canApproveOutdoorWork(req.user.id, id);
-      const isHRMember = await User.isHRMember(req.user.id);
+      // 檢查權限：使用統一的權限檢查方法
+      const canView = await User.canViewOutdoorWorkApplication(req.user.id, id);
 
-      if (!isApplicant && !canApprove && !isHRMember) {
+      if (!canView) {
         return res.status(403).json({ message: '無權限查看此申請' });
       }
 
@@ -241,9 +239,9 @@ class OutdoorWorkController {
         let canReject = false;
         const userId = Number(req.user.id);
         const isHRMember = await User.isHRMember(userId);
-        const allowedStages = ['checker', 'approver_1', 'approver_2'];
         
-        if (isHRMember && allowedStages.includes(currentLevel)) {
+        // HR 成員可以在任何階段（除了已完成）拒絕
+        if (isHRMember && currentLevel !== 'completed') {
           canReject = true;
         } else {
           canReject = await User.canApproveOutdoorWork(userId, id);

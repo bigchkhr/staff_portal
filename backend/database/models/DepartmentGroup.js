@@ -141,25 +141,49 @@ class DepartmentGroup {
 
   // 取得部門群組的所有成員
   static async getMembers(groupId) {
-    const group = await knex('department_groups').where('id', groupId).first();
-    const parsedGroup = formatGroupRecord(group);
+    try {
+      const group = await knex('department_groups').where('id', groupId).first();
+      
+      if (!group) {
+        console.log(`[getMembers] 群組 ID ${groupId} 不存在`);
+        return [];
+      }
 
-    if (!parsedGroup || parsedGroup.user_ids.length === 0) {
-      return [];
+      const parsedGroup = formatGroupRecord(group);
+
+      if (!parsedGroup || !parsedGroup.user_ids || !Array.isArray(parsedGroup.user_ids) || parsedGroup.user_ids.length === 0) {
+        console.log(`[getMembers] 群組 ID ${groupId} 沒有成員，user_ids:`, parsedGroup?.user_ids);
+        return [];
+      }
+
+      // 確保所有 user_ids 都是有效的數字
+      const validUserIds = parsedGroup.user_ids
+        .map(id => Number(id))
+        .filter(id => !isNaN(id) && id > 0);
+
+      if (validUserIds.length === 0) {
+        console.log(`[getMembers] 群組 ID ${groupId} 沒有有效的成員 ID`);
+        return [];
+      }
+
+      const members = await knex('users')
+        .whereIn('users.id', validUserIds)
+        .leftJoin('departments', 'users.department_id', 'departments.id')
+        .leftJoin('positions', 'users.position_id', 'positions.id')
+        .select(
+          'users.*',
+          'departments.name as department_name',
+          'departments.name_zh as department_name_zh',
+          'positions.name as position_name',
+          'positions.name_zh as position_name_zh'
+        );
+
+      return members || [];
+    } catch (error) {
+      console.error(`[getMembers] 獲取群組 ID ${groupId} 的成員時發生錯誤:`, error);
+      console.error('錯誤堆疊:', error.stack);
+      throw error;
     }
-
-    return await knex('users')
-      .leftJoin('departments', 'users.department_id', 'departments.id')
-      .leftJoin('positions', 'users.position_id', 'positions.id')
-      .select(
-        'users.*',
-        'departments.name as department_name',
-        'departments.name_zh as department_name_zh',
-        'positions.code as position_code',
-        'positions.name as position_name',
-        'positions.name_zh as position_name_zh'
-      )
-      .whereIn('users.id', parsedGroup.user_ids);
   }
 
   // 取得使用者所屬的部門群組

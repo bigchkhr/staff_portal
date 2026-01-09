@@ -22,6 +22,8 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
   Dashboard as DashboardIcon,
   Assignment as AssignmentIcon,
   History as HistoryIcon,
@@ -47,8 +49,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
+import logo from './logo.webp';
 
-const drawerWidth = 260;
+const drawerWidth = 180;
+const drawerWidthCollapsed = 64;
 
 const Layout = ({ children }) => {
   const { t, i18n } = useTranslation();
@@ -58,6 +62,7 @@ const Layout = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopDrawerOpen, setDesktopDrawerOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -101,9 +106,7 @@ const Layout = ({ children }) => {
       path: '/my-approvals', 
       show: true 
     },
-    { key: 'schedule', icon: <CalendarTodayIcon />, path: '/schedule', show: true },
-    { key: 'attendance', icon: <AccessTimeIcon />, path: '/attendance', show: true },
-    { key: 'groupLeaveCalendar', icon: <EventNoteIcon />, path: '/group-leave-calendar', show: true },
+    { key: 'shiftManagement', icon: <CalendarTodayIcon />, path: '/shift-management', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },
@@ -120,6 +123,10 @@ const Layout = ({ children }) => {
     setMobileOpen(!mobileOpen);
   };
 
+  const handleDesktopDrawerToggle = () => {
+    setDesktopDrawerOpen(!desktopDrawerOpen);
+  };
+
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
   };
@@ -130,10 +137,55 @@ const Layout = ({ children }) => {
 
   const drawer = (
     <Box>
-      <Toolbar sx={{ bgcolor: 'primary.main', color: 'white' }}>
-        <Typography variant="h6" noWrap component="div">
-          {t('layout.appTitle')}
-        </Typography>
+      <Toolbar 
+        sx={{ 
+          bgcolor: 'primary.main', 
+          color: 'white',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          minHeight: { xs: '56px', sm: '64px' },
+          px: { xs: 2, sm: 3 },
+          position: 'relative'
+        }}
+      >
+        {((!isMobile && desktopDrawerOpen) || isMobile) && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }}
+          >
+            <img
+              src={logo}
+              alt="Logo"
+              style={{
+                maxWidth: '40px',
+                maxHeight: '40px',
+                width: 'auto',
+                height: 'auto',
+                borderRadius: '6px',
+              }}
+            />
+          </Box>
+        )}
+        {!isMobile && (
+          <IconButton
+            onClick={handleDesktopDrawerToggle}
+            sx={{ 
+              color: 'white',
+              ml: 'auto',
+              zIndex: 1
+            }}
+            title={desktopDrawerOpen ? t('layout.collapseMenu') || '收起選單' : t('layout.expandMenu') || '展開選單'}
+          >
+            {desktopDrawerOpen ? <ChevronLeftIcon /> : <ChevronRightIcon />}
+          </IconButton>
+        )}
       </Toolbar>
       <Divider />
       <List>
@@ -145,11 +197,30 @@ const Layout = ({ children }) => {
                 navigate(item.path);
                 if (isMobile) setMobileOpen(false);
               }}
+              sx={{
+                justifyContent: (!isMobile && !desktopDrawerOpen) ? 'center' : 'flex-start',
+                minHeight: 48,
+                px: (!isMobile && !desktopDrawerOpen) ? 1.5 : 2,
+              }}
+              title={(!isMobile && !desktopDrawerOpen) ? t(`layout.${item.key}`) : ''}
             >
-              <ListItemIcon sx={{ color: location.pathname === item.path ? 'primary.main' : 'inherit' }}>
+              <ListItemIcon 
+                sx={{ 
+                  color: location.pathname === item.path ? 'primary.main' : 'inherit',
+                  minWidth: (!isMobile && !desktopDrawerOpen) ? 'auto' : 40,
+                  justifyContent: 'center'
+                }}
+              >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={t(`layout.${item.key}`)} />
+              {((!isMobile && desktopDrawerOpen) || isMobile) && (
+                <ListItemText 
+                  primary={t(`layout.${item.key}`)}
+                  primaryTypographyProps={{
+                    fontSize: '0.875rem'
+                  }}
+                />
+              )}
             </ListItemButton>
           </ListItem>
         ))}
@@ -157,13 +228,19 @@ const Layout = ({ children }) => {
     </Box>
   );
 
+  const currentDrawerWidth = (!isMobile && !desktopDrawerOpen) ? drawerWidthCollapsed : drawerWidth;
+
   return (
     <Box sx={{ display: 'flex' }}>
       <AppBar
         position="fixed"
         sx={{
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
+          width: { md: `calc(100% - ${currentDrawerWidth}px)` },
+          ml: { md: `${currentDrawerWidth}px` },
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
         <Toolbar>
@@ -238,7 +315,14 @@ const Layout = ({ children }) => {
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+        sx={{ 
+          width: { md: currentDrawerWidth }, 
+          flexShrink: { md: 0 },
+          transition: theme.transitions.create('width', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+        }}
       >
         <Drawer
           variant="temporary"
@@ -258,9 +342,17 @@ const Layout = ({ children }) => {
           variant="permanent"
           sx={{
             display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: currentDrawerWidth,
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+              overflowX: 'hidden',
+            },
           }}
-          open
+          open={desktopDrawerOpen}
         >
           {drawer}
         </Drawer>
@@ -269,9 +361,15 @@ const Layout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          mt: 8
+          p: { xs: 2, sm: 2.5, md: 2 },
+          width: { md: `calc(100% - ${currentDrawerWidth}px)` },
+          mt: { xs: 7, sm: 8 },
+          transition: theme.transitions.create(['width', 'padding'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+          maxWidth: '100%',
+          overflow: 'hidden',
         }}
       >
         {children}

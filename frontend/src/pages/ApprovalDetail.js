@@ -1116,7 +1116,7 @@ const ApprovalDetail = () => {
         {/* HR Group 獲授權人專用拒絕操作 Grid */}
         {user?.is_hr_member && 
          application?.status === 'pending' && 
-         (currentStage === 'checker' || currentStage === 'approver_1' || currentStage === 'approver_2') && (
+         currentStage !== 'completed' && (
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>

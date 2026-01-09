@@ -17,7 +17,7 @@ import {
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 
-const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null }) => {
+const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null, isHRMember = false, onToggleForcePasswordChange = null }) => {
   const { t, i18n } = useTranslation();
   const [formData, setFormData] = useState({
     employee_number: '',
@@ -31,7 +31,8 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
     department_id: '',
     position_id: '',
     hire_date: '',
-    deactivated: false
+    deactivated: false,
+    force_password_change: false
   });
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -54,7 +55,8 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
           department_id: initialData.department_id || '',
           position_id: initialData.position_id || '',
           hire_date: initialData.hire_date ? initialData.hire_date.split('T')[0] : '',
-          deactivated: !!initialData.deactivated
+          deactivated: !!initialData.deactivated,
+          force_password_change: !!initialData.force_password_change
         });
       } else {
         setFormData({
@@ -69,7 +71,8 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
           department_id: '',
           position_id: '',
           hire_date: '',
-          deactivated: false
+          deactivated: false,
+          force_password_change: false
         });
       }
     }
@@ -229,6 +232,18 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null 
             )}
             label={formData.deactivated ? t('adminUsers.accountDeactivated') : t('adminUsers.accountActive')}
           />
+          {isHRMember && (
+            <FormControlLabel
+              control={(
+                <Switch
+                  checked={formData.force_password_change}
+                  onChange={handleChange('force_password_change')}
+                  color="warning"
+                />
+              )}
+              label={t('adminUsers.forcePasswordChange')}
+            />
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

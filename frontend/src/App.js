@@ -41,15 +41,17 @@ import ManualApproval from './pages/ManualApproval';
 import PublicHolidayManagement from './pages/PublicHolidayManagement';
 import ExternalLinks from './pages/ExternalLinks';
 import Tools from './pages/Tools';
+import GroupContacts from './pages/GroupContacts';
 import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
+import ShiftManagement from './pages/ShiftManagement';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.13:1689';
-axios.defaults.baseURL = 'http://192.168.3.4:1689';
+axios.defaults.baseURL = 'http://172.31.132.13:1689';
+// axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
   palette: {
@@ -98,6 +100,7 @@ function App() {
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
             <Route path="/tools" element={<PrivateRoute><Tools /></PrivateRoute>} />
+            <Route path="/group-contacts" element={<PrivateRoute><GroupContacts /></PrivateRoute>} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
@@ -106,6 +109,7 @@ function App() {
             <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
             <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
+            <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

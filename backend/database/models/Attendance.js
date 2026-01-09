@@ -20,7 +20,6 @@ class Attendance {
           'department_groups.name_zh as department_group_name_zh',
           'departments.name as department_name',
           'departments.name_zh as department_name_zh',
-          'positions.code as position_code',
           'positions.name as position_name',
           'positions.name_zh as position_name_zh'
         );
@@ -76,7 +75,6 @@ class Attendance {
           'department_groups.name_zh as department_group_name_zh',
           'departments.name as department_name',
           'departments.name_zh as department_name_zh',
-          'positions.code as position_code',
           'positions.name as position_name',
           'positions.name_zh as position_name_zh'
         )

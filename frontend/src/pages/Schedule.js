@@ -57,7 +57,7 @@ dayjs.extend(timezone);
 // 設置默認時區為香港（UTC+8）
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
-const Schedule = () => {
+const Schedule = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const theme = useTheme();
@@ -1312,9 +1312,9 @@ const Schedule = () => {
 
   const dates = generateDateRange();
 
-  return (
+  const content = (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Container maxWidth="xl" sx={noLayout ? { mt: 0, mb: 0 } : { mt: 4, mb: 4 }}>
         <Paper 
           elevation={3}
           sx={{ 
@@ -2126,6 +2126,8 @@ const Schedule = () => {
       </Container>
     </LocalizationProvider>
   );
+
+  return content;
 };
 
 export default Schedule;

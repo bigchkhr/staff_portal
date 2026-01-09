@@ -11,37 +11,37 @@ import {
   useMediaQuery
 } from '@mui/material';
 import {
-  People as PeopleIcon,
-  Description as DescriptionIcon,
-  Link as LinkIcon
+  CalendarToday as CalendarTodayIcon,
+  AccessTime as AccessTimeIcon,
+  EventNote as EventNoteIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
 
-const Tools = () => {
+const ShiftManagement = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const toolItems = [
+  const shiftItems = [
     {
-      key: 'groupContacts',
-      icon: <PeopleIcon sx={{ fontSize: 48 }} />,
-      path: '/group-contacts',
-      translationKey: 'groupContacts'
+      key: 'schedule',
+      icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
+      path: '/schedule',
+      translationKey: 'schedule'
     },
     {
-      key: 'formLibrary',
-      icon: <DescriptionIcon sx={{ fontSize: 48 }} />,
-      path: '/form-library',
-      translationKey: 'formLibrary'
+      key: 'attendance',
+      icon: <AccessTimeIcon sx={{ fontSize: 48 }} />,
+      path: '/attendance',
+      translationKey: 'attendance'
     },
     {
-      key: 'externalLinks',
-      icon: <LinkIcon sx={{ fontSize: 48 }} />,
-      path: '/external-links',
-      translationKey: 'externalLinks'
+      key: 'groupLeaveCalendar',
+      icon: <EventNoteIcon sx={{ fontSize: 48 }} />,
+      path: '/group-leave-calendar',
+      translationKey: 'groupLeaveCalendar'
     }
   ];
 
@@ -53,10 +53,10 @@ const Tools = () => {
     <Layout>
       <Box>
         <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-          {t('tools.title')}
+          {t('shiftManagement.title')}
         </Typography>
         <Grid container spacing={3}>
-          {toolItems.map((item) => (
+          {shiftItems.map((item) => (
             <Grid item xs={6} sm={4} md={3} key={item.key}>
               <Card
                 sx={{
@@ -105,7 +105,7 @@ const Tools = () => {
                       {item.icon}
                     </Box>
                     <Typography variant="h6" component="div" sx={{ fontWeight: 500 }}>
-                      {t(`tools.${item.translationKey}`)}
+                      {t(`layout.${item.translationKey}`)}
                     </Typography>
                   </CardContent>
                 </CardActionArea>
@@ -118,4 +118,5 @@ const Tools = () => {
   );
 };
 
-export default Tools;
+export default ShiftManagement;
+

@@ -57,6 +57,7 @@
     "myApprovals": "My Approvals",
     "schedule": "Schedule",
     "attendance": "Attendance",
+    "shiftManagement": "Shift Management",
     "groupLeaveCalendar": "Group Leave Calendar",
     "systemMaintenance": "System Maintenance",
     "manualApproval": "Manual Approval",
@@ -708,6 +709,11 @@
     "externalLinks": "External Links",
     "groupContacts": "Group Contacts"
   },
+  "shiftManagement": {
+    "title": "Shift Management",
+    "schedule": "Schedule",
+    "attendance": "Attendance"
+  },
   "groupContacts": {
     "title": "Group Contacts",
     "pageDescription": "Browse and manage group contact information",
@@ -1014,7 +1020,12 @@
     "operationFailed": "Operation failed",
     "forcePasswordChange": "Force Password Change",
     "forcePasswordChangeEnabled": "Force password change enabled",
-    "forcePasswordChangeDisabled": "Force password change disabled"
+    "forcePasswordChangeDisabled": "Force password change disabled",
+    "filter": {
+      "all": "All",
+      "active": "Active",
+      "deactivated": "Deactivated"
+    }
   },
   "adminLeaveTypes": {
     "title": "Leave Type Management",

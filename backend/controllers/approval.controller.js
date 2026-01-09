@@ -58,19 +58,15 @@ class ApprovalController {
         // 檢查是否有權限拒絕
         let canReject = false;
         
-        // 方法1：直接檢查是否是 HR Group 獲授權人（ID: 1, 29, 31），且在 checker、approver_1、approver_2 階段
+        // 方法1：檢查是否是 HR Group 成員，HR 成員可以在任何階段拒絕
         const userId = Number(req.user.id);
-        const hrGroupUserIds = [1, 29, 31]; // HR Group 成員 ID
-        const isHRMember = hrGroupUserIds.includes(userId);
-        const allowedStages = ['checker', 'approver_1', 'approver_2'];
+        const isHRMember = await User.isHRMember(userId);
         
         console.log('[Reject] User ID:', userId, 'isHRMember:', isHRMember, 'currentLevel:', currentLevel);
         
-        if (isHRMember && allowedStages.includes(currentLevel)) {
+        if (isHRMember && currentLevel !== 'completed') {
           canReject = true;
           console.log('[Reject] HR Member can reject at stage:', currentLevel);
-        } else {
-          console.log('[Reject] HR Member check failed - isHRMember:', isHRMember, 'currentLevel:', currentLevel, 'allowed levels:', allowedStages);
         }
         
         // 方法2：如果方法1不滿足，檢查是否有權限批核（只有當前階段的批核者才能拒絕）

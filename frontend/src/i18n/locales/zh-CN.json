@@ -55,11 +55,12 @@
     "announcements": "公告栏",
     "myApplications": "我的申请",
     "myApprovals": "我的批核",
-    "schedule": "排班表",
+    "schedule": "排班",
     "attendance": "考勤管理",
+    "shiftManagement": "班表",
     "groupLeaveCalendar": "群组假期周历",
     "systemMaintenance": "系统维护",
-    "manualApproval": "人手批核",
+    "manualApproval": "人工批核",
     "applyLeave": "申请假期",
     "leaveHistory": "申请历史",
     "leaveBalance": "假期余额",
@@ -703,6 +704,11 @@
     "externalLinks": "外部链接",
     "groupContacts": "群组联系人"
   },
+  "shiftManagement": {
+    "title": "更表",
+    "schedule": "排班表",
+    "attendance": "考勤管理"
+  },
   "groupContacts": {
     "title": "群组联系人",
     "pageDescription": "浏览和管理群组联系人信息",
@@ -945,7 +951,7 @@
     "givenName": "名字",
     "alias": "别名",
     "chineseName": "中文姓名",
-    "displayName": "Display Name",
+    "displayName": "显示名称",
     "newPassword": "新密码（留空则不更改）",
     "password": "密码",
     "accountDeactivated": "账户已停用（无法登录）",
@@ -954,7 +960,12 @@
     "operationFailed": "操作失败",
     "forcePasswordChange": "强制更改密码",
     "forcePasswordChangeEnabled": "已启用强制更改密码",
-    "forcePasswordChangeDisabled": "未启用强制更改密码"
+    "forcePasswordChangeDisabled": "未启用强制更改密码",
+    "filter": {
+      "all": "全部",
+      "active": "启用中",
+      "deactivated": "已停用"
+    }
   },
   "adminLeaveTypes": {
     "title": "假期类型管理",
