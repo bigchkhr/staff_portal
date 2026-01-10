@@ -26,7 +26,13 @@ import {
   Card,
   Divider,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Checkbox,
+  FormControlLabel,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
@@ -38,7 +44,8 @@ import {
   AccessTime as AccessTimeIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -74,6 +81,10 @@ const Attendance = ({ noLayout = false }) => {
   const [editTimeOffStart, setEditTimeOffStart] = useState(null);
   const [editTimeOffEnd, setEditTimeOffEnd] = useState(null);
   const [editRemarks, setEditRemarks] = useState('');
+  const [editClockRecords, setEditClockRecords] = useState([]); // 存儲所有打卡記錄，用於選擇有效性
+  const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -156,36 +167,135 @@ const Attendance = ({ noLayout = false }) => {
   };
 
   const handleOpenEditDialog = (item) => {
+    console.log('handleOpenEditDialog - item:', item);
+    console.log('item.attendance_date:', item?.attendance_date);
+    
+    // 確保 item 有必要的屬性
+    if (!item) {
+      console.error('handleOpenEditDialog: item is null or undefined');
+      return;
+    }
+    
+    // 確保 attendance_date 存在
+    if (!item.attendance_date) {
+      console.error('handleOpenEditDialog: item.attendance_date is missing', item);
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: '缺少考勤日期信息，請重新選擇'
+      });
+      return;
+    }
+    
     setEditingAttendance(item);
     setEditClockInTime(item.attendance?.clock_in_time ? dayjs(item.attendance.clock_in_time, 'HH:mm:ss') : null);
     setEditClockOutTime(item.attendance?.clock_out_time ? dayjs(item.attendance.clock_out_time, 'HH:mm:ss') : null);
     setEditTimeOffStart(item.attendance?.time_off_start ? dayjs(item.attendance.time_off_start, 'HH:mm:ss') : null);
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
     setEditRemarks(item.attendance?.remarks || '');
+    
+    // 初始化打卡記錄列表，顯示所有記錄（包括有效的和無效的）
+    const clockRecords = item?.clock_records || [];
+    console.log('Opening edit dialog, clock_records:', clockRecords);
+    console.log('clock_records length:', clockRecords.length);
+    
+    // 顯示所有記錄，保留它們當前的 is_valid 狀態
+    setEditClockRecords(clockRecords.map(record => ({
+      ...record,
+      is_valid: record.is_valid === true // 保留當前的有效性狀態
+    })));
     setEditDialogOpen(true);
+  };
+
+  // 自動勾選最早的4個時間
+  const handleAutoSelectEarliest = () => {
+    if (!editClockRecords || editClockRecords.length === 0) return;
+    
+    // 按時間排序，取最早的4個
+    const sorted = [...editClockRecords].sort((a, b) => {
+      const timeA = a.clock_time || '';
+      const timeB = b.clock_time || '';
+      return timeA.localeCompare(timeB);
+    });
+    
+    // 只勾選前4個
+    const updated = editClockRecords.map((record, idx) => {
+      const sortedIndex = sorted.findIndex(r => r.id === record.id);
+      return {
+        ...record,
+        is_valid: sortedIndex >= 0 && sortedIndex < 4
+      };
+    });
+    
+    setEditClockRecords(updated);
   };
 
   const handleSaveAttendance = async () => {
     if (!editingAttendance) return;
 
     try {
-      const attendanceData = {
-        user_id: editingAttendance.user_id,
-        department_group_id: selectedGroupId,
-        attendance_date: editingAttendance.attendance_date,
-        clock_in_time: editClockInTime ? editClockInTime.format('HH:mm:ss') : null,
-        clock_out_time: editClockOutTime ? editClockOutTime.format('HH:mm:ss') : null,
-        time_off_start: editTimeOffStart ? editTimeOffStart.format('HH:mm:ss') : null,
-        time_off_end: editTimeOffEnd ? editTimeOffEnd.format('HH:mm:ss') : null,
-        remarks: editRemarks || null
-      };
+      // 如果有打卡記錄，更新它們的有效性
+      // 使用 editClockRecords 中的所有記錄（因為現在顯示所有記錄）
+      if (editClockRecords && editClockRecords.length > 0) {
+        // 構建更新列表：只包含有 id 的記錄
+        const updates = editClockRecords
+          .filter(record => record.id) // 只包含有 id 的記錄
+          .map(record => ({
+            id: record.id,
+            is_valid: record.is_valid === true // 明確轉換為 boolean
+          }));
+        
+        console.log('Saving clock records updates:', updates);
+        
+        if (updates.length > 0) {
+          // 調用 API 更新打卡記錄的有效性
+          await axios.put('/api/attendances/update-clock-records', {
+            clock_records: updates
+          });
+        }
+      }
 
-      if (editingAttendance.attendance?.id) {
-        // 更新現有記錄
-        await axios.put(`/api/attendances/${editingAttendance.attendance.id}`, attendanceData);
-      } else {
-        // 建立新記錄
-        await axios.post('/api/attendances', attendanceData);
+      // 只有在有手動輸入的時間或備註時，才更新考勤記錄
+      const hasManualTimeInput = editClockInTime || editClockOutTime || editTimeOffStart || editTimeOffEnd;
+      const hasRemarks = editRemarks && editRemarks.trim() !== '';
+      
+      if (hasManualTimeInput || hasRemarks) {
+        // 確保有必要的參數：優先使用 employee_number，如果沒有則使用 user_id
+        console.log('Saving attendance - editingAttendance:', editingAttendance);
+        console.log('attendance_date:', editingAttendance?.attendance_date);
+        
+        if (!editingAttendance || !editingAttendance.attendance_date) {
+          const errorMsg = editingAttendance 
+            ? '缺少必要的參數：attendance_date' 
+            : '編輯數據不存在，請重新打開編輯對話框';
+          throw new Error(errorMsg);
+        }
+        
+        if (!editingAttendance.employee_number && !editingAttendance.user_id) {
+          throw new Error('缺少必要的參數：employee_number 或 user_id');
+        }
+
+        const attendanceData = {
+          employee_number: editingAttendance.employee_number, // 優先使用 employee_number
+          user_id: editingAttendance.user_id, // 如果沒有 employee_number，使用 user_id
+          department_group_id: selectedGroupId,
+          attendance_date: editingAttendance.attendance_date, // 確保使用正確的日期格式
+          clock_in_time: editClockInTime ? editClockInTime.format('HH:mm:ss') : null,
+          clock_out_time: editClockOutTime ? editClockOutTime.format('HH:mm:ss') : null,
+          time_off_start: editTimeOffStart ? editTimeOffStart.format('HH:mm:ss') : null,
+          time_off_end: editTimeOffEnd ? editTimeOffEnd.format('HH:mm:ss') : null,
+          remarks: editRemarks || null
+        };
+        
+        console.log('Sending attendanceData:', attendanceData);
+
+        if (editingAttendance.attendance?.id) {
+          // 更新現有記錄
+          await axios.put(`/api/attendances/${editingAttendance.attendance.id}`, attendanceData);
+        } else if (hasManualTimeInput) {
+          // 建立新記錄（只有在有時間輸入時）
+          await axios.post('/api/attendances', attendanceData);
+        }
       }
 
       setEditDialogOpen(false);
@@ -195,6 +305,7 @@ const Attendance = ({ noLayout = false }) => {
       setEditTimeOffStart(null);
       setEditTimeOffEnd(null);
       setEditRemarks('');
+      setEditClockRecords([]);
       
       await fetchAttendanceComparison();
       
@@ -241,6 +352,101 @@ const Attendance = ({ noLayout = false }) => {
           text: error.response?.data?.message || t('attendance.deleteFailed')
         });
       }
+    }
+  };
+
+  // 處理 CSV 文件選擇
+  const handleCsvFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        Swal.fire({
+          icon: 'error',
+          title: t('attendance.error'),
+          text: t('attendance.invalidFileType')
+        });
+        return;
+      }
+      setCsvFile(file);
+    }
+  };
+
+  // 處理 CSV 匯入
+  const handleCsvImport = async () => {
+    if (!csvFile) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.error'),
+        text: t('attendance.pleaseSelectFile')
+      });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      // 讀取 CSV 文件
+      const text = await csvFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        throw new Error(t('attendance.csvEmptyOrInvalid'));
+      }
+
+      // 解析 CSV（假設第一行是標題）
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length < 6) continue; // 跳過不完整的行
+
+        // 根據 POS CSV 格式：欄A=employee_number, 欄B=name, 欄C=branch_code, 欄D=date, 欄E=clock_time, 欄F=in_out
+        const row = {
+          employee_number: values[0] || '',
+          name: values[1] || '',
+          branch_code: values[2] || '',
+          date: values[3] || '',
+          clock_time: values[4] || '',
+          in_out: values[5] || ''
+        };
+
+        if (row.employee_number && row.date && row.clock_time && row.in_out) {
+          data.push(row);
+        }
+      }
+
+      if (data.length === 0) {
+        throw new Error(t('attendance.noValidData'));
+      }
+
+      // 發送到後端
+      const response = await axios.post('/api/attendances/import-csv', { data });
+
+      setCsvImportDialogOpen(false);
+      setCsvFile(null);
+      
+      // 刷新數據
+      await fetchAttendanceComparison();
+      
+      Swal.fire({
+        icon: 'success',
+        title: t('attendance.success'),
+        text: t('attendance.csvImportSuccess', { count: response.data.imported_count })
+      });
+
+      // 如果有錯誤，顯示警告
+      if (response.data.errors && response.data.errors.length > 0) {
+        console.warn('CSV import errors:', response.data.errors);
+      }
+    } catch (error) {
+      console.error('CSV import error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: error.response?.data?.message || error.message || t('attendance.csvImportFailed')
+      });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -410,24 +616,45 @@ const Attendance = ({ noLayout = false }) => {
                 />
               </Grid>
               <Grid item xs={12} md={3}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={fetchAttendanceComparison}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    boxShadow: 3,
-                    '&:hover': {
-                      boxShadow: 5,
-                      transform: 'translateY(-2px)',
-                      transition: 'all 0.2s',
-                    },
-                  }}
-                >
-                  {t('attendance.refresh')}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={fetchAttendanceComparison}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      boxShadow: 3,
+                      '&:hover': {
+                        boxShadow: 5,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s',
+                      },
+                    }}
+                  >
+                    {t('attendance.refresh')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={() => setCsvImportDialogOpen(true)}
+                    startIcon={<UploadIcon />}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      boxShadow: 1,
+                      '&:hover': {
+                        boxShadow: 3,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s',
+                      },
+                    }}
+                  >
+                    {t('attendance.importCSV')}
+                  </Button>
+                </Box>
               </Grid>
             </Grid>
           </Card>
@@ -532,14 +759,23 @@ const Attendance = ({ noLayout = false }) => {
                                 <Button
                                   size="small"
                                   variant="outlined"
-                                  onClick={() => handleOpenEditDialog(item || {
-                                    user_id: userData.user_id,
-                                    employee_number: userData.employee_number,
-                                    display_name: userData.display_name,
-                                    attendance_date: dateStr,
-                                    schedule: null,
-                                    attendance: null
-                                  })}
+                                  onClick={() => {
+                                    // 確保 item 有 attendance_date，如果沒有則使用 dateStr
+                                    const itemToEdit = item ? {
+                                      ...item,
+                                      attendance_date: item.attendance_date || dateStr // 確保有 attendance_date
+                                    } : {
+                                      user_id: userData.user_id,
+                                      employee_number: userData.employee_number,
+                                      display_name: userData.display_name,
+                                      attendance_date: dateStr, // 明確設置 attendance_date
+                                      schedule: null,
+                                      attendance: null,
+                                      clock_records: [] // 確保有 clock_records 屬性
+                                    };
+                                    console.log('Opening edit dialog with item:', itemToEdit);
+                                    handleOpenEditDialog(itemToEdit);
+                                  }}
                                   sx={{ 
                                     minWidth: 'auto', 
                                     p: 0.5,
@@ -580,56 +816,74 @@ const Attendance = ({ noLayout = false }) => {
                                         )}
                                       </Box>
                                     )}
-                                    {item.attendance && (
-                                      <>
-                                        <Box sx={{ mb: 0.5 }}>
-                                          <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#1976d2', fontWeight: 600 }}>
-                                            {t('attendance.clockIn')}: {item.attendance.clock_in_time ? item.attendance.clock_in_time.substring(0, 5) : '--:--'}
-                                          </Typography>
-                                          <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#1976d2', fontWeight: 600 }}>
-                                            {t('attendance.clockOut')}: {item.attendance.clock_out_time ? item.attendance.clock_out_time.substring(0, 5) : '--:--'}
-                                          </Typography>
-                                          {item.attendance.time_off_start && item.attendance.time_off_end && (
-                                            <Typography variant="caption" display="block" sx={{ fontSize: '0.65rem', color: '#d4af37', mt: 0.25 }}>
-                                              {t('attendance.timeOff')}: {item.attendance.time_off_start.substring(0, 5)} - {item.attendance.time_off_end.substring(0, 5)}
-                                            </Typography>
+                                    {/* 顯示打卡時間 - 只顯示有效時間 */}
+                                    {(() => {
+                                      // 確保 item 存在且有 employee_number 匹配
+                                      if (!item) return null;
+                                      
+                                      // 只顯示有效的 clock_records，按時間排序
+                                      const clockRecords = item.clock_records || [];
+                                      const validRecords = clockRecords.filter(r => r.is_valid === true);
+                                      const sortedRecords = [...validRecords].sort((a, b) => {
+                                        const timeA = a.clock_time || '';
+                                        const timeB = b.clock_time || '';
+                                        return timeA.localeCompare(timeB);
+                                      });
+                                      
+                                      if (sortedRecords.length === 0) {
+                                        return null;
+                                      }
+                                      
+                                      return (
+                                        <>
+                                          <Box sx={{ mb: 0.5 }}>
+                                            {sortedRecords.map((record, idx) => {
+                                              const timeStr = record.clock_time ? 
+                                                (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
+                                                '--:--';
+                                              
+                                              return (
+                                                <Typography 
+                                                  key={idx}
+                                                  variant="caption" 
+                                                  display="block" 
+                                                  sx={{ 
+                                                    fontSize: '0.7rem', 
+                                                    color: '#1976d2',
+                                                    fontWeight: 600
+                                                  }}
+                                                >
+                                                  {timeStr}
+                                                </Typography>
+                                              );
+                                            })}
+                                            {clockRecords.length > 0 && (
+                                              <Typography variant="caption" display="block" sx={{ fontSize: '0.6rem', color: '#999', mt: 0.5 }}>
+                                                {t('attendance.totalRecords')}: {clockRecords.length}
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                          {item.attendance?.status && (
+                                            <Chip
+                                              label={
+                                                item.attendance.status === 'late' && item.attendance.late_minutes
+                                                  ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
+                                                  : getStatusText(item.attendance.status)
+                                              }
+                                              size="small"
+                                              color={getStatusColor(item.attendance.status)}
+                                              sx={{ 
+                                                fontSize: '0.7rem', 
+                                                height: '22px', 
+                                                mb: 0.5,
+                                                fontWeight: 600,
+                                                boxShadow: 1,
+                                              }}
+                                            />
                                           )}
-                                        </Box>
-                                        <Chip
-                                          label={
-                                            item.attendance.status === 'late' && item.attendance.late_minutes
-                                              ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
-                                              : getStatusText(item.attendance.status)
-                                          }
-                                          size="small"
-                                          color={getStatusColor(item.attendance.status)}
-                                          sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: '22px', 
-                                            mb: 0.5,
-                                            fontWeight: 600,
-                                            boxShadow: 1,
-                                          }}
-                                        />
-                                        {item.attendance.id && (
-                                          <IconButton
-                                            size="small"
-                                            onClick={() => handleDeleteAttendance(item.attendance.id)}
-                                            color="error"
-                                            sx={{
-                                              '&:hover': {
-                                                bgcolor: 'error.main',
-                                                color: 'error.contrastText',
-                                                transform: 'scale(1.1)',
-                                                transition: 'all 0.2s',
-                                              },
-                                            }}
-                                          >
-                                            <DeleteIcon fontSize="small" />
-                                          </IconButton>
-                                        )}
-                                      </>
-                                    )}
+                                        </>
+                                      );
+                                    })()}
                                   </>
                                 )}
                               </Box>
@@ -670,6 +924,7 @@ const Attendance = ({ noLayout = false }) => {
             setEditTimeOffStart(null);
             setEditTimeOffEnd(null);
             setEditRemarks('');
+            setEditClockRecords([]);
           }}
           maxWidth="sm"
           fullWidth
@@ -710,43 +965,98 @@ const Attendance = ({ noLayout = false }) => {
                   <Divider />
                 </>
               )}
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <TimePicker
-                    label={t('attendance.clockIn')}
-                    value={editClockInTime}
-                    onChange={(newValue) => setEditClockInTime(newValue)}
-                    ampm={true}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TimePicker
-                    label={t('attendance.clockOut')}
-                    value={editClockOutTime}
-                    onChange={(newValue) => setEditClockOutTime(newValue)}
-                    ampm={true}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TimePicker
-                    label={t('attendance.timeOffStart')}
-                    value={editTimeOffStart}
-                    onChange={(newValue) => setEditTimeOffStart(newValue)}
-                    ampm={true}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <TimePicker
-                    label={t('attendance.timeOffEnd')}
-                    value={editTimeOffEnd}
-                    onChange={(newValue) => setEditTimeOffEnd(newValue)}
-                    ampm={true}
-                    slotProps={{ textField: { fullWidth: true } }}
-                  />
-                </Grid>
+              {/* 顯示所有未勾選的打卡記錄，允許選擇有效性 */}
+              {editClockRecords && editClockRecords.length > 0 ? (
+                <>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      {t('attendance.clockRecords') || '打卡記錄'} - {t('attendance.selectValidRecords') || '選擇有效記錄'}
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleAutoSelectEarliest}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      {t('attendance.autoSelectEarliest') || '自動選取最早4個'}
+                    </Button>
+                  </Box>
+                  <Box sx={{ maxHeight: 300, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
+                    <List dense>
+                      {editClockRecords
+                        .sort((a, b) => {
+                          const timeA = a.clock_time || '';
+                          const timeB = b.clock_time || '';
+                          return timeA.localeCompare(timeB);
+                        })
+                        .map((record, idx) => {
+                          const timeStr = record.clock_time ? 
+                            (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
+                            '--:--';
+                          const isValid = record.is_valid || false;
+                          
+                          return (
+                            <ListItem 
+                              key={record.id || idx}
+                              sx={{
+                                bgcolor: isValid ? 'action.selected' : 'transparent',
+                                borderRadius: 1,
+                                mb: 0.5,
+                                '&:hover': {
+                                  bgcolor: 'action.hover'
+                                }
+                              }}
+                            >
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={isValid}
+                                    onChange={(e) => {
+                                      const updated = [...editClockRecords];
+                                      // 找到對應的記錄並更新
+                                      const recordIndex = updated.findIndex(r => r.id === record.id);
+                                      if (recordIndex >= 0) {
+                                        updated[recordIndex].is_valid = e.target.checked;
+                                        setEditClockRecords(updated);
+                                      }
+                                    }}
+                                    size="small"
+                                  />
+                                }
+                                label={
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {timeStr}
+                                  </Typography>
+                                }
+                              />
+                            </ListItem>
+                          );
+                        })}
+                    </List>
+                  </Box>
+                </>
+              ) : (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {t('attendance.noClockRecords') || '暫無打卡記錄'}
+                  </Typography>
+                  {editingAttendance && editingAttendance.clock_records && editingAttendance.clock_records.length > 0 && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
+                      （共有 {editingAttendance.clock_records.length} 條打卡記錄，但所有記錄都已被標記為有效）
+                    </Typography>
+                  )}
+                  {editingAttendance && (!editingAttendance.clock_records || editingAttendance.clock_records.length === 0) && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
+                      （該日期暫無打卡記錄，請先匯入 CSV 數據）
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              
+              <Grid container spacing={2} sx={{ mt: 1 }}>
                 <Grid item xs={12}>
                   <TextField
                     label={t('attendance.remarks')}
@@ -770,6 +1080,7 @@ const Attendance = ({ noLayout = false }) => {
                 setEditTimeOffStart(null);
                 setEditTimeOffEnd(null);
                 setEditRemarks('');
+                setEditClockRecords([]);
               }}
               sx={{
                 borderRadius: 2,
@@ -798,6 +1109,110 @@ const Attendance = ({ noLayout = false }) => {
               }}
             >
               {t('common.save')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* CSV 匯入對話框 */}
+        <Dialog 
+          open={csvImportDialogOpen} 
+          onClose={() => {
+            if (!importing) {
+              setCsvImportDialogOpen(false);
+              setCsvFile(null);
+            }
+          }}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: 6,
+            }
+          }}
+        >
+          <DialogTitle
+            sx={{
+              bgcolor: 'secondary.main',
+              color: 'secondary.contrastText',
+              fontWeight: 600,
+              py: 2.5,
+            }}
+          >
+            {t('attendance.importCSV')}
+          </DialogTitle>
+          <DialogContent sx={{ p: 3, mt: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {t('attendance.csvFormatDescription')}
+              </Typography>
+              <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                  {t('attendance.csvFormatExample')}
+                </Typography>
+              </Box>
+              <input
+                accept=".csv"
+                style={{ display: 'none' }}
+                id="csv-file-upload-attendance"
+                type="file"
+                onChange={handleCsvFileSelect}
+                disabled={importing}
+              />
+              <label htmlFor="csv-file-upload-attendance">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<UploadIcon />}
+                  disabled={importing}
+                  fullWidth
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 1.5,
+                  }}
+                >
+                  {csvFile ? csvFile.name : t('attendance.selectCSVFile')}
+                </Button>
+              </label>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 2, gap: 1 }}>
+            <Button 
+              onClick={() => {
+                setCsvImportDialogOpen(false);
+                setCsvFile(null);
+              }}
+              disabled={importing}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button 
+              onClick={handleCsvImport} 
+              variant="contained" 
+              color="secondary"
+              disabled={!csvFile || importing}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                boxShadow: 3,
+                '&:hover': {
+                  boxShadow: 5,
+                  transform: 'translateY(-2px)',
+                  transition: 'all 0.2s',
+                },
+              }}
+            >
+              {importing ? t('attendance.importing') : t('attendance.import')}
             </Button>
           </DialogActions>
         </Dialog>

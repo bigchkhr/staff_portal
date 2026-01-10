@@ -18,6 +18,12 @@ router.get('/:id', attendanceController.getAttendance.bind(attendanceController)
 // 建立考勤記錄
 router.post('/', attendanceController.createAttendance.bind(attendanceController));
 
+// 從CSV導入打卡記錄
+router.post('/import-csv', attendanceController.importClockRecordsFromCSV.bind(attendanceController));
+
+// 更新打卡記錄的有效性（必須放在 /:id 之前，否則會被當作 id）
+router.put('/update-clock-records', attendanceController.updateClockRecordsValidity.bind(attendanceController));
+
 // 更新考勤記錄
 router.put('/:id', attendanceController.updateAttendance.bind(attendanceController));
 

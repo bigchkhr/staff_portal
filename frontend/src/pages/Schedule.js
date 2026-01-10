@@ -40,7 +40,8 @@ import {
   Delete as DeleteIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
-  CalendarToday as CalendarIcon
+  CalendarToday as CalendarIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -93,6 +94,9 @@ const Schedule = ({ noLayout = false }) => {
   const [editEndTime, setEditEndTime] = useState('');
   const [editLeaveTypeId, setEditLeaveTypeId] = useState(null);
   const [editLeaveSession, setEditLeaveSession] = useState(null);
+  const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -1252,6 +1256,98 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
+  // 處理 CSV 文件選擇
+  const handleCsvFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        Swal.fire({
+          icon: 'error',
+          title: t('schedule.error'),
+          text: t('schedule.invalidFileType')
+        });
+        return;
+      }
+      setCsvFile(file);
+    }
+  };
+
+  // 處理 CSV 匯入
+  const handleCsvImport = async () => {
+    if (!csvFile) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.error'),
+        text: t('schedule.pleaseSelectFile')
+      });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      // 讀取 CSV 文件
+      const text = await csvFile.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        throw new Error(t('schedule.csvEmptyOrInvalid'));
+      }
+
+      // 解析 CSV（假設第一行是標題）
+      const headers = lines[0].split(',').map(h => h.trim());
+      const data = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (values.length < 6) continue; // 跳過不完整的行
+
+        // 根據 POS CSV 格式：欄A=employee_number, 欄B=name, 欄C=branch_code, 欄D=date, 欄E=clock_time, 欄F=in_out
+        const row = {
+          employee_number: values[0] || '',
+          name: values[1] || '',
+          branch_code: values[2] || '',
+          date: values[3] || '',
+          clock_time: values[4] || '',
+          in_out: values[5] || ''
+        };
+
+        if (row.employee_number && row.date && row.clock_time && row.in_out) {
+          data.push(row);
+        }
+      }
+
+      if (data.length === 0) {
+        throw new Error(t('schedule.noValidData'));
+      }
+
+      // 發送到後端
+      const response = await axios.post('/api/attendances/import-csv', { data });
+
+      setCsvImportDialogOpen(false);
+      setCsvFile(null);
+      
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.csvImportSuccess', { count: response.data.imported_count })
+      });
+
+      // 如果有錯誤，顯示警告
+      if (response.data.errors && response.data.errors.length > 0) {
+        console.warn('CSV import errors:', response.data.errors);
+      }
+    } catch (error) {
+      console.error('CSV import error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || error.message || t('schedule.csvImportFailed')
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDeleteSchedule = async (scheduleId) => {
     const result = await Swal.fire({
       icon: 'warning',
@@ -1451,6 +1547,25 @@ const Schedule = ({ noLayout = false }) => {
                           {t('schedule.batchEdit')}
                         </Button>
                       )}
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        onClick={() => setCsvImportDialogOpen(true)}
+                        startIcon={<UploadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          boxShadow: 1,
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {t('schedule.importCSV')}
+                      </Button>
                     </>
                   )}
                 </Box>
@@ -2120,6 +2235,110 @@ const Schedule = ({ noLayout = false }) => {
               }}
             >
               {t('common.save')}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* CSV 匯入對話框 */}
+        <Dialog 
+          open={csvImportDialogOpen} 
+          onClose={() => {
+            if (!importing) {
+              setCsvImportDialogOpen(false);
+              setCsvFile(null);
+            }
+          }}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: 6,
+            }
+          }}
+        >
+          <DialogTitle
+            sx={{
+              bgcolor: 'secondary.main',
+              color: 'secondary.contrastText',
+              fontWeight: 600,
+              py: 2.5,
+            }}
+          >
+            {t('schedule.importCSV')}
+          </DialogTitle>
+          <DialogContent sx={{ p: 3, mt: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                {t('schedule.csvFormatDescription')}
+              </Typography>
+              <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
+                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                  {t('schedule.csvFormatExample')}
+                </Typography>
+              </Box>
+              <input
+                accept=".csv"
+                style={{ display: 'none' }}
+                id="csv-file-upload"
+                type="file"
+                onChange={handleCsvFileSelect}
+                disabled={importing}
+              />
+              <label htmlFor="csv-file-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<UploadIcon />}
+                  disabled={importing}
+                  fullWidth
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    py: 1.5,
+                  }}
+                >
+                  {csvFile ? csvFile.name : t('schedule.selectCSVFile')}
+                </Button>
+              </label>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, pt: 2, gap: 1 }}>
+            <Button 
+              onClick={() => {
+                setCsvImportDialogOpen(false);
+                setCsvFile(null);
+              }}
+              disabled={importing}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button 
+              onClick={handleCsvImport} 
+              variant="contained" 
+              color="secondary"
+              disabled={!csvFile || importing}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                boxShadow: 3,
+                '&:hover': {
+                  boxShadow: 5,
+                  transform: 'translateY(-2px)',
+                  transition: 'all 0.2s',
+                },
+              }}
+            >
+              {importing ? t('schedule.importing') : t('schedule.import')}
             </Button>
           </DialogActions>
         </Dialog>
