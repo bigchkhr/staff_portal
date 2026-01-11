@@ -24,6 +24,9 @@ router.post('/import-csv', attendanceController.importClockRecordsFromCSV.bind(a
 // 更新打卡記錄的有效性（必須放在 /:id 之前，否則會被當作 id）
 router.put('/update-clock-records', attendanceController.updateClockRecordsValidity.bind(attendanceController));
 
+// 更新打卡記錄的時間（必須放在 /:id 之前，否則會被當作 id）
+router.put('/update-clock-records-time', attendanceController.updateClockRecordsTime.bind(attendanceController));
+
 // 更新考勤記錄
 router.put('/:id', attendanceController.updateAttendance.bind(attendanceController));
 

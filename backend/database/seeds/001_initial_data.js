@@ -563,7 +563,7 @@ exports.seed = async function (knex) {
       name: 'Retail Store - FAN',
       name_zh: '零售店舖群組 - FAN',
       description: '',
-      user_ids: [87, 328, 467, 468, 480, 481, 483],
+      user_ids: [87, 328, 467, 468, 480, 481],
       checker_id: 30,
       approver_1_id: 12,
       approver_2_id: null,
@@ -574,7 +574,7 @@ exports.seed = async function (knex) {
       name: 'Retail Store - TPU',
       name_zh: '零售店舖群組 - TPU',
       description: '',
-      user_ids: [88, 92, 422, 462, 485],
+      user_ids: [88, 422, 462, 485],
       checker_id: 31,
       approver_1_id: 12,
       approver_2_id: null,
@@ -686,9 +686,15 @@ exports.seed = async function (knex) {
     { code: 'NPSL', name: 'No Pay Sick Leave', name_zh: '無薪病假', requires_balance: false, allow_schedule_input: false },
     { code: 'NPL', name: 'No Pay Personal Leave', name_zh: '無薪事假', requires_balance: false, allow_schedule_input: false },
     { code: 'IL', name: 'Work Injury Leave', name_zh: '工傷病假', requires_balance: false, allow_schedule_input: false },
-    { code: 'SPL', name: 'Special Leave', name_zh: '特別假期', requires_balance: false, allow_schedule_input: false },
-    { code: 'RD', name: 'Rest Day', name_zh: '例假', requires_balance: false, allow_schedule_input: true },
-    { code: 'SH', name: 'Public Holiday', name_zh: '法定假期', requires_balance: false, allow_schedule_input: true }
+    { code: 'SPL', name: 'Special Leave', name_zh: '特別假期', requires_balance: false, allow_schedule_input: true },
+    { code: 'AR', name: 'Accumulated Rest Day', name_zh: '累積例假', requires_balance: false, allow_schedule_input: true },
+    { code: 'R1', name: 'Rest Day 1', name_zh: '例假 1', requires_balance: false, allow_schedule_input: true },
+    { code: 'R2', name: 'Rest Day 2', name_zh: '例假 2', requires_balance: false, allow_schedule_input: true },
+    { code: 'R3', name: 'Rest Day 3', name_zh: '例假 3', requires_balance: false, allow_schedule_input: true },
+    { code: 'R4', name: 'Rest Day 4', name_zh: '例假 4', requires_balance: false, allow_schedule_input: true },
+    { code: 'R5', name: 'Rest Day 5', name_zh: '例假 5', requires_balance: false, allow_schedule_input: true },
+    { code: 'R6', name: 'Rest Day 6', name_zh: '例假 6', requires_balance: false, allow_schedule_input: true },
+    { code: 'SH', name: 'Statutory Holiday', name_zh: '法定假期', requires_balance: false, allow_schedule_input: true }
   ]);
 
   // 建立群組聯絡人模板數據

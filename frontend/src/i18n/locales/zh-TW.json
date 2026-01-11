@@ -1290,7 +1290,12 @@
     "csvEmptyOrInvalid": "CSV文件為空或格式無效",
     "noValidData": "CSV文件中沒有有效的數據",
     "csvImportSuccess": "成功匯入 {{count}} 條打卡記錄",
-    "csvImportFailed": "CSV匯入失敗"
+    "csvImportFailed": "CSV匯入失敗",
+    "editClockTimes": "編輯打卡時間",
+    "addClockTime": "新增時間",
+    "clockTime": "打卡時間",
+    "timeFormatHint": "格式：HH:mm (例如：09:00)",
+    "noClockTimes": "暫無打卡時間，請點擊「新增時間」按鈕添加"
   },
   "groupLeaveCalendar": {
     "title": "群組假期週曆",

@@ -239,8 +239,13 @@ class AttendanceController {
       }
 
       // 更新打卡記錄到 clock_records 表
-      if (clock_in_time !== undefined || clock_out_time !== undefined || 
-          time_off_start !== undefined || time_off_end !== undefined) {
+      // 只有在有實際的時間值（不是 null 或空字符串）時才處理
+      const hasActualTimeInput = (clock_in_time && clock_in_time.trim() !== '') ||
+                                  (clock_out_time && clock_out_time.trim() !== '') ||
+                                  (time_off_start && time_off_start.trim() !== '') ||
+                                  (time_off_end && time_off_end.trim() !== '');
+      
+      if (hasActualTimeInput) {
         // 只刪除手動創建的記錄（created_by_id 不為 null）
         // 保留從 CSV 導入的記錄
         await knex('clock_records')
@@ -252,7 +257,7 @@ class AttendanceController {
         // 創建新的打卡記錄
         const clockRecords = [];
         
-        if (clock_in_time) {
+        if (clock_in_time && clock_in_time.trim() !== '') {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
@@ -265,7 +270,7 @@ class AttendanceController {
             updated_by_id: userId
           });
         }
-        if (time_off_start) {
+        if (time_off_start && time_off_start.trim() !== '') {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
@@ -278,7 +283,7 @@ class AttendanceController {
             updated_by_id: userId
           });
         }
-        if (time_off_end) {
+        if (time_off_end && time_off_end.trim() !== '') {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
@@ -291,7 +296,7 @@ class AttendanceController {
             updated_by_id: userId
           });
         }
-        if (clock_out_time) {
+        if (clock_out_time && clock_out_time.trim() !== '') {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
@@ -772,6 +777,90 @@ class AttendanceController {
     } catch (error) {
       console.error('Update clock records validity error:', error);
       res.status(500).json({ message: '更新打卡記錄失敗', error: error.message });
+    }
+  }
+
+  // 更新打卡記錄的時間
+  async updateClockRecordsTime(req, res) {
+    try {
+      const { clock_records } = req.body; // [{id, clock_time}, ...]
+
+      console.log('updateClockRecordsTime - received data:', clock_records);
+
+      if (!clock_records || !Array.isArray(clock_records)) {
+        return res.status(400).json({ message: '請提供有效的打卡記錄數據' });
+      }
+
+      if (clock_records.length === 0) {
+        return res.status(400).json({ message: '打卡記錄數組不能為空' });
+      }
+
+      const userId = req.user.id;
+      const updates = [];
+      const errors = [];
+
+      for (const record of clock_records) {
+        if (!record.id) {
+          errors.push(`記錄缺少 id: ${JSON.stringify(record)}`);
+          continue;
+        }
+
+        if (!record.clock_time) {
+          errors.push(`記錄缺少 clock_time: id=${record.id}`);
+          continue;
+        }
+
+        // 驗證時間格式 (HH:mm:ss)
+        const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (!timeRegex.test(record.clock_time)) {
+          errors.push(`時間格式不正確: id=${record.id}, clock_time=${record.clock_time}，應為 HH:mm:ss 格式`);
+          continue;
+        }
+
+        try {
+          // 更新單個打卡記錄的時間
+          const updated = await knex('clock_records')
+            .where('id', record.id)
+            .update({
+              clock_time: record.clock_time,
+              updated_by_id: userId,
+              updated_at: knex.fn.now()
+            });
+
+          if (updated > 0) {
+            updates.push({
+              id: record.id,
+              clock_time: record.clock_time
+            });
+          } else {
+            errors.push(`記錄不存在或更新失敗: id=${record.id}`);
+          }
+        } catch (error) {
+          console.error(`Error updating record ${record.id}:`, error);
+          errors.push(`更新記錄失敗: id=${record.id}, error=${error.message}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        console.warn('Update clock records time errors:', errors);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ 
+          message: '沒有成功更新任何記錄',
+          errors: errors.length > 0 ? errors : undefined
+        });
+      }
+
+      res.json({ 
+        message: '打卡記錄時間更新成功',
+        updated_count: updates.length,
+        updates,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error('Update clock records time error:', error);
+      res.status(500).json({ message: '更新打卡記錄時間失敗', error: error.message });
     }
   }
 }

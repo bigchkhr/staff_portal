@@ -82,6 +82,7 @@ const Attendance = ({ noLayout = false }) => {
   const [editTimeOffEnd, setEditTimeOffEnd] = useState(null);
   const [editRemarks, setEditRemarks] = useState('');
   const [editClockRecords, setEditClockRecords] = useState([]); // 存儲所有打卡記錄，用於選擇有效性
+  const [editClockTimes, setEditClockTimes] = useState([]); // 存儲可編輯的打卡時間列表 [{id, time, is_valid}, ...]
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -199,11 +200,16 @@ const Attendance = ({ noLayout = false }) => {
     console.log('Opening edit dialog, clock_records:', clockRecords);
     console.log('clock_records length:', clockRecords.length);
     
-    // 顯示所有記錄，保留它們當前的 is_valid 狀態
+    // 顯示所有記錄，保留它們當前的 is_valid 狀態，並添加可編輯的時間字段
     setEditClockRecords(clockRecords.map(record => ({
       ...record,
-      is_valid: record.is_valid === true // 保留當前的有效性狀態
+      is_valid: record.is_valid === true, // 保留當前的有效性狀態
+      editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '' // 可編輯的時間字符串
     })));
+    
+    // 不再需要單獨的 editClockTimes，因為時間編輯直接在 editClockRecords 中
+    setEditClockTimes([]);
+    
     setEditDialogOpen(true);
   };
 
@@ -230,71 +236,167 @@ const Attendance = ({ noLayout = false }) => {
     setEditClockRecords(updated);
   };
 
+  // 處理新增打卡時間
+  const handleAddClockTime = () => {
+    const newRecord = {
+      id: null, // 新記錄沒有id
+      employee_number: editingAttendance?.employee_number || '',
+      name: editingAttendance?.display_name || '',
+      branch_code: '',
+      attendance_date: editingAttendance?.attendance_date || '',
+      clock_time: '',
+      in_out: 'IN1',
+      is_valid: true,
+      editableTime: '', // 可編輯的時間字符串
+      created_by_id: null,
+      updated_by_id: null
+    };
+    setEditClockRecords([...editClockRecords, newRecord]);
+  };
+
+  // 處理刪除打卡時間
+  const handleRemoveClockTime = (recordId) => {
+    if (recordId !== null && recordId !== undefined) {
+      // 有 id 的記錄，標記為無效而不是刪除
+      const updated = editClockRecords.map(record => 
+        record.id === recordId ? { ...record, is_valid: false } : record
+      );
+      setEditClockRecords(updated);
+    } else {
+      // 沒有 id 的新記錄，直接從數組中移除
+      // 需要找到第一個 id 為 null 的記錄並移除
+      let found = false;
+      const updated = editClockRecords.filter(record => {
+        if (!found && record.id === null) {
+          found = true;
+          return false; // 移除第一個 id 為 null 的記錄
+        }
+        return true;
+      });
+      setEditClockRecords(updated);
+    }
+  };
+
+  // 處理更新打卡時間
+  const handleUpdateClockTime = (recordId, newTime) => {
+    const updated = editClockRecords.map(record => {
+      if (recordId !== null && record.id === recordId) {
+        // 有 id 的記錄
+        return { ...record, editableTime: newTime };
+      } else if (recordId === null && record.id === null) {
+        // 新記錄（沒有 id）
+        return { ...record, editableTime: newTime };
+      }
+      return record;
+    });
+    setEditClockRecords(updated);
+  };
+
   const handleSaveAttendance = async () => {
     if (!editingAttendance) return;
 
     try {
-      // 如果有打卡記錄，更新它們的有效性
-      // 使用 editClockRecords 中的所有記錄（因為現在顯示所有記錄）
-      if (editClockRecords && editClockRecords.length > 0) {
-        // 構建更新列表：只包含有 id 的記錄
-        const updates = editClockRecords
-          .filter(record => record.id) // 只包含有 id 的記錄
-          .map(record => ({
+      if (!editClockRecords || editClockRecords.length === 0) {
+        // 沒有打卡記錄，直接返回
+        setEditDialogOpen(false);
+        setEditingAttendance(null);
+        setEditRemarks('');
+        setEditClockRecords([]);
+        await fetchAttendanceComparison();
+        return;
+      }
+
+      // 確保有必要的參數
+      if (!editingAttendance.attendance_date) {
+        throw new Error('缺少必要的參數：attendance_date');
+      }
+      
+      if (!editingAttendance.employee_number && !editingAttendance.user_id) {
+        throw new Error('缺少必要的參數：employee_number 或 user_id');
+      }
+
+      // 分離需要處理的記錄
+      const validityUpdates = []; // 更新有效性的記錄
+      const timeUpdates = []; // 更新時間的記錄
+      const creates = []; // 新增的記錄
+
+      for (const record of editClockRecords) {
+        // 處理有效性更新（只針對有 id 的記錄）
+        if (record.id) {
+          // 確保 is_valid 是明確的 boolean 值
+          const isValid = record.is_valid === true || record.is_valid === 'true' || record.is_valid === 1;
+          validityUpdates.push({
             id: record.id,
-            is_valid: record.is_valid === true // 明確轉換為 boolean
-          }));
-        
-        console.log('Saving clock records updates:', updates);
-        
-        if (updates.length > 0) {
-          // 調用 API 更新打卡記錄的有效性
-          await axios.put('/api/attendances/update-clock-records', {
-            clock_records: updates
+            is_valid: isValid === true // 明確轉換為 boolean
           });
+
+          // 處理時間更新（如果有修改）
+          if (record.editableTime && record.editableTime.trim() !== '') {
+            // 驗證時間格式
+            const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+            if (!timeRegex.test(record.editableTime)) {
+              throw new Error(`時間格式不正確: ${record.editableTime}，應為 HH:mm 格式`);
+            }
+
+            const timeStr = record.editableTime + ':00'; // 轉換為 HH:mm:ss 格式
+            const originalTime = record.clock_time ? 
+              (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '';
+            
+            if (originalTime !== record.editableTime) {
+              // 時間有變化，需要更新
+              timeUpdates.push({
+                id: record.id,
+                clock_time: timeStr
+              });
+            }
+          }
+        } else {
+          // 新記錄，需要新增（只新增有效的記錄）
+          if (record.is_valid && record.editableTime && record.editableTime.trim() !== '') {
+            // 驗證時間格式
+            const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+            if (!timeRegex.test(record.editableTime)) {
+              throw new Error(`時間格式不正確: ${record.editableTime}，應為 HH:mm 格式`);
+            }
+
+            const timeStr = record.editableTime + ':00';
+            creates.push({
+              employee_number: editingAttendance.employee_number,
+              user_id: editingAttendance.user_id,
+              department_group_id: selectedGroupId,
+              attendance_date: editingAttendance.attendance_date,
+              clock_time: timeStr
+            });
+          }
         }
       }
 
-      // 只有在有手動輸入的時間或備註時，才更新考勤記錄
-      const hasManualTimeInput = editClockInTime || editClockOutTime || editTimeOffStart || editTimeOffEnd;
-      const hasRemarks = editRemarks && editRemarks.trim() !== '';
-      
-      if (hasManualTimeInput || hasRemarks) {
-        // 確保有必要的參數：優先使用 employee_number，如果沒有則使用 user_id
-        console.log('Saving attendance - editingAttendance:', editingAttendance);
-        console.log('attendance_date:', editingAttendance?.attendance_date);
-        
-        if (!editingAttendance || !editingAttendance.attendance_date) {
-          const errorMsg = editingAttendance 
-            ? '缺少必要的參數：attendance_date' 
-            : '編輯數據不存在，請重新打開編輯對話框';
-          throw new Error(errorMsg);
-        }
-        
-        if (!editingAttendance.employee_number && !editingAttendance.user_id) {
-          throw new Error('缺少必要的參數：employee_number 或 user_id');
-        }
+      // 執行更新和新增操作
+      if (validityUpdates.length > 0) {
+        await axios.put('/api/attendances/update-clock-records', {
+          clock_records: validityUpdates
+        });
+      }
 
-        const attendanceData = {
-          employee_number: editingAttendance.employee_number, // 優先使用 employee_number
-          user_id: editingAttendance.user_id, // 如果沒有 employee_number，使用 user_id
-          department_group_id: selectedGroupId,
-          attendance_date: editingAttendance.attendance_date, // 確保使用正確的日期格式
-          clock_in_time: editClockInTime ? editClockInTime.format('HH:mm:ss') : null,
-          clock_out_time: editClockOutTime ? editClockOutTime.format('HH:mm:ss') : null,
-          time_off_start: editTimeOffStart ? editTimeOffStart.format('HH:mm:ss') : null,
-          time_off_end: editTimeOffEnd ? editTimeOffEnd.format('HH:mm:ss') : null,
-          remarks: editRemarks || null
-        };
-        
-        console.log('Sending attendanceData:', attendanceData);
+      if (timeUpdates.length > 0) {
+        await axios.put('/api/attendances/update-clock-records-time', {
+          clock_records: timeUpdates
+        });
+      }
 
-        if (editingAttendance.attendance?.id) {
-          // 更新現有記錄
-          await axios.put(`/api/attendances/${editingAttendance.attendance.id}`, attendanceData);
-        } else if (hasManualTimeInput) {
-          // 建立新記錄（只有在有時間輸入時）
-          await axios.post('/api/attendances', attendanceData);
+      if (creates.length > 0) {
+        for (const createData of creates) {
+          await axios.post('/api/attendances', {
+            employee_number: createData.employee_number,
+            user_id: createData.user_id,
+            department_group_id: createData.department_group_id,
+            attendance_date: createData.attendance_date,
+            clock_in_time: createData.clock_time,
+            clock_out_time: null,
+            time_off_start: null,
+            time_off_end: null,
+            remarks: null
+          });
         }
       }
 
@@ -319,7 +421,7 @@ const Attendance = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'error',
         title: t('attendance.error'),
-        text: error.response?.data?.message || t('attendance.updateFailed')
+        text: error.response?.data?.message || error.message || t('attendance.updateFailed')
       });
     }
   };
@@ -925,6 +1027,7 @@ const Attendance = ({ noLayout = false }) => {
             setEditTimeOffEnd(null);
             setEditRemarks('');
             setEditClockRecords([]);
+            setEditClockTimes([]);
           }}
           maxWidth="sm"
           fullWidth
@@ -972,19 +1075,33 @@ const Attendance = ({ noLayout = false }) => {
                     <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                       {t('attendance.clockRecords') || '打卡記錄'} - {t('attendance.selectValidRecords') || '選擇有效記錄'}
                     </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={handleAutoSelectEarliest}
-                      sx={{
-                        textTransform: 'none',
-                        fontSize: '0.75rem'
-                      }}
-                    >
-                      {t('attendance.autoSelectEarliest') || '自動選取最早4個'}
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleAddClockTime}
+                        startIcon={<ScheduleIcon />}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        {t('attendance.addClockTime') || '新增時間'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleAutoSelectEarliest}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        {t('attendance.autoSelectEarliest') || '自動選取最早4個'}
+                      </Button>
+                    </Box>
                   </Box>
-                  <Box sx={{ maxHeight: 300, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
+                  <Box sx={{ maxHeight: 400, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
                     <List dense>
                       {editClockRecords
                         .sort((a, b) => {
@@ -996,42 +1113,80 @@ const Attendance = ({ noLayout = false }) => {
                           const timeStr = record.clock_time ? 
                             (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
                             '--:--';
-                          const isValid = record.is_valid || false;
+                          const isValid = record.is_valid === true; // 明確檢查是否為 true
+                          const editableTime = record.editableTime !== undefined ? record.editableTime : timeStr;
                           
                           return (
                             <ListItem 
-                              key={record.id || idx}
+                              key={record.id || `new-${idx}`}
                               sx={{
                                 bgcolor: isValid ? 'action.selected' : 'transparent',
                                 borderRadius: 1,
                                 mb: 0.5,
+                                p: 1,
                                 '&:hover': {
                                   bgcolor: 'action.hover'
                                 }
                               }}
                             >
-                              <FormControlLabel
-                                control={
-                                  <Checkbox
-                                    checked={isValid}
-                                    onChange={(e) => {
-                                      const updated = [...editClockRecords];
-                                      // 找到對應的記錄並更新
-                                      const recordIndex = updated.findIndex(r => r.id === record.id);
-                                      if (recordIndex >= 0) {
-                                        updated[recordIndex].is_valid = e.target.checked;
-                                        setEditClockRecords(updated);
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                                <Checkbox
+                                  checked={isValid}
+                                  onChange={(e) => {
+                                    const updated = editClockRecords.map(r => {
+                                      // 使用 id 來匹配記錄，如果沒有 id 則使用索引
+                                      if (record.id) {
+                                        if (r.id === record.id) {
+                                          return { ...r, is_valid: e.target.checked === true };
+                                        }
+                                      } else {
+                                        // 對於新記錄，使用引用比較
+                                        if (r === record) {
+                                          return { ...r, is_valid: e.target.checked === true };
+                                        }
                                       }
-                                    }}
-                                    size="small"
-                                  />
-                                }
-                                label={
-                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {timeStr}
-                                  </Typography>
-                                }
-                              />
+                                      return r;
+                                    });
+                                    setEditClockRecords(updated);
+                                  }}
+                                  size="small"
+                                />
+                                <TextField
+                                  label={t('attendance.clockTime') || '打卡時間'}
+                                  value={editableTime}
+                                  onChange={(e) => {
+                                    const timeValue = e.target.value;
+                                    // 只允許輸入 HH:mm 格式
+                                    if (timeValue === '' || /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(timeValue) || /^([0-1][0-9]|2[0-3]):[0-5]?$/.test(timeValue)) {
+                                      handleUpdateClockTime(record.id || null, timeValue);
+                                    }
+                                  }}
+                                  placeholder="HH:mm"
+                                  size="small"
+                                  sx={{ flex: 1, maxWidth: 150 }}
+                                  inputProps={{
+                                    maxLength: 5,
+                                    pattern: '^([0-1][0-9]|2[0-3]):[0-5][0-9]$'
+                                  }}
+                                />
+                                <IconButton
+                                  color="error"
+                                  size="small"
+                                  onClick={() => {
+                                    if (record.id) {
+                                      // 有 id 的記錄，標記為無效
+                                      handleRemoveClockTime(record.id);
+                                    } else {
+                                      // 沒有 id 的新記錄，直接刪除
+                                      const updated = editClockRecords.filter(r => r !== record);
+                                      setEditClockRecords(updated);
+                                    }
+                                  }}
+                                  sx={{ flexShrink: 0 }}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
                             </ListItem>
                           );
                         })}
@@ -1056,7 +1211,7 @@ const Attendance = ({ noLayout = false }) => {
                 </Box>
               )}
               
-              <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid container spacing={2} sx={{ mt: 2 }}>
                 <Grid item xs={12}>
                   <TextField
                     label={t('attendance.remarks')}
@@ -1081,6 +1236,7 @@ const Attendance = ({ noLayout = false }) => {
                 setEditTimeOffEnd(null);
                 setEditRemarks('');
                 setEditClockRecords([]);
+                setEditClockTimes([]);
               }}
               sx={{
                 borderRadius: 2,
