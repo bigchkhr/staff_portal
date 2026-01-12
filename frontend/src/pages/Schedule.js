@@ -449,12 +449,49 @@ const Schedule = ({ noLayout = false }) => {
     setEditDialogOpen(true);
   };
 
+  // 計算結束時間（開始時間 + 9小時）
+  const calculateEndTime = (startTime) => {
+    if (!startTime || startTime.trim() === '') {
+      return '';
+    }
+    
+    // 解析開始時間
+    let hours, minutes;
+    
+    // 處理4位數字格式（如2330）
+    if (/^\d{4}$/.test(startTime)) {
+      hours = parseInt(startTime.substring(0, 2), 10);
+      minutes = parseInt(startTime.substring(2, 4), 10);
+    } else {
+      // 處理HH:mm格式
+      const parts = startTime.split(':');
+      if (parts.length !== 2) {
+        return '';
+      }
+      hours = parseInt(parts[0], 10);
+      minutes = parseInt(parts[1], 10);
+    }
+    
+    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 32 || minutes < 0 || minutes > 59) {
+      return '';
+    }
+    
+    // 加9小時
+    const totalMinutes = hours * 60 + minutes + 9 * 60;
+    const endHours = Math.floor(totalMinutes / 60);
+    const endMinutes = totalMinutes % 60;
+    
+    // 格式化為HH:mm（支持0-32小時格式）
+    return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+  };
+
   // 處理開始時間輸入（支援0-32小時格式，支援4位數字輸入如2330）
   const handleStartTimeChange = (e) => {
     const value = e.target.value;
     // 允許輸入格式：HH:mm 或 H:mm，或4位數字（如2330），小時範圍0-32
     if (value === '') {
       setEditStartTime('');
+      setEditEndTime(''); // 清空開始時間時也清空結束時間
       return;
     }
     
@@ -463,6 +500,9 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
     
+    let finalStartTime = '';
+    let shouldAutoCalculate = false;
+    
     // 如果輸入的是4位數字（如2330），自動轉換為23:30格式
     if (/^\d{4}$/.test(value)) {
       const hours = parseInt(value.substring(0, 2), 10);
@@ -470,50 +510,64 @@ const Schedule = ({ noLayout = false }) => {
       
       // 驗證範圍
       if (hours >= 0 && hours <= 32 && minutes >= 0 && minutes <= 59) {
-        setEditStartTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
-        return;
+        finalStartTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        shouldAutoCalculate = true;
       }
-    }
-    
-    // 限制長度（最多5個字符：HH:mm）
-    if (value.length > 5) {
-      return;
-    }
-    
-    // 驗證格式：允許部分輸入，但必須符合 HH:mm 或 H:mm 格式
-    const parts = value.split(':');
-    
-    if (parts.length === 1) {
-      // 只有小時部分
-      const hours = parseInt(parts[0], 10);
-      if (isNaN(hours) || hours < 0 || hours > 32) {
-        return; // 小時超出範圍
-      }
-      setEditStartTime(value);
-    } else if (parts.length === 2) {
-      // 有小時和分鐘
-      const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
-      const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
+    } else if (value.length <= 5) {
+      // 限制長度（最多5個字符：HH:mm）
+      const parts = value.split(':');
       
-      // 驗證小時範圍（0-32）
-      if (hours !== -1 && (hours < 0 || hours > 32)) {
-        return;
-      }
-      
-      // 驗證分鐘範圍（0-59）或允許部分輸入
-      if (minutes !== -1 && (minutes < 0 || minutes > 59)) {
-        return;
-      }
-      
-      // 如果分鐘部分超過2位數，截斷
-      if (parts[1].length > 2) {
-        setEditStartTime(`${parts[0]}:${parts[1].substring(0, 2)}`);
+      if (parts.length === 1) {
+        // 只有小時部分
+        const hours = parseInt(parts[0], 10);
+        if (!isNaN(hours) && hours >= 0 && hours <= 32) {
+          setEditStartTime(value);
+          return; // 還未輸入完整，不自動計算
+        }
+      } else if (parts.length === 2) {
+        // 有小時和分鐘
+        const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
+        const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
+        
+        // 驗證小時範圍（0-32）
+        if (hours !== -1 && (hours < 0 || hours > 32)) {
+          return;
+        }
+        
+        // 驗證分鐘範圍（0-59）或允許部分輸入
+        if (minutes !== -1 && (minutes < 0 || minutes > 59)) {
+          return;
+        }
+        
+        // 如果分鐘部分超過2位數，截斷
+        if (parts[1].length > 2) {
+          finalStartTime = `${parts[0]}:${parts[1].substring(0, 2)}`;
+          shouldAutoCalculate = true;
+        } else {
+          // 檢查是否已輸入完整的時間格式（HH:mm）
+          if (hours !== -1 && minutes !== -1 && parts[0].length === 2 && parts[1].length === 2) {
+            finalStartTime = value;
+            shouldAutoCalculate = true;
+          } else {
+            setEditStartTime(value);
+            return; // 還未輸入完整，不自動計算
+          }
+        }
       } else {
-        setEditStartTime(value);
+        // 多個冒號，不允許
+        return;
       }
-    } else {
-      // 多個冒號，不允許
-      return;
+    }
+    
+    if (finalStartTime) {
+      setEditStartTime(finalStartTime);
+      // 自動計算結束時間（開始時間 + 9小時）
+      if (shouldAutoCalculate) {
+        const calculatedEndTime = calculateEndTime(finalStartTime);
+        if (calculatedEndTime) {
+          setEditEndTime(calculatedEndTime);
+        }
+      }
     }
   };
 
@@ -1021,6 +1075,7 @@ const Schedule = ({ noLayout = false }) => {
     const value = e.target.value;
     if (value === '') {
       setBatchStartTime('');
+      setBatchEndTime(''); // 清空開始時間時也清空結束時間
       return;
     }
     
@@ -1028,47 +1083,63 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
     
+    let finalStartTime = '';
+    let shouldAutoCalculate = false;
+    
     if (/^\d{4}$/.test(value)) {
       const hours = parseInt(value.substring(0, 2), 10);
       const minutes = parseInt(value.substring(2, 4), 10);
       
       if (hours >= 0 && hours <= 32 && minutes >= 0 && minutes <= 59) {
-        setBatchStartTime(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
-        return;
+        finalStartTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        shouldAutoCalculate = true;
+      }
+    } else if (value.length <= 5) {
+      const parts = value.split(':');
+      
+      if (parts.length === 1) {
+        const hours = parseInt(parts[0], 10);
+        if (!isNaN(hours) && hours >= 0 && hours <= 32) {
+          setBatchStartTime(value);
+          return; // 還未輸入完整，不自動計算
+        }
+      } else if (parts.length === 2) {
+        const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
+        const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
+        
+        if (hours !== -1 && (hours < 0 || hours > 32)) {
+          return;
+        }
+        
+        if (minutes !== -1 && (minutes < 0 || minutes > 59)) {
+          return;
+        }
+        
+        if (parts[1].length > 2) {
+          finalStartTime = `${parts[0]}:${parts[1].substring(0, 2)}`;
+          shouldAutoCalculate = true;
+        } else {
+          // 檢查是否已輸入完整的時間格式（HH:mm）
+          if (hours !== -1 && minutes !== -1 && parts[0].length === 2 && parts[1].length === 2) {
+            finalStartTime = value;
+            shouldAutoCalculate = true;
+          } else {
+            setBatchStartTime(value);
+            return; // 還未輸入完整，不自動計算
+          }
+        }
       }
     }
     
-    if (value.length > 5) {
-      return;
-    }
-    
-    const parts = value.split(':');
-    
-    if (parts.length === 1) {
-      const hours = parseInt(parts[0], 10);
-      if (isNaN(hours) || hours < 0 || hours > 32) {
-        return;
+    if (finalStartTime) {
+      setBatchStartTime(finalStartTime);
+      // 自動計算結束時間（開始時間 + 9小時）
+      if (shouldAutoCalculate) {
+        const calculatedEndTime = calculateEndTime(finalStartTime);
+        if (calculatedEndTime) {
+          setBatchEndTime(calculatedEndTime);
+        }
       }
-      setBatchStartTime(value);
-    } else if (parts.length === 2) {
-      const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
-      const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
-      
-      if (hours !== -1 && (hours < 0 || hours > 32)) {
-        return;
-      }
-      
-      if (minutes !== -1 && (minutes < 0 || minutes > 59)) {
-        return;
-      }
-      
-      if (parts[1].length > 2) {
-        setBatchStartTime(`${parts[0]}:${parts[1].substring(0, 2)}`);
-      } else {
-        setBatchStartTime(value);
-      }
-    } else {
-      return;
     }
   };
 

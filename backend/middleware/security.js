@@ -101,6 +101,54 @@ const apiLimiter = rateLimit({
   }
 });
 
+// 聊天室 API 的 Rate Limiting（允許更高的請求頻率，因為需要輪詢）
+const chatLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 分鐘
+  max: 10, // 每分鐘 10 個請求
+  message: { message: 'Too many chat requests, please try again later. 聊天請求過於頻繁，請稍後再試' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // 基於用戶 ID 進行限制
+  keyGenerator: (req) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const decoded = jwt.decode(token);
+        if (decoded && decoded.userId) {
+          return `chat_user_${decoded.userId}`;
+        }
+      }
+      return req.ip || req.connection.remoteAddress || 'unknown';
+    } catch (error) {
+      return req.ip || req.connection.remoteAddress || 'unknown';
+    }
+  },
+  handler: (req, res) => {
+    res.status(429).json({ 
+      message: 'Too many chat requests, please try again later. 聊天請求過於頻繁，請稍後再試',
+      error: 'TOO_MANY_CHAT_REQUESTS'
+    });
+  },
+  // 跳過 HR Group 成員的請求
+  skip: async (req) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (!token) {
+        return false;
+      }
+      const decoded = jwt.decode(token);
+      if (!decoded || !decoded.userId) {
+        return false;
+      }
+      const isHRMember = await checkHRMembership(decoded.userId);
+      return isHRMember;
+    } catch (error) {
+      console.warn('[chatLimiter] Error checking HR membership:', error.message);
+      return false;
+    }
+  }
+});
+
 // 登入 API 的嚴格 Rate Limiting（防暴力破解）
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
@@ -202,6 +250,7 @@ const securityLogger = (req, res, next) => {
 
 module.exports = {
   apiLimiter,
+  chatLimiter,
   loginLimiter,
   ipWhitelist,
   requestSizeLimit,

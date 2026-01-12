@@ -46,12 +46,13 @@ import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
 import ShiftManagement from './pages/ShiftManagement';
+import ChatRoom from './pages/ChatRoom';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.13:1689';
-axios.defaults.baseURL = 'http://192.168.3.4:1689';
+axios.defaults.baseURL = 'http://172.31.132.13:1689';
+// axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
   palette: {
@@ -110,6 +111,7 @@ function App() {
             <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
+            <Route path="/chat" element={<PrivateRoute><ChatRoom /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

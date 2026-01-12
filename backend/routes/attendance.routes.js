@@ -27,6 +27,9 @@ router.put('/update-clock-records', attendanceController.updateClockRecordsValid
 // 更新打卡記錄的時間（必須放在 /:id 之前，否則會被當作 id）
 router.put('/update-clock-records-time', attendanceController.updateClockRecordsTime.bind(attendanceController));
 
+// 更新考勤備註（必須放在 /:id 之前，否則會被當作 id）
+router.put('/update-remarks', attendanceController.updateAttendanceRemarks.bind(attendanceController));
+
 // 更新考勤記錄
 router.put('/:id', attendanceController.updateAttendance.bind(attendanceController));
 

@@ -544,6 +544,11 @@ class AttendanceController {
               const clockOutRecord = validRecords.length > 3 ? validRecords[3] : 
                 (allRecordsSorted.length > 3 ? allRecordsSorted[3] : null);
               
+              // 獲取備註：優先從第一條有效記錄中獲取，如果沒有則從第一條記錄中獲取
+              const remarksRecord = validRecords.length > 0 ? validRecords[0] : 
+                (allRecordsSorted.length > 0 ? allRecordsSorted[0] : null);
+              const remarks = remarksRecord?.remarks || null;
+              
               return {
                 clock_in_time: clockInRecord?.clock_time || null,
                 clock_out_time: clockOutRecord?.clock_time || null,
@@ -551,7 +556,7 @@ class AttendanceController {
                 time_off_end: timeOffEndRecord?.clock_time || null,
                 status: null, // 可以根據需要計算狀態
                 late_minutes: null, // 可以根據需要計算遲到分鐘數
-                remarks: null
+                remarks: remarks
               };
             })(),
             clock_records: (() => {
@@ -861,6 +866,88 @@ class AttendanceController {
     } catch (error) {
       console.error('Update clock records time error:', error);
       res.status(500).json({ message: '更新打卡記錄時間失敗', error: error.message });
+    }
+  }
+
+  // 更新考勤備註
+  async updateAttendanceRemarks(req, res) {
+    try {
+      const userId = req.user.id;
+      const {
+        user_id,
+        employee_number,
+        attendance_date,
+        remarks
+      } = req.body;
+
+      // 需要提供 attendance_date，以及 user_id 或 employee_number
+      if (!attendance_date) {
+        return res.status(400).json({ message: '請提供 attendance_date' });
+      }
+
+      let user;
+      if (employee_number) {
+        user = await User.findByEmployeeNumber(employee_number);
+        if (!user) {
+          return res.status(400).json({ message: `找不到員工編號為 ${employee_number} 的用戶` });
+        }
+      } else if (user_id) {
+        user = await User.findById(user_id);
+        if (!user) {
+          return res.status(400).json({ message: '找不到指定的用戶' });
+        }
+      } else {
+        return res.status(400).json({ message: '請提供 user_id 或 employee_number' });
+      }
+
+      if (!user.employee_number) {
+        return res.status(400).json({ message: '用戶沒有員工編號，無法更新備註' });
+      }
+
+      // 處理 attendance_date：確保是 YYYY-MM-DD 格式
+      let finalAttendanceDate = attendance_date;
+      if (finalAttendanceDate instanceof Date) {
+        const year = finalAttendanceDate.getFullYear();
+        const month = String(finalAttendanceDate.getMonth() + 1).padStart(2, '0');
+        const day = String(finalAttendanceDate.getDate()).padStart(2, '0');
+        finalAttendanceDate = `${year}-${month}-${day}`;
+      } else if (typeof finalAttendanceDate === 'string') {
+        finalAttendanceDate = finalAttendanceDate.split('T')[0].split(' ')[0];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(finalAttendanceDate)) {
+          return res.status(400).json({ message: `attendance_date 格式不正確: ${finalAttendanceDate}，應為 YYYY-MM-DD` });
+        }
+      }
+
+      // 查找該日期和員工的所有打卡記錄
+      const records = await knex('clock_records')
+        .where('employee_number', user.employee_number)
+        .where('attendance_date', finalAttendanceDate)
+        .orderBy('clock_time', 'asc');
+
+      if (records.length === 0) {
+        return res.status(404).json({ message: '找不到該日期的打卡記錄' });
+      }
+
+      // 優先更新第一條有效記錄的備註，如果沒有有效記錄則更新第一條記錄
+      const validRecord = records.find(r => r.is_valid === true);
+      const targetRecord = validRecord || records[0];
+
+      // 更新備註
+      await knex('clock_records')
+        .where('id', targetRecord.id)
+        .update({
+          remarks: remarks || null,
+          updated_by_id: userId,
+          updated_at: knex.fn.now()
+        });
+
+      res.json({ 
+        message: '備註更新成功',
+        record_id: targetRecord.id
+      });
+    } catch (error) {
+      console.error('Update attendance remarks error:', error);
+      res.status(500).json({ message: '更新備註失敗', error: error.message });
     }
   }
 }

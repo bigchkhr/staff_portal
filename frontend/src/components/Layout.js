@@ -45,6 +45,7 @@ import {
   Build as BuildIcon,
   CalendarToday as CalendarTodayIcon,
   AccessTime as AccessTimeIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -66,11 +67,20 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     fetchPendingCount();
-    // 設置定時刷新，每30秒更新一次
-    const interval = setInterval(fetchPendingCount, 30000);
+    fetchUnreadChatCount();
+    // 設置定時刷新，減少更新頻率
+    const interval = setInterval(() => {
+      fetchPendingCount();
+      // 只在不在訊息傳遞頁面時更新未讀數量（避免重複請求）
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/chat') {
+        fetchUnreadChatCount();
+      }
+    }, 60000); // 改為每60秒更新一次
     return () => clearInterval(interval);
   }, []);
 
@@ -78,6 +88,13 @@ const Layout = ({ children }) => {
   useEffect(() => {
     if (location.pathname.startsWith('/approval') || location.pathname === '/my-approvals') {
       fetchPendingCount();
+    }
+  }, [location.pathname]);
+
+  // 當路由變化到訊息傳遞頁面時，刷新未讀訊息數量
+  useEffect(() => {
+    if (location.pathname === '/chat') {
+      fetchUnreadChatCount();
     }
   }, [location.pathname]);
 
@@ -92,9 +109,30 @@ const Layout = ({ children }) => {
     }
   };
 
+  const fetchUnreadChatCount = async () => {
+    try {
+      const response = await axios.get('/api/chat/unread-count');
+      const count = response.data.unreadCount || 0;
+      setUnreadChatCount(count);
+    } catch (error) {
+      console.error('獲取未讀訊息數量錯誤:', error);
+      setUnreadChatCount(0);
+    }
+  };
+
   const menuItems = [
     { key: 'dashboard', icon: <DashboardIcon />, path: '/', show: true },
     { key: 'announcements', icon: <NotificationsIcon />, path: '/announcements', show: true },
+    { 
+      key: 'chatRoom', 
+      icon: (
+        <Badge badgeContent={unreadChatCount} color="error" max={99}>
+          <ChatIcon />
+        </Badge>
+      ), 
+      path: '/chat', 
+      show: true 
+    },
     { key: 'myApplications', icon: <AssignmentIcon />, path: '/my-applications', show: true },
     { 
       key: 'myApprovals', 

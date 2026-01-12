@@ -240,6 +240,7 @@ const Attendance = ({ noLayout = false }) => {
   const handleAddClockTime = () => {
     const newRecord = {
       id: null, // 新記錄沒有id
+      tempId: `temp-${Date.now()}-${Math.random()}`, // 臨時唯一標識符
       employee_number: editingAttendance?.employee_number || '',
       name: editingAttendance?.display_name || '',
       branch_code: '',
@@ -255,36 +256,28 @@ const Attendance = ({ noLayout = false }) => {
   };
 
   // 處理刪除打卡時間
-  const handleRemoveClockTime = (recordId) => {
+  const handleRemoveClockTime = (recordId, tempId) => {
     if (recordId !== null && recordId !== undefined) {
       // 有 id 的記錄，標記為無效而不是刪除
       const updated = editClockRecords.map(record => 
         record.id === recordId ? { ...record, is_valid: false } : record
       );
       setEditClockRecords(updated);
-    } else {
-      // 沒有 id 的新記錄，直接從數組中移除
-      // 需要找到第一個 id 為 null 的記錄並移除
-      let found = false;
-      const updated = editClockRecords.filter(record => {
-        if (!found && record.id === null) {
-          found = true;
-          return false; // 移除第一個 id 為 null 的記錄
-        }
-        return true;
-      });
+    } else if (tempId) {
+      // 沒有 id 的新記錄，使用 tempId 來移除
+      const updated = editClockRecords.filter(record => record.tempId !== tempId);
       setEditClockRecords(updated);
     }
   };
 
   // 處理更新打卡時間
-  const handleUpdateClockTime = (recordId, newTime) => {
+  const handleUpdateClockTime = (recordId, tempId, newTime) => {
     const updated = editClockRecords.map(record => {
       if (recordId !== null && record.id === recordId) {
         // 有 id 的記錄
         return { ...record, editableTime: newTime };
-      } else if (recordId === null && record.id === null) {
-        // 新記錄（沒有 id）
+      } else if (tempId && record.tempId === tempId) {
+        // 新記錄（使用 tempId 匹配）
         return { ...record, editableTime: newTime };
       }
       return record;
@@ -400,6 +393,22 @@ const Attendance = ({ noLayout = false }) => {
         }
       }
 
+      // 更新備註（如果有修改）
+      if (editRemarks !== undefined && editRemarks !== null) {
+        const originalRemarks = editingAttendance?.attendance?.remarks || null;
+        const remarksToSave = editRemarks.trim() === '' ? null : editRemarks.trim();
+        
+        // 只有當備註有變化時才更新
+        if (remarksToSave !== originalRemarks) {
+          await axios.put('/api/attendances/update-remarks', {
+            user_id: editingAttendance.user_id,
+            employee_number: editingAttendance.employee_number,
+            attendance_date: editingAttendance.attendance_date,
+            remarks: remarksToSave
+          });
+        }
+      }
+
       setEditDialogOpen(false);
       setEditingAttendance(null);
       setEditClockInTime(null);
@@ -423,6 +432,113 @@ const Attendance = ({ noLayout = false }) => {
         title: t('attendance.error'),
         text: error.response?.data?.message || error.message || t('attendance.updateFailed')
       });
+    }
+  };
+
+  // 將時間字符串轉換為分鐘數（處理跨天情況）
+  const timeToMinutes = (timeStr, isEndTime = false, startHour = null) => {
+    if (!timeStr) return null;
+    const time = timeStr.substring(0, 5); // HH:mm
+    const [hour, minute] = time.split(':').map(Number);
+    let totalMinutes = hour * 60 + minute;
+    
+    // 如果小時數 >= 24，表示跨天（如26:00表示第二天凌晨2:00）
+    if (hour >= 24) {
+      totalMinutes = (hour - 24) * 60 + minute + 24 * 60;
+    }
+    // 如果是結束時間，且小時數小於開始時間的小時數，表示跨天
+    else if (isEndTime && startHour !== null && hour < startHour) {
+      totalMinutes = totalMinutes + 24 * 60;
+    }
+    
+    return totalMinutes;
+  };
+
+  // 自動對比考勤並生成備註
+  const handleAutoCompare = () => {
+    if (!editingAttendance) return;
+    
+    const issues = [];
+    
+    // 獲取排班時間
+    const schedule = editingAttendance.schedule;
+    const scheduleStartTime = schedule?.start_time;
+    const scheduleEndTime = schedule?.end_time;
+    
+    // 獲取有效的打卡記錄
+    const validRecords = editClockRecords.filter(r => r.is_valid === true);
+    const sortedRecords = [...validRecords].sort((a, b) => {
+      const timeA = a.editableTime || (a.clock_time ? (typeof a.clock_time === 'string' ? a.clock_time.substring(0, 5) : a.clock_time) : '');
+      const timeB = b.editableTime || (b.clock_time ? (typeof b.clock_time === 'string' ? b.clock_time.substring(0, 5) : b.clock_time) : '');
+      return timeA.localeCompare(timeB);
+    });
+    
+    // 獲取實際打卡時間
+    const clockInTime = sortedRecords.length > 0 ? (sortedRecords[0].editableTime || (sortedRecords[0].clock_time ? (typeof sortedRecords[0].clock_time === 'string' ? sortedRecords[0].clock_time.substring(0, 5) : sortedRecords[0].clock_time) : '')) : null;
+    // 下班時間取最後一條有效記錄
+    const clockOutTime = sortedRecords.length > 0 ? (sortedRecords[sortedRecords.length - 1].editableTime || (sortedRecords[sortedRecords.length - 1].clock_time ? (typeof sortedRecords[sortedRecords.length - 1].clock_time === 'string' ? sortedRecords[sortedRecords.length - 1].clock_time.substring(0, 5) : sortedRecords[sortedRecords.length - 1].clock_time) : '')) : null;
+    
+    // 檢查缺勤
+    if (sortedRecords.length === 0) {
+      issues.push('缺勤');
+    } else {
+      // 檢查遲到：第一個有效打卡時間大於排班的開始時間
+      if (scheduleStartTime && clockInTime) {
+        const scheduleStart = scheduleStartTime.substring(0, 5); // HH:mm
+        const [scheduleHour, scheduleMinute] = scheduleStart.split(':').map(Number);
+        const [clockInHour, clockInMinute] = clockInTime.split(':').map(Number);
+        
+        // 處理跨天的情況（小時可能超過24，如26:00表示第二天凌晨2:00）
+        let scheduleTotalMinutes = scheduleHour * 60 + scheduleMinute;
+        if (scheduleHour >= 24) {
+          scheduleTotalMinutes = (scheduleHour - 24) * 60 + scheduleMinute + 24 * 60;
+        }
+        
+        let clockInTotalMinutes = clockInHour * 60 + clockInMinute;
+        if (clockInHour >= 24) {
+          clockInTotalMinutes = (clockInHour - 24) * 60 + clockInMinute + 24 * 60;
+        }
+        // 如果打卡時間的小時數小於排班開始時間的小時數，且打卡時間在12點之前，可能是跨天
+        else if (clockInHour < scheduleHour && clockInHour < 12) {
+          clockInTotalMinutes = clockInTotalMinutes + 24 * 60;
+        }
+        
+        // 第一個有效打卡時間大於排班開始時間，則為遲到
+        if (clockInTotalMinutes > scheduleTotalMinutes) {
+          const lateMinutes = clockInTotalMinutes - scheduleTotalMinutes;
+          issues.push(`遲到${lateMinutes}分鐘`);
+        }
+      }
+      
+      // 檢查早退和超時工作（需要有排班結束時間和實際下班時間）
+      if (scheduleEndTime && clockOutTime) {
+        const scheduleStartHour = scheduleStartTime ? parseInt(scheduleStartTime.substring(0, 2)) : null;
+        const scheduleEndMinutes = timeToMinutes(scheduleEndTime, true, scheduleStartHour);
+        const clockOutMinutes = timeToMinutes(clockOutTime, true, scheduleStartHour);
+        
+        if (scheduleEndMinutes !== null && clockOutMinutes !== null) {
+          if (clockOutMinutes < scheduleEndMinutes) {
+            const earlyMinutes = scheduleEndMinutes - clockOutMinutes;
+            issues.push(`早退${earlyMinutes}分鐘`);
+          } else if (clockOutMinutes > scheduleEndMinutes) {
+            const overtimeMinutes = clockOutMinutes - scheduleEndMinutes;
+            if (overtimeMinutes >= 15) {
+              issues.push(`超時工作${overtimeMinutes}分鐘`);
+            }
+          }
+        }
+      }
+    }
+    
+    // 生成備註
+    if (issues.length > 0) {
+      const remarksText = issues.join('、');
+      setEditRemarks(remarksText);
+    } else {
+      // 如果沒有問題，可以清空備註或顯示正常
+      if (editRemarks.trim() === '') {
+        setEditRemarks('正常');
+      }
     }
   };
 
@@ -897,9 +1013,12 @@ const Attendance = ({ noLayout = false }) => {
                                   <>
                                     {item.schedule && (
                                       <Box sx={{ mb: 0.5 }}>
-                                        <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#1976d2', fontWeight: 600 }}>
-                                          {t('attendance.roster')}: {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
-                                        </Typography>
+                                        {/* 只有在有開始時間或結束時間時才顯示排班時間 */}
+                                        {(item.schedule.start_time || item.schedule.end_time) && (
+                                          <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#1976d2', fontWeight: 600 }}>
+                                            {t('attendance.roster')}: {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
+                                          </Typography>
+                                        )}
                                         {item.schedule.leave_type_name_zh && (
                                           <Chip
                                             label={item.schedule.leave_type_name_zh}
@@ -907,7 +1026,7 @@ const Attendance = ({ noLayout = false }) => {
                                             sx={{ 
                                               fontSize: '0.65rem', 
                                               height: '18px', 
-                                              mt: 0.25,
+                                              mt: (item.schedule.start_time || item.schedule.end_time) ? 0.25 : 0,
                                               bgcolor: '#d4af37',
                                               color: 'white',
                                               '& .MuiChip-label': {
@@ -918,12 +1037,11 @@ const Attendance = ({ noLayout = false }) => {
                                         )}
                                       </Box>
                                     )}
-                                    {/* 顯示打卡時間 - 只顯示有效時間 */}
+                                    {/* 顯示打卡時間 */}
                                     {(() => {
                                       // 確保 item 存在且有 employee_number 匹配
                                       if (!item) return null;
                                       
-                                      // 只顯示有效的 clock_records，按時間排序
                                       const clockRecords = item.clock_records || [];
                                       const validRecords = clockRecords.filter(r => r.is_valid === true);
                                       const sortedRecords = [...validRecords].sort((a, b) => {
@@ -932,59 +1050,66 @@ const Attendance = ({ noLayout = false }) => {
                                         return timeA.localeCompare(timeB);
                                       });
                                       
-                                      if (sortedRecords.length === 0) {
-                                        return null;
+                                      // 如果有打卡記錄但沒有有效記錄，顯示總記錄數
+                                      if (clockRecords.length > 0 && sortedRecords.length === 0) {
+                                        return (
+                                          <Box sx={{ mb: 0.5 }}>
+                                            <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#999', mt: 0.5 }}>
+                                              {t('attendance.totalRecords')}: {clockRecords.length}
+                                            </Typography>
+                                          </Box>
+                                        );
                                       }
                                       
-                                      return (
-                                        <>
-                                          <Box sx={{ mb: 0.5 }}>
-                                            {sortedRecords.map((record, idx) => {
-                                              const timeStr = record.clock_time ? 
-                                                (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
-                                                '--:--';
-                                              
-                                              return (
-                                                <Typography 
-                                                  key={idx}
-                                                  variant="caption" 
-                                                  display="block" 
-                                                  sx={{ 
-                                                    fontSize: '0.7rem', 
-                                                    color: '#1976d2',
-                                                    fontWeight: 600
-                                                  }}
-                                                >
-                                                  {timeStr}
-                                                </Typography>
-                                              );
-                                            })}
-                                            {clockRecords.length > 0 && (
-                                              <Typography variant="caption" display="block" sx={{ fontSize: '0.6rem', color: '#999', mt: 0.5 }}>
-                                                {t('attendance.totalRecords')}: {clockRecords.length}
-                                              </Typography>
+                                      // 如果有有效記錄，只顯示有效記錄
+                                      if (sortedRecords.length > 0) {
+                                        return (
+                                          <>
+                                            <Box sx={{ mb: 0.5 }}>
+                                              {sortedRecords.map((record, idx) => {
+                                                const timeStr = record.clock_time ? 
+                                                  (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
+                                                  '--:--';
+                                                
+                                                return (
+                                                  <Typography 
+                                                    key={idx}
+                                                    variant="caption" 
+                                                    display="block" 
+                                                    sx={{ 
+                                                      fontSize: '0.7rem', 
+                                                      color: '#1976d2',
+                                                      fontWeight: 600
+                                                    }}
+                                                  >
+                                                    {timeStr}
+                                                  </Typography>
+                                                );
+                                              })}
+                                            </Box>
+                                            {item.attendance?.status && (
+                                              <Chip
+                                                label={
+                                                  item.attendance.status === 'late' && item.attendance.late_minutes
+                                                    ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
+                                                    : getStatusText(item.attendance.status)
+                                                }
+                                                size="small"
+                                                color={getStatusColor(item.attendance.status)}
+                                                sx={{ 
+                                                  fontSize: '0.7rem', 
+                                                  height: '22px', 
+                                                  mb: 0.5,
+                                                  fontWeight: 600,
+                                                  boxShadow: 1,
+                                                }}
+                                              />
                                             )}
-                                          </Box>
-                                          {item.attendance?.status && (
-                                            <Chip
-                                              label={
-                                                item.attendance.status === 'late' && item.attendance.late_minutes
-                                                  ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
-                                                  : getStatusText(item.attendance.status)
-                                              }
-                                              size="small"
-                                              color={getStatusColor(item.attendance.status)}
-                                              sx={{ 
-                                                fontSize: '0.7rem', 
-                                                height: '22px', 
-                                                mb: 0.5,
-                                                fontWeight: 600,
-                                                boxShadow: 1,
-                                              }}
-                                            />
-                                          )}
-                                        </>
-                                      );
+                                          </>
+                                        );
+                                      }
+                                      
+                                      return null;
                                     })()}
                                   </>
                                 )}
@@ -1059,7 +1184,7 @@ const Attendance = ({ noLayout = false }) => {
                     <Typography variant="body2" color="text.secondary">
                       {t('attendance.date')}: {editingAttendance.attendance_date}
                     </Typography>
-                    {editingAttendance.schedule && (
+                    {editingAttendance.schedule && (editingAttendance.schedule.start_time || editingAttendance.schedule.end_time) && (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         {t('attendance.roster')}: {editingAttendance.schedule.start_time ? editingAttendance.schedule.start_time.substring(0, 5) : '--:--'} - {editingAttendance.schedule.end_time ? editingAttendance.schedule.end_time.substring(0, 5) : '--:--'}
                       </Typography>
@@ -1118,7 +1243,7 @@ const Attendance = ({ noLayout = false }) => {
                           
                           return (
                             <ListItem 
-                              key={record.id || `new-${idx}`}
+                              key={record.id || record.tempId || `new-${idx}`}
                               sx={{
                                 bgcolor: isValid ? 'action.selected' : 'transparent',
                                 borderRadius: 1,
@@ -1134,14 +1259,14 @@ const Attendance = ({ noLayout = false }) => {
                                   checked={isValid}
                                   onChange={(e) => {
                                     const updated = editClockRecords.map(r => {
-                                      // 使用 id 來匹配記錄，如果沒有 id 則使用索引
+                                      // 使用 id 或 tempId 來匹配記錄
                                       if (record.id) {
                                         if (r.id === record.id) {
                                           return { ...r, is_valid: e.target.checked === true };
                                         }
-                                      } else {
-                                        // 對於新記錄，使用引用比較
-                                        if (r === record) {
+                                      } else if (record.tempId) {
+                                        // 對於新記錄，使用 tempId 匹配
+                                        if (r.tempId === record.tempId) {
                                           return { ...r, is_valid: e.target.checked === true };
                                         }
                                       }
@@ -1156,17 +1281,58 @@ const Attendance = ({ noLayout = false }) => {
                                   value={editableTime}
                                   onChange={(e) => {
                                     const timeValue = e.target.value;
-                                    // 只允許輸入 HH:mm 格式
-                                    if (timeValue === '' || /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(timeValue) || /^([0-1][0-9]|2[0-3]):[0-5]?$/.test(timeValue)) {
-                                      handleUpdateClockTime(record.id || null, timeValue);
+                                    // 允許輸入過程中的中間狀態
+                                    let isValidInput = false;
+                                    
+                                    // 空字符串
+                                    if (timeValue === '') {
+                                      isValidInput = true;
+                                    }
+                                    // 單個數字 0-2（小時第一位）
+                                    else if (/^[0-2]$/.test(timeValue)) {
+                                      isValidInput = true;
+                                    }
+                                    // 兩位數字 00-23（小時）
+                                    else if (/^([0-1][0-9]|2[0-3])$/.test(timeValue)) {
+                                      isValidInput = true;
+                                    }
+                                    // 小時加冒號，如 "12:"
+                                    else if (/^([0-1][0-9]|2[0-3]):$/.test(timeValue)) {
+                                      isValidInput = true;
+                                    }
+                                    // 小時加冒號加單個數字 0-5（分鐘第一位），如 "12:3"
+                                    else if (/^([0-1][0-9]|2[0-3]):[0-5]$/.test(timeValue)) {
+                                      isValidInput = true;
+                                    }
+                                    // 完整的 HH:mm 格式
+                                    else if (/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(timeValue)) {
+                                      isValidInput = true;
+                                    }
+                                    
+                                    if (isValidInput) {
+                                      // 直接更新狀態，確保正確匹配記錄
+                                      const updated = editClockRecords.map(r => {
+                                        if (record.id) {
+                                          // 有 id 的記錄，使用 id 匹配
+                                          if (r.id === record.id) {
+                                            return { ...r, editableTime: timeValue };
+                                          }
+                                        } else if (record.tempId) {
+                                          // 新記錄（沒有 id），使用 tempId 匹配
+                                          if (r.tempId === record.tempId) {
+                                            return { ...r, editableTime: timeValue };
+                                          }
+                                        }
+                                        return r;
+                                      });
+                                      setEditClockRecords(updated);
                                     }
                                   }}
                                   placeholder="HH:mm"
                                   size="small"
                                   sx={{ flex: 1, maxWidth: 150 }}
                                   inputProps={{
-                                    maxLength: 5,
-                                    pattern: '^([0-1][0-9]|2[0-3]):[0-5][0-9]$'
+                                    maxLength: 5
                                   }}
                                 />
                                 <IconButton
@@ -1176,10 +1342,9 @@ const Attendance = ({ noLayout = false }) => {
                                     if (record.id) {
                                       // 有 id 的記錄，標記為無效
                                       handleRemoveClockTime(record.id);
-                                    } else {
-                                      // 沒有 id 的新記錄，直接刪除
-                                      const updated = editClockRecords.filter(r => r !== record);
-                                      setEditClockRecords(updated);
+                                    } else if (record.tempId) {
+                                      // 沒有 id 的新記錄，使用 tempId 刪除
+                                      handleRemoveClockTime(null, record.tempId);
                                     }
                                   }}
                                   sx={{ flexShrink: 0 }}
@@ -1213,14 +1378,31 @@ const Attendance = ({ noLayout = false }) => {
               
               <Grid container spacing={2} sx={{ mt: 2 }}>
                 <Grid item xs={12}>
-                  <TextField
-                    label={t('attendance.remarks')}
-                    value={editRemarks}
-                    onChange={(e) => setEditRemarks(e.target.value)}
-                    fullWidth
-                    multiline
-                    rows={3}
-                  />
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <TextField
+                      label={t('attendance.remarks')}
+                      value={editRemarks}
+                      onChange={(e) => setEditRemarks(e.target.value)}
+                      fullWidth
+                      multiline
+                      rows={3}
+                    />
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      onClick={handleAutoCompare}
+                      sx={{
+                        minWidth: 'auto',
+                        whiteSpace: 'nowrap',
+                        mt: 0.5,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                      }}
+                      startIcon={<CheckCircleIcon />}
+                    >
+                      {t('attendance.autoCompare') || '自動對比'}
+                    </Button>
+                  </Box>
                 </Grid>
               </Grid>
             </Box>
