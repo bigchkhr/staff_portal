@@ -110,11 +110,22 @@ const Layout = ({ children }) => {
   };
 
   const fetchUnreadChatCount = async () => {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    console.log(`📨 [Layout] fetchUnreadChatCount 開始 - 時間: ${timestamp}`);
+    
     try {
       const response = await axios.get('/api/chat/unread-count');
+      const duration = Date.now() - startTime;
       const count = response.data.unreadCount || 0;
       setUnreadChatCount(count);
+      console.log(`✅ [Layout] fetchUnreadChatCount 成功 - 未讀數量: ${count}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      console.log(`${statusIcon} [Layout] fetchUnreadChatCount 失敗 - 狀態: ${status}, 錯誤: ${error.response?.data?.message || error.message}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
       console.error('獲取未讀訊息數量錯誤:', error);
       setUnreadChatCount(0);
     }

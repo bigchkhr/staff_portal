@@ -86,13 +86,16 @@ const ChatRoom = () => {
   });
 
   useEffect(() => {
+    console.log(`🔄 [前端] ChatRoom 組件掛載 - 時間: ${new Date().toISOString()}`);
     fetchRooms();
     checkHRMembership();
   }, []);
 
   useEffect(() => {
+    console.log(`🔄 [前端] selectedRoom 變化 - ID: ${selectedRoom?.id || 'null'}, 時間: ${new Date().toISOString()}`);
     if (selectedRoom) {
       // 切換訊息傳遞時自動載入訊息歷史
+      console.log(`📋 [前端] 準備載入訊息傳遞詳情和訊息 - ID: ${selectedRoom.id}`);
       setMessages([]); // 先清空舊訊息
       fetchRoomDetail();
       fetchMessages(); // 自動載入訊息
@@ -118,12 +121,18 @@ const ChatRoom = () => {
   };
 
   const fetchRooms = async (silent = false) => {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    console.log(`📨 [前端] fetchRooms 開始 - silent: ${silent}, 時間: ${timestamp}`);
+    
     try {
       if (!silent) {
         setLoading(true);
       }
       const response = await axios.get('/api/chat/my-rooms');
+      const duration = Date.now() - startTime;
       const newRooms = response.data.rooms || [];
+      console.log(`✅ [前端] fetchRooms 成功 - 訊息傳遞數量: ${newRooms.length}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
       
       // 只在訊息傳遞列表真正變化時才更新狀態
       setRooms(prevRooms => {
@@ -147,6 +156,13 @@ const ChatRoom = () => {
         return prevRooms;
       });
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      
+      console.log(`${statusIcon} [前端] fetchRooms 失敗 - 狀態: ${status}, 錯誤: ${error.response?.data?.message || error.message}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
+      
       if (!silent) {
         console.error('Fetch rooms error:', error);
         Swal.fire({
@@ -165,25 +181,48 @@ const ChatRoom = () => {
 
   const fetchRoomDetail = async () => {
     if (!selectedRoom) return;
+    const startTime = Date.now();
+    const roomId = selectedRoom.id;
+    console.log(`📨 [前端] fetchRoomDetail 開始 - 訊息傳遞 ID: ${roomId}, 時間: ${new Date().toISOString()}`);
+    
     try {
-      const response = await axios.get(`/api/chat/${selectedRoom.id}`);
+      const response = await axios.get(`/api/chat/${roomId}`);
+      const duration = Date.now() - startTime;
       setSelectedRoom(response.data.room);
+      console.log(`✅ [前端] fetchRoomDetail 成功 - 訊息傳遞 ID: ${roomId}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      console.log(`${statusIcon} [前端] fetchRoomDetail 失敗 - 訊息傳遞 ID: ${roomId}, 狀態: ${status}, 錯誤: ${error.response?.data?.message || error.message}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
       console.error('Fetch room detail error:', error);
     }
   };
 
   const fetchMessages = async (silent = false) => {
     if (!selectedRoom) return;
+    const startTime = Date.now();
+    const roomId = selectedRoom.id;
+    console.log(`📨 [前端] fetchMessages 開始 - 訊息傳遞 ID: ${roomId}, silent: ${silent}, 時間: ${new Date().toISOString()}`);
+    
     try {
-      const response = await axios.get(`/api/chat/${selectedRoom.id}/messages`, {
+      const response = await axios.get(`/api/chat/${roomId}/messages`, {
         params: { limit: 100, offset: 0 }
       });
+      const duration = Date.now() - startTime;
       const newMessages = response.data.messages || [];
+      console.log(`✅ [前端] fetchMessages 成功 - 訊息傳遞 ID: ${roomId}, 訊息數量: ${newMessages.length}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
       
       // 直接設置訊息，不進行複雜的比較
       setMessages(newMessages);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      console.log(`${statusIcon} [前端] fetchMessages 失敗 - 訊息傳遞 ID: ${roomId}, 狀態: ${status}, 錯誤: ${error.response?.data?.message || error.message}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
+      
       if (!silent) {
         console.error('Fetch messages error:', error);
         Swal.fire({
@@ -232,6 +271,12 @@ const ChatRoom = () => {
     if (!selectedRoom) return;
     if ((!messageText.trim() && !selectedFile) || sending) return;
 
+    const startTime = Date.now();
+    const roomId = selectedRoom.id;
+    const hasMessage = !!messageText.trim();
+    const hasFile = !!selectedFile;
+    console.log(`📨 [前端] handleSendMessage 開始 - 訊息傳遞 ID: ${roomId}, 有訊息: ${hasMessage}, 有檔案: ${hasFile}, 時間: ${new Date().toISOString()}`);
+
     try {
       setSending(true);
       const formData = new FormData();
@@ -242,11 +287,14 @@ const ChatRoom = () => {
         formData.append('file', selectedFile);
       }
 
-      const response = await axios.post(`/api/chat/${selectedRoom.id}/messages`, formData, {
+      const response = await axios.post(`/api/chat/${roomId}/messages`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ [前端] handleSendMessage 成功 - 訊息傳遞 ID: ${roomId}, 訊息 ID: ${response.data.chatMessage?.id}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
 
       setMessageText('');
       setSelectedFile(null);
@@ -256,10 +304,17 @@ const ChatRoom = () => {
       
       // 發送成功後自動刷新一次，讓用戶立即看到新訊息
       setTimeout(() => {
+        console.log(`🔄 [前端] 自動刷新訊息和列表 - 訊息傳遞 ID: ${roomId}, 時間: ${new Date().toISOString()}`);
         fetchMessages(true);
         fetchRooms(true);
       }, 500);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      console.log(`${statusIcon} [前端] handleSendMessage 失敗 - 訊息傳遞 ID: ${roomId}, 狀態: ${status}, 錯誤: ${error.response?.data?.message || error.message}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
+      
       console.error('Send message error:', error);
       Swal.fire({
         icon: 'error',
@@ -382,11 +437,25 @@ const ChatRoom = () => {
   };
 
   const checkHRMembership = async () => {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    console.log(`📨 [前端] checkHRMembership 開始 - 時間: ${timestamp}`);
+    
     try {
       // 通過嘗試獲取所有訊息傳遞來檢查是否為 HR Group 成員
-      await axios.get('/api/chat/all');
+      const response = await axios.get('/api/chat/all');
+      const duration = Date.now() - startTime;
       setIsHRMember(true);
+      console.log(`✅ [前端] checkHRMembership 成功 - 是 HR 成員, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
     } catch (error) {
+      const duration = Date.now() - startTime;
+      const status = error.response?.status;
+      const isRateLimit = status === 429;
+      const statusIcon = isRateLimit ? '🚫' : '❌';
+      const isHR = status !== 403; // 403 表示不是 HR，其他錯誤可能是其他問題
+      
+      console.log(`${statusIcon} [前端] checkHRMembership 完成 - 狀態: ${status}, 是 HR 成員: ${status === 200}, 耗時: ${duration}ms, 時間: ${new Date().toISOString()}`);
+      
       if (error.response?.status === 403) {
         setIsHRMember(false);
       } else {

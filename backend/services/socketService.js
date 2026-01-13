@@ -10,9 +10,17 @@ class SocketService {
 
   initialize(server) {
     const { Server } = require('socket.io');
+    const allowedOrigins = ['http://localhost:3000'];
+    if (process.env.CLOUDFRONT_URL) {
+      allowedOrigins.push(process.env.CLOUDFRONT_URL);
+    }
+    if (process.env.FRONTEND_URL) {
+      allowedOrigins.push(process.env.FRONTEND_URL);
+    }
+
     this.io = new Server(server, {
       cors: {
-        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+        origin: process.env.NODE_ENV === 'production' ? allowedOrigins : true,
         methods: ['GET', 'POST'],
         credentials: true
       },

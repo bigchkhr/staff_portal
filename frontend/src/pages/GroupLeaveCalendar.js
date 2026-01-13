@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { getSessionForDate, sessionToFlags } from '../utils/leaveSessionUtils';
 import 'dayjs/locale/zh-tw';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
@@ -295,50 +296,16 @@ const GroupLeaveCalendar = () => {
                 const isInWeek = currentDateStr >= weekStart && currentDateStr <= weekEnd;
                 
                 if (isInWeek) {
-                  const currentDateObj = dayjs(currentDateStr);
-                  const isStartDate = index === 0;
-                  const isEndDate = index === dateRange.length - 1;
+                  // 確保日期格式一致：使用已解析的日期字符串
+                  const normalizedApp = {
+                    ...app,
+                    start_date: startDate.format('YYYY-MM-DD'), // 使用已解析的日期格式
+                    end_date: endDate.format('YYYY-MM-DD')      // 使用已解析的日期格式
+                  };
                   
-                  let isMorning = false;
-                  let isAfternoon = false;
-                  
-                  if (isStartDate && isEndDate) {
-                    // 同一天開始和結束
-                    if (app.start_session === 'AM' || app.start_session === 'PM') {
-                      isMorning = app.start_session === 'AM';
-                      isAfternoon = app.start_session === 'PM';
-                    } else {
-                      // 全天假
-                      isMorning = true;
-                      isAfternoon = true;
-                    }
-                  } else if (isStartDate) {
-                    // 開始日期
-                    if (app.start_session === 'AM') {
-                      isMorning = true;
-                    } else if (app.start_session === 'PM') {
-                      isAfternoon = true;
-                    } else {
-                      // 全天假
-                      isMorning = true;
-                      isAfternoon = true;
-                    }
-                  } else if (isEndDate) {
-                    // 結束日期
-                    if (app.end_session === 'AM') {
-                      isMorning = true;
-                    } else if (app.end_session === 'PM') {
-                      isAfternoon = true;
-                    } else {
-                      // 全天假
-                      isMorning = true;
-                      isAfternoon = true;
-                    }
-                  } else {
-                    // 中間日期，全天假
-                    isMorning = true;
-                    isAfternoon = true;
-                  }
+                  // 使用統一的工具函數計算該日期的時段
+                  const session = getSessionForDate(normalizedApp, currentDateStr);
+                  const { isMorning, isAfternoon } = sessionToFlags(session);
                   
                   allLeaveApplications.push({
                     user_id: member.id,
@@ -352,13 +319,8 @@ const GroupLeaveCalendar = () => {
                     leave_type_name_zh: app.leave_type_name_zh,
                     is_morning_leave: isMorning,
                     is_afternoon_leave: isAfternoon,
+                    leave_session: session, // 保存 session 以便後續使用
                     department_group_id: groupId
-                  });
-                  
-                  console.log(`Added leave record for user ${member.id} on ${currentDateStr}:`, {
-                    isMorning,
-                    isAfternoon,
-                    leaveType: app.leave_type_name_zh || app.leave_type_name
                   });
                 }
               });
@@ -373,9 +335,88 @@ const GroupLeaveCalendar = () => {
         }
       }
       
-      console.log('All leave applications:', allLeaveApplications);
-      console.log('Total leave applications count:', allLeaveApplications.length);
-      setSchedules(allLeaveApplications);
+      // 合併同一天多個假期申請的記錄
+      // 使用 Map 來存儲每個用戶每個日期的假期記錄
+      const leaveMap = new Map();
+      
+      allLeaveApplications.forEach(leave => {
+        const key = `${leave.user_id}_${leave.schedule_date}`;
+        const existing = leaveMap.get(key);
+        
+        if (existing) {
+          // 如果已存在，合併上午假和下午假標記
+          const newIsMorning = leave.is_morning_leave === true || leave.is_morning_leave === 1;
+          const newIsAfternoon = leave.is_afternoon_leave === true || leave.is_afternoon_leave === 1;
+          const existingIsMorning = existing.is_morning_leave === true || existing.is_morning_leave === 1;
+          const existingIsAfternoon = existing.is_afternoon_leave === true || existing.is_afternoon_leave === 1;
+          
+          // 合併：如果任一記錄有上午假，則為上午假；如果任一記錄有下午假，則為下午假
+          const mergedIsMorning = existingIsMorning || newIsMorning;
+          const mergedIsAfternoon = existingIsAfternoon || newIsAfternoon;
+          
+          // 如果合併後是全天假，清除 leave_session；否則保留其中一個 session
+          let mergedSession = null;
+          if (mergedIsMorning && mergedIsAfternoon) {
+            // 全天假，session 為 null
+            mergedSession = null;
+          } else if (mergedIsMorning) {
+            // 只有上午假
+            mergedSession = 'AM';
+          } else if (mergedIsAfternoon) {
+            // 只有下午假
+            mergedSession = 'PM';
+          }
+          
+          console.log(`Merging leave records for user ${leave.user_id} on ${leave.schedule_date}:`, {
+            existing: {
+              is_morning_leave: existing.is_morning_leave,
+              is_afternoon_leave: existing.is_afternoon_leave,
+              leave_session: existing.leave_session
+            },
+            new: {
+              is_morning_leave: leave.is_morning_leave,
+              is_afternoon_leave: leave.is_afternoon_leave,
+              leave_session: leave.leave_session
+            },
+            merged: {
+              is_morning_leave: mergedIsMorning,
+              is_afternoon_leave: mergedIsAfternoon,
+              leave_session: mergedSession
+            }
+          });
+          
+          leaveMap.set(key, {
+            ...existing,
+            is_morning_leave: mergedIsMorning,
+            is_afternoon_leave: mergedIsAfternoon,
+            leave_session: mergedSession
+          });
+        } else {
+          leaveMap.set(key, leave);
+        }
+      });
+      
+      const mergedLeaves = Array.from(leaveMap.values());
+      
+      console.log('All leave applications (before merge):', allLeaveApplications.length);
+      console.log('Merged leave applications:', mergedLeaves.length);
+      
+      // 按用戶和日期排序，方便調試
+      mergedLeaves.sort((a, b) => {
+        if (a.user_id !== b.user_id) return a.user_id - b.user_id;
+        return a.schedule_date.localeCompare(b.schedule_date);
+      });
+      
+      console.log('Sample merged leaves (first 10):', mergedLeaves.slice(0, 10).map(l => ({
+        user_id: l.user_id,
+        schedule_date: l.schedule_date,
+        is_morning_leave: l.is_morning_leave,
+        is_afternoon_leave: l.is_afternoon_leave,
+        leave_session: l.leave_session,
+        leave_type_name_zh: l.leave_type_name_zh
+      })));
+      
+      setSchedules(mergedLeaves);
     } catch (error) {
       console.error('Fetch leave applications error:', error);
     } finally {

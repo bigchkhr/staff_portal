@@ -1019,15 +1019,28 @@ const Attendance = ({ noLayout = false }) => {
                                             {t('attendance.roster')}: {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
                                           </Typography>
                                         )}
+                                        {/* 顯示假期類型（包括已批准的假期和排班中的假期） */}
                                         {item.schedule.leave_type_name_zh && (
                                           <Chip
-                                            label={item.schedule.leave_type_name_zh}
+                                            label={
+                                              (() => {
+                                                const leaveTypeDisplay = item.schedule.leave_type_name_zh;
+                                                // 如果有時段信息，顯示上午/下午
+                                                if (item.schedule.leave_session) {
+                                                  const sessionText = item.schedule.leave_session === 'AM' 
+                                                    ? t('schedule.morning') 
+                                                    : t('schedule.afternoon');
+                                                  return `${leaveTypeDisplay} (${sessionText})`;
+                                                }
+                                                return leaveTypeDisplay;
+                                              })()
+                                            }
                                             size="small"
                                             sx={{ 
                                               fontSize: '0.65rem', 
                                               height: '18px', 
                                               mt: (item.schedule.start_time || item.schedule.end_time) ? 0.25 : 0,
-                                              bgcolor: '#d4af37',
+                                              bgcolor: item.schedule.is_approved_leave ? '#28a745' : '#d4af37', // 已批准的假期使用綠色
                                               color: 'white',
                                               '& .MuiChip-label': {
                                                 color: 'white',

@@ -14,13 +14,7 @@ import {
   TextField,
   InputAdornment,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
   Alert,
-  Snackbar,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -39,6 +33,7 @@ import {
 import { Search as SearchIcon, Undo as UndoIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { formatDate } from '../utils/dateFormat';
@@ -53,10 +48,7 @@ const LeaveHistory = () => {
   const [allApplications, setAllApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [reversalDialogOpen, setReversalDialogOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState(null);
-  const [reversing, setReversing] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const navigate = useNavigate();
   
   // 獲取當前年份作為預設值
@@ -177,30 +169,61 @@ const LeaveHistory = () => {
     return statusMap[application.status] || application.status;
   };
 
-  const handleReversalClick = (application) => {
+  const handleReversalClick = async (application) => {
     setSelectedApplication(application);
-    setReversalDialogOpen(true);
+    
+    const leaveTypeName = i18n.language === 'en' 
+      ? (application.leave_type_name || application.leave_type_name_zh || '')
+      : (application.leave_type_name_zh || application.leave_type_name || '');
+    
+    const result = await Swal.fire({
+      title: t('leaveHistory.confirmReversal'),
+      html: `
+        <div style="text-align: left;">
+          <p>${t('leaveHistory.confirmReversalMessage')}</p>
+          <br>
+          <strong>${t('leaveHistory.applicationDetails')}</strong><br>
+          ${t('leaveHistory.transactionIdLabel')}${application.transaction_id}<br>
+          ${t('leaveHistory.leaveTypeLabel')}${leaveTypeName}<br>
+          ${t('leaveHistory.dateLabel')}${formatDate(application.start_date)} ~ ${formatDate(application.end_date)}<br>
+          ${t('leaveHistory.daysLabel')}${application.days} ${t('leaveHistory.days')}
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: t('leaveHistory.confirmReversal'),
+      cancelButtonText: t('common.cancel'),
+      confirmButtonColor: '#f0ad4e',
+      cancelButtonColor: '#6c757d',
+      reverseButtons: true
+    });
+
+    if (result.isConfirmed) {
+      await handleReversalConfirm(application);
+    } else {
+      setSelectedApplication(null);
+    }
   };
 
-  const handleReversalConfirm = async () => {
-    if (!selectedApplication) return;
+  const handleReversalConfirm = async (application) => {
+    if (!application) return;
 
     try {
-      setReversing(true);
       const response = await axios.post('/api/leaves/reverse', {
-        application_id: selectedApplication.id
+        application_id: application.id
       });
       
       // 使用後端返回的消息
       const message = response.data.message || t('leaveHistory.reversalSubmitted');
       
-      setSnackbar({
-        open: true,
-        message,
-        severity: 'success'
+      await Swal.fire({
+        icon: 'success',
+        title: t('common.success'),
+        text: message,
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#28a745'
       });
       
-      setReversalDialogOpen(false);
       setSelectedApplication(null);
       
       // 重新載入申請列表
@@ -208,23 +231,15 @@ const LeaveHistory = () => {
     } catch (error) {
       console.error('Reversal error:', error);
       const errorMessage = error.response?.data?.message || t('leaveHistory.reversalError');
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: 'error'
+      
+      await Swal.fire({
+        icon: 'error',
+        title: t('common.error'),
+        text: errorMessage,
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#d33'
       });
-    } finally {
-      setReversing(false);
     }
-  };
-
-  const handleReversalCancel = () => {
-    setReversalDialogOpen(false);
-    setSelectedApplication(null);
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
   };
 
   const canShowReversalButton = (application) => {
@@ -937,70 +952,6 @@ const LeaveHistory = () => {
         )}
       </Paper>
 
-      {/* 銷假確認對話框 */}
-      <Dialog
-        open={reversalDialogOpen}
-        onClose={handleReversalCancel}
-        aria-labelledby="reversal-dialog-title"
-        fullScreen={isMobile}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle id="reversal-dialog-title">{t('leaveHistory.confirmReversal')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {t('leaveHistory.confirmReversalMessage')}
-            {selectedApplication && (
-              <>
-                <br />
-                <br />
-                <strong>{t('leaveHistory.applicationDetails')}</strong>
-                <br />
-                {t('leaveHistory.transactionIdLabel')}{selectedApplication.transaction_id}
-                <br />
-                {t('leaveHistory.leaveTypeLabel')}
-                {i18n.language === 'en' 
-                  ? (selectedApplication.leave_type_name || selectedApplication.leave_type_name_zh || '')
-                  : (selectedApplication.leave_type_name_zh || selectedApplication.leave_type_name || '')
-                }
-                <br />
-                {t('leaveHistory.dateLabel')}{formatDate(selectedApplication.start_date)} ~ {formatDate(selectedApplication.end_date)}
-                <br />
-                {t('leaveHistory.daysLabel')}{selectedApplication.days} {t('leaveHistory.days')}
-              </>
-            )}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleReversalCancel} disabled={reversing}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            onClick={handleReversalConfirm}
-            color="warning"
-            variant="contained"
-            disabled={reversing}
-          >
-            {reversing ? t('leaveHistory.reversing') : t('leaveHistory.confirmReversal')}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* 成功/錯誤提示 */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

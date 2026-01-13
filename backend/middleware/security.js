@@ -70,6 +70,19 @@ const apiLimiter = rateLimit({
     }
   },
   handler: (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    let userId = 'unknown';
+    try {
+      if (token) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.userId || 'unknown';
+      }
+    } catch (e) {
+      // ignore
+    }
+    
+    console.log(`🚫 [API RATE LIMIT] 429 錯誤 - 用戶 ID: ${userId}, 路徑: ${req.path}, 方法: ${req.method}, IP: ${req.ip || req.connection.remoteAddress || 'unknown'}, 時間: ${new Date().toISOString()}`);
+    
     res.status(429).json({ 
       message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試',
       error: 'TOO_MANY_REQUESTS'
@@ -104,7 +117,7 @@ const apiLimiter = rateLimit({
 // 聊天室 API 的 Rate Limiting（允許更高的請求頻率，因為需要輪詢）
 const chatLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 分鐘
-  max: 10, // 每分鐘 10 個請求
+  max: 35, // 每分鐘 35 個請求
   message: { message: 'Too many chat requests, please try again later. 聊天請求過於頻繁，請稍後再試' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -123,7 +136,24 @@ const chatLimiter = rateLimit({
       return req.ip || req.connection.remoteAddress || 'unknown';
     }
   },
+  // 自定義處理器，記錄詳細信息
+  requestWasSuccessful: (req, res) => {
+    return res.statusCode < 400;
+  },
   handler: (req, res) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    let userId = 'unknown';
+    try {
+      if (token) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.userId || 'unknown';
+      }
+    } catch (e) {
+      // ignore
+    }
+    
+    console.log(`🚫 [CHAT RATE LIMIT] 429 錯誤 - 用戶 ID: ${userId}, 路徑: ${req.path}, 方法: ${req.method}, IP: ${req.ip || req.connection.remoteAddress || 'unknown'}, 時間: ${new Date().toISOString()}`);
+    
     res.status(429).json({ 
       message: 'Too many chat requests, please try again later. 聊天請求過於頻繁，請稍後再試',
       error: 'TOO_MANY_CHAT_REQUESTS'
@@ -146,6 +176,20 @@ const chatLimiter = rateLimit({
       console.warn('[chatLimiter] Error checking HR membership:', error.message);
       return false;
     }
+  },
+  // 添加 onLimitReached 回調來記錄詳細信息
+  onLimitReached: (req, res, options) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    let userId = 'unknown';
+    try {
+      if (token) {
+        const decoded = jwt.decode(token);
+        userId = decoded?.userId || 'unknown';
+      }
+    } catch (e) {
+      // ignore
+    }
+    console.log(`⚠️ [CHAT RATE LIMIT] 達到限制 - 用戶 ID: ${userId}, 路徑: ${req.path}, 方法: ${req.method}, 時間: ${new Date().toISOString()}`);
   }
 });
 

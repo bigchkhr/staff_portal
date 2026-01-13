@@ -735,13 +735,19 @@ class LeaveApplication {
     const startSession = leaveApplication.start_session;
     const endSession = leaveApplication.end_session;
 
+    // 確保日期格式一致（移除可能的時間部分）
+    const normalizedTargetDate = targetDateStr ? targetDateStr.split('T')[0].substring(0, 10) : null;
+    const normalizedStartDate = startDateStr ? startDateStr.split('T')[0].substring(0, 10) : null;
+    const normalizedEndDate = endDateStr ? endDateStr.split('T')[0].substring(0, 10) : null;
+
     // 確保目標日期在假期範圍內
-    if (targetDateStr < startDateStr || targetDateStr > endDateStr) {
+    if (!normalizedStartDate || !normalizedEndDate || !normalizedTargetDate || 
+        normalizedTargetDate < normalizedStartDate || normalizedTargetDate > normalizedEndDate) {
       return null;
     }
 
     // 單一申請（同一天）
-    if (startDateStr === endDateStr) {
+    if (normalizedStartDate === normalizedEndDate) {
       // 如果 start_session 和 end_session 都是 'AM'，顯示上午假
       if (startSession === 'AM' && endSession === 'AM') {
         return 'AM';
@@ -755,29 +761,23 @@ class LeaveApplication {
     }
 
     // 跨日假期（一連串假期）
-    if (targetDateStr === startDateStr) {
+    if (normalizedTargetDate === normalizedStartDate) {
       // 第一天：根據 start_session 判斷
-      // 如果 start_session 是 'AM'，顯示上午假
-      if (startSession === 'AM') {
-        return 'AM';
-      }
       // 如果 start_session 是 'PM'，顯示下午假
       if (startSession === 'PM') {
         return 'PM';
       }
-      // 如果 start_session 是 null，全天假，不顯示 session
+      // 如果 start_session 是 'AM' 或 null，顯示全天假
+      // 這是因為跨日假期的第一天如果是上午開始，通常意味著當天是全天假
       return null;
-    } else if (targetDateStr === endDateStr) {
+    } else if (normalizedTargetDate === normalizedEndDate) {
       // 最後一天：根據 end_session 判斷
       // 如果 end_session 是 'AM'，顯示上午假
       if (endSession === 'AM') {
         return 'AM';
       }
-      // 如果 end_session 是 'PM'，顯示下午假
-      if (endSession === 'PM') {
-        return 'PM';
-      }
-      // 如果 end_session 是 null，全天假，不顯示 session
+      // 如果 end_session 是 'PM' 或 null，顯示全天假
+      // 這是因為跨日假期的最後一天如果是下午結束，通常意味著當天是全天假
       return null;
     } else {
       // 中間日期：全天假，不顯示 session

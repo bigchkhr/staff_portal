@@ -7,6 +7,7 @@ class ChatController {
   // 獲取所有訊息傳遞（用戶加入的）
   async getMyChatRooms(req, res) {
     try {
+      console.log(`📋 [getMyChatRooms] 用戶 ID: ${req.user.id}, 時間: ${new Date().toISOString()}`);
       const rooms = await ChatRoom.findAll(req.user.id);
       const unreadCounts = await ChatRoom.getUnreadCountsByRoom(req.user.id);
       
@@ -16,9 +17,10 @@ class ChatController {
         unread_count: unreadCounts[room.id] || 0
       }));
       
+      console.log(`📋 [getMyChatRooms] 成功 - 用戶 ID: ${req.user.id}, 訊息傳遞數量: ${roomsWithUnread.length}, 時間: ${new Date().toISOString()}`);
       res.json({ rooms: roomsWithUnread });
     } catch (error) {
-      console.error('Get my chat rooms error:', error);
+      console.error(`❌ [getMyChatRooms] 錯誤 - 用戶 ID: ${req.user.id}, 錯誤: ${error.message}, 時間: ${new Date().toISOString()}`);
       res.status(500).json({ message: '獲取訊息傳遞列表時發生錯誤', error: error.message });
     }
   }
@@ -44,15 +46,19 @@ class ChatController {
   async getChatRoomById(req, res) {
     try {
       const { id } = req.params;
+      console.log(`📄 [getChatRoomById] 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 時間: ${new Date().toISOString()}`);
+      
       const room = await ChatRoom.findById(id);
       
       if (!room) {
+        console.log(`❌ [getChatRoomById] 不存在 - 訊息傳遞 ID: ${id}, 時間: ${new Date().toISOString()}`);
         return res.status(404).json({ message: '訊息傳遞不存在' });
       }
 
       // 檢查用戶是否為訊息傳遞成員
       const isMember = await ChatRoom.isMember(id, req.user.id);
       if (!isMember) {
+        console.log(`🚫 [getChatRoomById] 權限拒絕 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 時間: ${new Date().toISOString()}`);
         return res.status(403).json({ message: '您不是此訊息傳遞的成員' });
       }
 
@@ -60,9 +66,10 @@ class ChatController {
       const members = await ChatRoom.getMembers(id);
       room.members = members;
 
+      console.log(`✅ [getChatRoomById] 成功 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 成員數量: ${members.length}, 時間: ${new Date().toISOString()}`);
       res.json({ room });
     } catch (error) {
-      console.error('Get chat room by id error:', error);
+      console.error(`❌ [getChatRoomById] 錯誤 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${req.params.id}, 錯誤: ${error.message}, 時間: ${new Date().toISOString()}`);
       res.status(500).json({ message: '獲取訊息傳遞詳情時發生錯誤', error: error.message });
     }
   }
@@ -267,9 +274,12 @@ class ChatController {
       const { id } = req.params;
       const { limit = 50, offset = 0 } = req.query;
 
+      console.log(`💬 [getMessages] 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, limit: ${limit}, offset: ${offset}, 時間: ${new Date().toISOString()}`);
+
       // 檢查用戶是否為訊息傳遞成員
       const isMember = await ChatRoom.isMember(id, req.user.id);
       if (!isMember) {
+        console.log(`🚫 [getMessages] 權限拒絕 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 時間: ${new Date().toISOString()}`);
         return res.status(403).json({ message: '您不是此訊息傳遞的成員' });
       }
 
@@ -284,9 +294,10 @@ class ChatController {
       // 更新用戶最後讀取時間
       await ChatRoom.updateLastReadAt(id, req.user.id);
 
+      console.log(`💬 [getMessages] 成功 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 訊息數量: ${messages.length}, 時間: ${new Date().toISOString()}`);
       res.json({ messages });
     } catch (error) {
-      console.error('Get messages error:', error);
+      console.error(`❌ [getMessages] 錯誤 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${req.params.id}, 錯誤: ${error.message}, 時間: ${new Date().toISOString()}`);
       res.status(500).json({ message: '獲取訊息時發生錯誤', error: error.message });
     }
   }
@@ -319,6 +330,7 @@ class ChatController {
       const { id } = req.params;
       const { message } = req.body;
 
+      console.log(`📤 [sendMessage] 開始 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 有訊息: ${!!message}, 有檔案: ${!!req.file}, 時間: ${new Date().toISOString()}`);
       console.log('[sendMessage] Request params:', { id, message: message ? 'has message' : 'no message' });
       console.log('[sendMessage] User ID:', req.user.id);
       console.log('[sendMessage] Has file:', !!req.file);
@@ -357,7 +369,7 @@ class ChatController {
       console.log('[sendMessage] Message data:', { ...messageData, message: messageData.message ? 'has message' : 'no message' });
 
       const newMessage = await ChatMessage.create(messageData);
-      console.log('[sendMessage] Message created successfully:', newMessage.id);
+      console.log(`✅ [sendMessage] 成功 - 用戶 ID: ${req.user.id}, 訊息傳遞 ID: ${id}, 訊息 ID: ${newMessage.id}, 時間: ${new Date().toISOString()}`);
       
       res.status(201).json({
         message: '訊息發送成功',
