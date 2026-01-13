@@ -113,7 +113,8 @@ const LeaveHistory = () => {
       const response = await axios.get('/api/leaves', { params });
       const fetchedApplications = response.data.applications || [];
       
-      // 過濾只顯示使用者本人的申請，且必須是 e-flow 或 paper-flow
+      // leave/history 只顯示使用者本人的申請，HR Group 成員亦是
+      // 且必須是 e-flow 或 paper-flow
       const myApplications = fetchedApplications.filter(app => {
         // 確保是使用者本人的申請
         const isMyApplication = app.user_id === user.id;
@@ -242,16 +243,9 @@ const LeaveHistory = () => {
       return false;
     }
     
-    // 檢查是否為 paper-flow 申請
-    const isPaperFlow = application.is_paper_flow === true || application.flow_type === 'paper-flow';
-    const isHRMember = user?.is_hr_member || user?.is_system_admin;
-    
-    // 如果是 paper-flow，只有 HR 成員可以看到銷假按鈕
-    if (isPaperFlow) {
-      return isHRMember;
-    }
-    
-    // 如果是 e-flow，只有申請者本人才能看到銷假按鈕
+    // leave/history 只顯示自己的申請，所以只能為自己的申請進行銷假
+    // HR Group 成員在 leave/history 中也是只看到自己的申請
+    // 但 HR Group 成員可以通過 API 為任何申請進行銷假（一鍵批核）
     return application.user_id === user.id;
   };
 
@@ -589,7 +583,145 @@ const LeaveHistory = () => {
                 {t('leaveHistory.noApplications')}
               </Alert>
             ) : (
-              filteredApplications.map((app) => renderMobileCard(app))
+              filteredApplications.map((app) => (
+                <React.Fragment key={app.id}>
+                  {renderMobileCard(app)}
+                  {/* 顯示相關的銷假交易 */}
+                  {app.reversal_transactions && app.reversal_transactions.length > 0 && (
+                    app.reversal_transactions.map((reversal) => (
+                      <Card 
+                        key={`reversal-${reversal.id}`} 
+                        sx={{ 
+                          mb: 2,
+                          backgroundColor: '#f8f9fa',
+                          ...(reversal.is_reversed === true ? {
+                            '& .MuiTypography-root': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            },
+                            '& .MuiChip-label': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            },
+                            '& .MuiButton-root': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            }
+                          } : {})
+                        }}
+                      >
+                        <CardContent>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                            <Box>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('approvalHistory.reversalPrefix')}
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                {reversal.transaction_id}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              label={getStatusText(reversal)}
+                              color={getStatusColor(reversal)}
+                              size="small"
+                            />
+                          </Box>
+
+                          <Divider sx={{ my: 1.5 }} />
+
+                          <Grid container spacing={1.5}>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.applicant')}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {reversal.applicant_display_name}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.year')}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {reversal.year || (reversal.start_date ? new Date(reversal.start_date).getFullYear() : '-')}{t('leaveHistory.yearSuffix')}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.leaveType')}
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                                <Chip
+                                  label={t('approvalHistory.reversalLabel')}
+                                  color="info"
+                                  size="small"
+                                  sx={{ fontSize: '0.65rem', height: '20px' }}
+                                />
+                                <Typography variant="body2">
+                                  {(() => {
+                                    const leaveTypeName = i18n.language === 'en' 
+                                      ? (reversal.leave_type_name || reversal.leave_type_name_zh || '')
+                                      : (reversal.leave_type_name_zh || reversal.leave_type_name || '');
+                                    return `${leaveTypeName} (${t('leaveHistory.reversal')})`;
+                                  })()}
+                                </Typography>
+                              </Box>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.flowType')}
+                              </Typography>
+                              <Chip
+                                label={getFlowTypeText(reversal)}
+                                color={reversal.is_paper_flow === true || reversal.flow_type === 'paper-flow' ? 'secondary' : 'primary'}
+                                size="small"
+                                sx={{ mt: 0.5 }}
+                              />
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.days')}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium', color: 'error.main' }}>
+                                -{Math.abs(reversal.days)}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.startDate')}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {formatDate(reversal.start_date)}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {t('leaveHistory.endDate')}
+                              </Typography>
+                              <Typography variant="body2" sx={{ mb: 1 }}>
+                                {formatDate(reversal.end_date)}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+
+                          <Divider sx={{ my: 1.5 }} />
+
+                          <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
+                            <Button
+                              fullWidth
+                              size="small"
+                              variant="outlined"
+                              onClick={() => navigate(`/approval/${reversal.id}`)}
+                            >
+                              {t('leaveHistory.viewDetails')}
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </React.Fragment>
+              ))
             )}
           </Box>
         ) : (
@@ -625,83 +757,178 @@ const LeaveHistory = () => {
                   </TableRow>
                 ) : (
                   filteredApplications.map((app) => (
-                    <TableRow 
-                      key={app.id} 
-                      hover
-                      sx={app.is_reversed === true ? {
-                        '& .MuiTableCell-root': {
-                          textDecoration: 'line-through',
-                          color: 'error.main',
-                          '& .MuiChip-label': {
+                    <React.Fragment key={app.id}>
+                      <TableRow 
+                        hover
+                        sx={app.is_reversed === true ? {
+                          '& .MuiTableCell-root': {
                             textDecoration: 'line-through',
-                            color: 'error.main'
-                          },
-                          '& .MuiButton-root': {
-                            textDecoration: 'line-through',
-                            color: 'error.main'
+                            color: 'error.main',
+                            '& .MuiChip-label': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            },
+                            '& .MuiButton-root': {
+                              textDecoration: 'line-through',
+                              color: 'error.main'
+                            }
                           }
-                        }
-                      } : {}}
-                    >
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.applicant_display_name}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        {(() => {
-                          const leaveTypeName = i18n.language === 'en' 
-                            ? (app.leave_type_name || app.leave_type_name_zh || '')
-                            : (app.leave_type_name_zh || app.leave_type_name || '');
-                          
-                          // 如果是銷假交易，在假期類型後面加上「銷假」
-                          if (app.is_reversal_transaction === true) {
-                            return `${leaveTypeName} (${t('leaveHistory.reversal')})`;
-                          }
-                          
-                          return leaveTypeName;
-                        })()}
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        <Chip
-                          label={getFlowTypeText(app)}
-                          color={app.is_paper_flow === true || app.flow_type === 'paper-flow' ? 'secondary' : 'primary'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('leaveHistory.yearSuffix')}
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.start_date)}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.end_date)}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.days}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        <Chip
-                          label={getStatusText(app)}
-                          color={getStatusColor(app)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        <Box sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                          <Button
+                        } : {}}
+                      >
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.applicant_display_name}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const leaveTypeName = i18n.language === 'en' 
+                              ? (app.leave_type_name || app.leave_type_name_zh || '')
+                              : (app.leave_type_name_zh || app.leave_type_name || '');
+                            
+                            // 如果是銷假交易，在假期類型後面加上「銷假」
+                            if (app.is_reversal_transaction === true) {
+                              return `${leaveTypeName} (${t('leaveHistory.reversal')})`;
+                            }
+                            
+                            return leaveTypeName;
+                          })()}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Chip
+                            label={getFlowTypeText(app)}
+                            color={app.is_paper_flow === true || app.flow_type === 'paper-flow' ? 'secondary' : 'primary'}
                             size="small"
-                            variant="outlined"
-                            onClick={() => navigate(`/approval/${app.id}`)}
-                          >
-                            {t('leaveHistory.viewDetails')}
-                          </Button>
-                          {canShowReversalButton(app) && (
+                          />
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {app.year || (app.start_date ? new Date(app.start_date).getFullYear() : '-')}{t('leaveHistory.yearSuffix')}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.start_date)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(app.end_date)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.days}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Chip
+                            label={getStatusText(app)}
+                            color={getStatusColor(app)}
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
                             <Button
                               size="small"
-                              variant="contained"
-                              color="warning"
-                              startIcon={<UndoIcon />}
-                              onClick={() => handleReversalClick(app)}
+                              variant="outlined"
+                              onClick={() => navigate(`/approval/${app.id}`)}
                             >
-                              {t('leaveHistory.reversal')}
+                              {t('leaveHistory.viewDetails')}
                             </Button>
-                          )}
-                        </Box>
-                      </TableCell>
-                    </TableRow>
+                            {canShowReversalButton(app) && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="warning"
+                                startIcon={<UndoIcon />}
+                                onClick={() => handleReversalClick(app)}
+                              >
+                                {t('leaveHistory.reversal')}
+                              </Button>
+                            )}
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                      {/* 顯示相關的銷假交易 */}
+                      {app.reversal_transactions && app.reversal_transactions.length > 0 && (
+                        app.reversal_transactions.map((reversal) => (
+                          <TableRow 
+                            key={`reversal-${reversal.id}`} 
+                            hover 
+                            sx={{ 
+                              backgroundColor: '#f8f9fa',
+                              ...(reversal.is_reversed === true ? {
+                                '& .MuiTableCell-root': {
+                                  textDecoration: 'line-through',
+                                  color: 'error.main',
+                                  '& .MuiChip-label': {
+                                    textDecoration: 'line-through',
+                                    color: 'error.main'
+                                  },
+                                  '& .MuiButton-root': {
+                                    textDecoration: 'line-through',
+                                    color: 'error.main'
+                                  }
+                                }
+                              } : {})
+                            }}
+                          >
+                            <TableCell sx={{ pl: 4, position: 'relative', whiteSpace: 'nowrap' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                                  {t('approvalHistory.reversalPrefix')}
+                                </Typography>
+                                {reversal.transaction_id}
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              {reversal.applicant_display_name}
+                              {(reversal.applicant_employee_number || reversal.user_employee_number) && (
+                                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                                  ({reversal.applicant_employee_number || reversal.user_employee_number})
+                                </Typography>
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Chip
+                                  label={t('approvalHistory.reversalLabel')}
+                                  color="info"
+                                  size="small"
+                                  sx={{ fontSize: '0.65rem', height: '20px' }}
+                                />
+                                <Typography variant="body2">
+                                  {(() => {
+                                    const leaveTypeName = i18n.language === 'en' 
+                                      ? (reversal.leave_type_name || reversal.leave_type_name_zh || '')
+                                      : (reversal.leave_type_name_zh || reversal.leave_type_name || '');
+                                    return `${leaveTypeName} (${t('leaveHistory.reversal')})`;
+                                  })()}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              <Chip
+                                label={getFlowTypeText(reversal)}
+                                color={reversal.is_paper_flow === true || reversal.flow_type === 'paper-flow' ? 'secondary' : 'primary'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              {reversal.year || (reversal.start_date ? new Date(reversal.start_date).getFullYear() : '-')}{t('leaveHistory.yearSuffix')}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(reversal.start_date)}</TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(reversal.end_date)}</TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              <Typography variant="body2" sx={{ color: 'error.main' }}>
+                                -{Math.abs(reversal.days)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              <Chip
+                                label={getStatusText(reversal)}
+                                color={getStatusColor(reversal)}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => navigate(`/approval/${reversal.id}`)}
+                              >
+                                {t('leaveHistory.viewDetails')}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </React.Fragment>
                   ))
                 )}
               </TableBody>

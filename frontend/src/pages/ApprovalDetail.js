@@ -458,12 +458,32 @@ const ApprovalDetail = () => {
                       userApprovalStage === 'approver_3' ? t('approvalDetail.stageApprover3') :
                       text;
 
+  // 檢查是否為銷假交易
+  const isReversalTransaction = application.is_reversal_transaction === true;
+
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        {t('approvalDetail.title')}
-      </Typography>
-
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h5">
+          {t('approvalDetail.title')}
+        </Typography>
+        {isReversalTransaction && (
+          <Chip
+            label={t('approvalDetail.reversalApplication')}
+            sx={{
+              backgroundColor: '#d32f2f',
+              color: '#ffffff',
+              fontWeight: 'bold',
+              fontSize: '0.875rem',
+              height: '32px',
+              '& .MuiChip-label': {
+                color: '#ffffff',
+                fontWeight: 'bold'
+              }
+            }}
+          />
+        )}
+      </Box>
 
       <Grid container spacing={2}>
         <Grid item xs={12} md={8}>

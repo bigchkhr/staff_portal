@@ -354,6 +354,7 @@
     "viewFile": "查看文件",
     "relatedReversalTransactions": "相关销假交易",
     "reversal": "销假",
+    "reversalApplication": "销假申请",
     "rejectionReason": "拒绝原因",
     "rejectionReasonPlaceholder": "请输入拒绝原因...",
     "rejectApplication": "拒绝申请",

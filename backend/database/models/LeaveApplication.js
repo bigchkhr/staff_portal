@@ -570,8 +570,8 @@ class LeaveApplication {
       originalStatus: originalApp.status
     });
     
-    // 如果是 paper-flow 或 HR 直接批准，銷假申請直接批准
-    if (isPaperFlow || isHRDirectApproval) {
+    // 如果是 HR 直接批准，銷假申請直接批准（無需走批核流程）
+    if (isHRDirectApproval) {
       // 使用原始申請的year字段
       const reversalYear = originalApp.year || (originalApp.start_date ? new Date(originalApp.start_date).getFullYear() : new Date().getFullYear());
       
@@ -608,7 +608,7 @@ class LeaveApplication {
       return await this.finalizeReversal(reversalApplication);
     }
 
-    // e-flow 的處理邏輯
+    // 普通用戶的銷假申請需要走批核流程
     const DepartmentGroup = require('./DepartmentGroup');
     const DelegationGroup = require('./DelegationGroup');
 
@@ -626,7 +626,8 @@ class LeaveApplication {
       total_days: -Math.abs(Number(originalApp.total_days || 0)),
       reason: 'Reversal',
       status: 'pending',
-      flow_type: 'e-flow',
+      flow_type: isPaperFlow ? 'paper-flow' : 'e-flow',
+      is_paper_flow: isPaperFlow,
       is_reversal_transaction: true,
       reversal_of_application_id: originalApplicationId,
       transaction_remark: 'Reversal - 銷假'
@@ -652,6 +653,7 @@ class LeaveApplication {
           }
         }
       } else {
+        // 沒有批核流程時直接批准
         reversalData.status = 'approved';
       }
     } else {

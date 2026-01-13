@@ -305,15 +305,16 @@ class LeaveController {
       if (end_date_from) options.end_date_from = end_date_from;
       if (end_date_to) options.end_date_to = end_date_to;
       
-      // 檢查是否為 HR 成員
-      const isHRMember = await User.isHRMember(req.user.id);
+      // leave/history 只顯示使用者本人的申請，HR Group 成員亦是
+      // 除非明確指定 user_id 或 applicant_id 參數（用於其他場景，如管理員查看）
       const requestedUserId = user_id || applicant_id;
       const includeApproverView = include_approver === 'true';
       
       if (requestedUserId) {
+        // 如果明確指定了 user_id 或 applicant_id，使用指定的用戶 ID
         options.user_id = requestedUserId;
-      } else if (!isHRMember) {
-        // 一般使用者預設僅能查看自己的申請
+      } else {
+        // 默認只返回當前用戶自己的申請（包括 HR Group 成員）
         options.user_id = req.user.id;
       }
 
@@ -323,7 +324,46 @@ class LeaveController {
 
       const applications = await LeaveApplication.findAll(options);
 
-      res.json({ applications });
+      // 為每個申請添加相關的銷假交易（reversal_transactions）
+      const knex = require('../config/database');
+      const applicationsWithReversals = await Promise.all(
+        applications.map(async (app) => {
+          // 查詢與此申請相關的有效銷假交易（只顯示已批准的）
+          const reversalTransactions = await knex('leave_applications')
+            .leftJoin('users', 'leave_applications.user_id', 'users.id')
+            .leftJoin('leave_types', 'leave_applications.leave_type_id', 'leave_types.id')
+            .select(
+              'leave_applications.*',
+              knex.raw('leave_applications.total_days as days'),
+              knex.raw('leave_applications.id as transaction_id'),
+              'users.employee_number as user_employee_number',
+              'users.employee_number as applicant_employee_number',
+              'users.surname as user_surname',
+              'users.given_name as user_given_name',
+              'users.display_name as user_display_name',
+              'users.display_name as applicant_display_name',
+              'leave_types.code as leave_type_code',
+              'leave_types.name as leave_type_name',
+              'leave_types.name_zh as leave_type_name_zh'
+            )
+            .where('leave_applications.reversal_of_application_id', app.id)
+            .where('leave_applications.is_reversal_transaction', true)
+            .where('leave_applications.status', 'approved') // 只顯示已批准的有效銷假交易
+            .orderBy('leave_applications.created_at', 'desc');
+
+          return {
+            ...app,
+            reversal_transactions: reversalTransactions.map(rev => ({
+              ...rev,
+              transaction_id: rev.transaction_id || `LA-${String(rev.id).padStart(6, '0')}`,
+              applicant_display_name: rev.applicant_display_name || rev.user_display_name,
+              days: rev.days !== undefined && rev.days !== null ? rev.days : rev.total_days
+            }))
+          };
+        })
+      );
+
+      res.json({ applications: applicationsWithReversals });
     } catch (error) {
       console.error('Get applications error:', error);
       res.status(500).json({ message: '獲取申請列表時發生錯誤' });
@@ -635,45 +675,34 @@ class LeaveController {
         return res.status(404).json({ message: '申請不存在' });
       }
 
+      // 檢查是否為 HR Group 成員
       const isHRMember = await User.isHRMember(req.user.id);
       const isSystemAdmin = req.user.is_system_admin;
-      const isApplicant = originalApplication.user_id === req.user.id;
-      
-      // 檢查是否為 paper-flow 申請
-      const isPaperFlow = originalApplication.is_paper_flow === true || originalApplication.flow_type === 'paper-flow';
+      const isHR = isHRMember || isSystemAdmin;
 
-      // 如果是 paper-flow，只有 HR 成員可以進行銷假
-      if (isPaperFlow) {
-        if (!isHRMember && !isSystemAdmin) {
-          return res.status(403).json({ message: '只有 HR 成員可以對紙本申請進行銷假' });
-        }
-      } else {
-        // e-flow 申請，申請者本人可以進行銷假
-        if (!isApplicant && !isHRMember && !isSystemAdmin) {
-          return res.status(403).json({ message: '只有申請人或 HR 才能進行銷假' });
-        }
+      // HR Group 成員可以為任何申請進行銷假，普通用戶只能為自己的申請進行銷假
+      const isApplicant = originalApplication.user_id === req.user.id;
+      if (!isHR && !isApplicant) {
+        return res.status(403).json({ message: '只能為自己的申請進行銷假' });
       }
 
-      // 對於 paper-flow，使用原始申請的 user_id；對於 e-flow，使用申請者本人的 user_id
-      const userIdForReversal = isPaperFlow ? originalApplication.user_id : (isApplicant ? req.user.id : originalApplication.user_id);
+      // HR Group 成員在 leave/history 中進行銷假操作，直接批准，無需走批核流程
+      // 普通用戶的銷假申請需要走批核流程
+      const isHRDirectApproval = isHR;
 
-      // 如果是 HR 成員或系統管理員操作，直接批准銷假申請（無需批核流程）
-      // 無論原始申請是 paper-flow 還是 e-flow，HR 成員的銷假都直接批准
-      const isHRDirectApproval = isHRMember || isSystemAdmin;
-
-      console.log('[requestReversal] HR 直接批准檢查:', {
-        isHRMember,
-        isSystemAdmin,
+      console.log('[requestReversal] 銷假申請參數:', {
+        application_id,
+        userId: req.user.id,
+        isHR,
         isHRDirectApproval,
-        isPaperFlow,
-        application_id
+        isApplicant
       });
 
       const reversalRequest = await LeaveApplication.createReversalRequest(
         application_id,
-        userIdForReversal,
+        originalApplication.user_id, // 使用原始申請的 user_id
         req.user.id,
-        isHRDirectApproval
+        isHRDirectApproval // HR Group 成員直接批准，普通用戶需要批核
       );
 
       console.log('[requestReversal] 銷假申請創建結果:', {
@@ -682,10 +711,7 @@ class LeaveController {
         is_reversal_transaction: reversalRequest.is_reversal_transaction
       });
 
-      // HR 成員或系統管理員的銷假申請會直接批准並完成
-      const message = isHRDirectApproval && reversalRequest.status === 'approved' 
-        ? '銷假申請已完成' 
-        : reversalRequest.status === 'approved'
+      const message = reversalRequest.status === 'approved'
         ? '銷假申請已完成'
         : '銷假申請已提交，等待批核';
 

@@ -354,6 +354,7 @@
     "viewFile": "View File",
     "relatedReversalTransactions": "Related Reversal Transactions",
     "reversal": "Reversal",
+    "reversalApplication": "Reversal Application",
     "rejectionReason": "Rejection Reason",
     "rejectionReasonPlaceholder": "Please enter rejection reason...",
     "rejectApplication": "Reject Application",
