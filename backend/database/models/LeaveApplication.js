@@ -231,8 +231,78 @@ class LeaveApplication {
       }
     }
 
+    // 建立計數查詢（用於獲取總數）
+    let countQuery = knex('leave_applications');
+    
+    // 應用相同的過濾條件到計數查詢
+    if (options.user_id) {
+      countQuery = countQuery.where('leave_applications.user_id', options.user_id);
+    }
+    if (options.status) {
+      if (options.status === 'reversed') {
+        countQuery = countQuery.where('leave_applications.is_reversed', true)
+                     .where(function() {
+                       this.where('leave_applications.is_reversal_transaction', false)
+                           .orWhereNull('leave_applications.is_reversal_transaction');
+                     });
+      } else {
+        countQuery = countQuery.where('leave_applications.status', options.status);
+      }
+    }
+    if (options.leave_type_id) {
+      countQuery = countQuery.where('leave_applications.leave_type_id', options.leave_type_id);
+    }
+    if (options.flow_type) {
+      countQuery = countQuery.where('leave_applications.flow_type', options.flow_type);
+    }
+    if (options.approver_id) {
+      countQuery = countQuery.where(function() {
+        this.where('leave_applications.checker_id', options.approver_id)
+          .orWhere('leave_applications.approver_1_id', options.approver_id)
+          .orWhere('leave_applications.approver_2_id', options.approver_id)
+          .orWhere('leave_applications.approver_3_id', options.approver_id);
+      });
+    }
+    if (options.is_cancellation_request !== undefined) {
+      countQuery = countQuery.where('leave_applications.is_cancellation_request', options.is_cancellation_request);
+    }
+    if (options.year) {
+      countQuery = countQuery.where('leave_applications.year', options.year);
+    }
+    if (options.start_date_from || options.end_date_to) {
+      if (options.start_date_from && options.end_date_to) {
+        countQuery = countQuery.where(function() {
+          this.where('leave_applications.start_date', '<=', options.end_date_to)
+              .andWhere('leave_applications.end_date', '>=', options.start_date_from);
+        });
+      } else if (options.start_date_from) {
+        countQuery = countQuery.where('leave_applications.end_date', '>=', options.start_date_from);
+      } else if (options.end_date_to) {
+        countQuery = countQuery.where('leave_applications.start_date', '<=', options.end_date_to);
+      }
+    }
+
+    // 獲取總數
+    const totalCount = await countQuery.count('leave_applications.id as count').first();
+    const countValue = totalCount?.count;
+    const total = typeof countValue === 'string' ? parseInt(countValue, 10) : (countValue || 0);
+
+    // 分頁支持
+    if (options.page && options.limit) {
+      const offset = (options.page - 1) * options.limit;
+      query = query.limit(options.limit).offset(offset);
+    }
+
     const applications = await query.orderBy('leave_applications.created_at', 'desc');
-    return applications.map(app => formatApplication(withResolvedApprovalStage(app)));
+    const formattedApplications = applications.map(app => formatApplication(withResolvedApprovalStage(app)));
+
+    return {
+      applications: formattedApplications,
+      total,
+      page: options.page || 1,
+      limit: options.limit || total,
+      totalPages: options.limit ? Math.ceil(total / options.limit) : 1
+    };
   }
 
   static async update(id, updateData) {

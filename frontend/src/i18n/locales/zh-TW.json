@@ -1037,6 +1037,7 @@
     "chineseName": "中文名稱",
     "requiresBalance": "需餘額限制",
     "allowScheduleInput": "允許排班表輸入",
+    "availableInFlow": "在申請流程中可用",
     "status": "狀態",
     "actions": "操作",
     "yes": "是",

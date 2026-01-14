@@ -33,7 +33,6 @@ import HRDocumentUpload from './pages/HRDocumentUpload';
 import EmployeeDocuments from './pages/EmployeeDocuments';
 import FormLibrary from './pages/FormLibrary';
 import DepartmentGroupBalances from './pages/DepartmentGroupBalances';
-import Announcements from './pages/Announcements';
 import MyApplications from './pages/MyApplications';
 import MyApprovals from './pages/MyApprovals';
 import SystemMaintenance from './pages/SystemMaintenance';
@@ -46,7 +45,6 @@ import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
 import ShiftManagement from './pages/ShiftManagement';
-import ChatRoom from './pages/ChatRoom';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -105,13 +103,11 @@ function App() {
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
-            <Route path="/announcements" element={<PrivateRoute><Announcements /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
             <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
             <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
-            <Route path="/chat" element={<PrivateRoute><ChatRoom /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

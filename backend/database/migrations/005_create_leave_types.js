@@ -7,6 +7,7 @@ exports.up = function(knex) {
     table.boolean('requires_balance').defaultTo(true);
     table.boolean('is_active').defaultTo(true);
     table.boolean('allow_schedule_input').defaultTo(false);
+    table.boolean('is_available_in_flow').defaultTo(true); // 是否在 e-flow 及 paper-flow 申請時被載入假期類型供選擇
     table.timestamps(true, true);
   });
 };

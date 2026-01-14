@@ -5,17 +5,22 @@ import {
   Typography,
   Box,
   Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Grid,
   Card,
   CardContent,
   Chip,
   IconButton,
   CircularProgress,
-  Alert
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Checkbox,
+  FormControlLabel,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material';
 import { 
   ChevronLeft as ChevronLeftIcon,
@@ -56,6 +61,8 @@ const GroupLeaveCalendar = () => {
   const [schedules, setSchedules] = useState([]); // 存儲假期申請數據
   const [loading, setLoading] = useState(false);
   const [groupMembers, setGroupMembers] = useState({}); // { groupId: [members] }
+  const [groupSelectDialogOpen, setGroupSelectDialogOpen] = useState(false);
+  const [tempSelectedGroupIds, setTempSelectedGroupIds] = useState([]);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -585,9 +592,28 @@ const GroupLeaveCalendar = () => {
     setCurrentWeek(dayjs().startOf('isoWeek'));
   };
 
-  const handleGroupChange = (event) => {
-    const value = event.target.value;
-    setSelectedGroupIds(typeof value === 'string' ? value.split(',') : value);
+  const handleOpenGroupSelectDialog = () => {
+    setTempSelectedGroupIds([...selectedGroupIds]);
+    setGroupSelectDialogOpen(true);
+  };
+
+  const handleCloseGroupSelectDialog = () => {
+    setGroupSelectDialogOpen(false);
+  };
+
+  const handleConfirmGroupSelection = () => {
+    setSelectedGroupIds([...tempSelectedGroupIds]);
+    setGroupSelectDialogOpen(false);
+  };
+
+  const handleToggleGroup = (groupId) => {
+    setTempSelectedGroupIds(prev => {
+      if (prev.includes(groupId)) {
+        return prev.filter(id => id !== groupId);
+      } else {
+        return [...prev, groupId];
+      }
+    });
   };
 
   const weekDates = getWeekDates();
@@ -623,34 +649,28 @@ const GroupLeaveCalendar = () => {
           <Box sx={{ mb: 3 }}>
             <Grid container spacing={2} alignItems="center">
               <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>{t('groupLeaveCalendar.selectGroups')}</InputLabel>
-                  <Select
-                    multiple
-                    value={selectedGroupIds}
-                    onChange={handleGroupChange}
-                    label={t('groupLeaveCalendar.selectGroups')}
-                    renderValue={(selected) => {
-                      if (selected.length === 0) return '';
-                      return selected.map(id => {
+                <Button
+                  variant="outlined"
+                  onClick={handleOpenGroupSelectDialog}
+                  fullWidth
+                  sx={{ 
+                    justifyContent: 'flex-start',
+                    textTransform: 'none',
+                    height: '56px'
+                  }}
+                >
+                  {selectedGroupIds.length === 0 
+                    ? t('groupLeaveCalendar.selectGroups')
+                    : selectedGroupIds.map(id => {
                         const group = departmentGroups.find(g => g.id === id);
                         return group 
                           ? (i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
                               ? group.name_zh || group.name 
                               : group.name)
                           : id;
-                      }).join(', ');
-                    }}
-                  >
-                    {departmentGroups.map(group => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
-                          ? group.name_zh || group.name 
-                          : group.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                      }).join(', ')
+                  }
+                </Button>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="body1" sx={{ textAlign: 'right' }}>
@@ -659,6 +679,63 @@ const GroupLeaveCalendar = () => {
               </Grid>
             </Grid>
           </Box>
+
+          {/* 群組選擇對話框 */}
+          <Dialog 
+            open={groupSelectDialogOpen} 
+            onClose={handleCloseGroupSelectDialog}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>
+              {t('groupLeaveCalendar.selectGroups')}
+            </DialogTitle>
+            <DialogContent>
+              <List>
+                {departmentGroups.map(group => {
+                  const groupName = i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
+                    ? group.name_zh || group.name 
+                    : group.name;
+                  const isChecked = tempSelectedGroupIds.includes(group.id);
+                  
+                  return (
+                    <ListItem 
+                      key={group.id}
+                      button
+                      onClick={() => handleToggleGroup(group.id)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: 'action.hover'
+                        }
+                      }}
+                    >
+                      <Checkbox
+                        checked={isChecked}
+                        onChange={() => handleToggleGroup(group.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <ListItemText 
+                        primary={groupName}
+                        secondary={group.description || ''}
+                      />
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseGroupSelectDialog}>
+                {t('common.cancel')}
+              </Button>
+              <Button 
+                onClick={handleConfirmGroupSelection} 
+                variant="contained"
+                color="primary"
+              >
+                {t('common.confirm')}
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>

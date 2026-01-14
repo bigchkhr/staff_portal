@@ -556,12 +556,13 @@ class ScheduleController {
     const userIds = members.map(m => m.id);
     console.log(`Group ${departmentGroupId} has ${userIds.length} members`);
     
-    // 查詢已批核的假期申請（排除已銷假的）
-    const allLeaveApplications = await LeaveApplication.findAll({
+    // 查詢已批核的假期申請（LeaveApplication.findAll 會回傳物件：{ applications, total, ... }）
+    const leaveResult = await LeaveApplication.findAll({
       status: 'approved',
       start_date_from: startDate,
       end_date_to: endDate
     });
+    const allLeaveApplications = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
     
     // 過濾出群組成員的假期申請，並排除已銷假的
     const leaveApplications = allLeaveApplications.filter(leave => {
@@ -609,12 +610,13 @@ class ScheduleController {
     const userIds = Array.from(allUserIds);
     console.log(`Groups have ${userIds.length} total members`);
     
-    // 查詢已批核的假期申請（排除已銷假的）
-    const allLeaveApplications = await LeaveApplication.findAll({
+    // 查詢已批核的假期申請（LeaveApplication.findAll 會回傳物件：{ applications, total, ... }）
+    const leaveResult = await LeaveApplication.findAll({
       status: 'approved',
       start_date_from: startDate,
       end_date_to: endDate
     });
+    const allLeaveApplications = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
     
     // 過濾出群組成員的假期申請，並排除已銷假的
     const leaveApplications = allLeaveApplications.filter(leave => {

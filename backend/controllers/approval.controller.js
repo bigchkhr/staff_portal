@@ -418,6 +418,10 @@ class ApprovalController {
 
   async getPendingApprovals(req, res) {
     try {
+      const { page, limit } = req.query;
+      const pageNum = page ? parseInt(page) : 1;
+      const limitNum = limit ? parseInt(limit) : 15;
+      
       const leaveApplications = await LeaveApplication.getPendingApprovals(req.user.id);
       const extraWorkingHoursApplications = await ExtraWorkingHoursApplication.getPendingApprovals(req.user.id);
       const outdoorWorkApplications = await OutdoorWorkApplication.getPendingApprovals(req.user.id);
@@ -434,7 +438,21 @@ class ApprovalController {
         return dateA - dateB;
       });
       
-      res.json({ applications: allApplications });
+      // 分頁處理
+      const total = allApplications.length;
+      const totalPages = Math.ceil(total / limitNum);
+      const offset = (pageNum - 1) * limitNum;
+      const paginatedApplications = allApplications.slice(offset, offset + limitNum);
+      
+      res.json({ 
+        applications: paginatedApplications,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages
+        }
+      });
     } catch (error) {
       console.error('Get pending approvals error:', error);
       res.status(500).json({ message: '獲取待批核申請時發生錯誤' });
@@ -472,8 +490,12 @@ class ApprovalController {
         department_group_id,
         start_date_from, 
         end_date_to,
-        application_type
+        application_type,
+        page,
+        limit
       } = req.query;
+      const pageNum = page ? parseInt(page) : 1;
+      const limitNum = limit ? parseInt(limit) : 15;
       const userId = req.user.id;
       
       // 獲取所有已處理的申請（不包括待批核的）
@@ -1072,9 +1094,23 @@ class ApprovalController {
         return dateB - dateA; // 降序
       });
       
-      console.log(`[getApprovalHistory] 最終返回 ${formattedApplications.length} 個申請`);
+      // 分頁處理
+      const total = formattedApplications.length;
+      const totalPages = Math.ceil(total / limitNum);
+      const offset = (pageNum - 1) * limitNum;
+      const paginatedApplications = formattedApplications.slice(offset, offset + limitNum);
       
-      res.json({ applications: formattedApplications });
+      console.log(`[getApprovalHistory] 總共 ${total} 個申請，返回第 ${pageNum} 頁，每頁 ${limitNum} 個`);
+      
+      res.json({ 
+        applications: paginatedApplications,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages
+        }
+      });
     } catch (error) {
       console.error('Get approval history error:', error);
       res.status(500).json({ message: '獲取批核記錄時發生錯誤' });

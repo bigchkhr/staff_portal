@@ -253,8 +253,8 @@ const LeaveApplication = () => {
 
   const fetchLeaveTypes = async () => {
     try {
-      const response = await axios.get('/api/leave-types');
-      setLeaveTypes(response.data.leaveTypes);
+      const response = await axios.get('/api/leave-types/available-in-flow');
+      setLeaveTypes(response.data.leaveTypes || []);
     } catch (error) {
       console.error('Fetch leave types error:', error);
     }

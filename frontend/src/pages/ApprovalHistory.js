@@ -38,7 +38,8 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  CircularProgress
+  CircularProgress,
+  Pagination
 } from '@mui/material';
 import { 
   Visibility as VisibilityIcon, 
@@ -272,6 +273,10 @@ const ApprovalHistory = () => {
   const [search, setSearch] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [limit] = useState(15); // 每頁顯示數量
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
   
   // 獲取當前年份和月份作為預設值
@@ -323,7 +328,10 @@ const ApprovalHistory = () => {
   const fetchApprovalHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {};
+      const params = {
+        page,
+        limit
+      };
       
       // 狀態篩選
       if (statusFilter !== 'all') {
@@ -358,12 +366,18 @@ const ApprovalHistory = () => {
       
       const response = await axios.get('/api/approvals/history', { params });
       setApplications(response.data.applications || []);
+      
+      // 更新分頁信息
+      if (response.data.pagination) {
+        setTotal(response.data.pagination.total || 0);
+        setTotalPages(response.data.pagination.totalPages || 1);
+      }
     } catch (error) {
       console.error('Fetch approval history error:', error);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterDepartmentGroup, filterYear, filterMonth, dateFrom, dateTo]);
+  }, [page, limit, statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterDepartmentGroup, filterYear, filterMonth, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -371,6 +385,14 @@ const ApprovalHistory = () => {
     fetchApprovalHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    fetchApprovalHistory();
+  }, [page, fetchApprovalHistory]);
+
+  const handlePageChange = (event, value) => {
+    setPage(value);
+  };
 
   const getStatusColor = useCallback((application) => {
     // 如果已被銷假，顯示特殊顏色
@@ -1279,6 +1301,25 @@ const ApprovalHistory = () => {
           </TableContainer>
         )}
       </Paper>
+      
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            size={isMobile ? 'small' : 'medium'}
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontSize: { xs: '0.875rem', sm: '1rem' }
+              }
+            }}
+          />
+        </Box>
+      )}
 
       {/* 檔案管理對話框 */}
       <Dialog

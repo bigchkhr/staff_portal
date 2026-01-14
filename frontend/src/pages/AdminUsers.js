@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   Box,
   Paper,
@@ -22,8 +22,8 @@ import {
   Switch,
   FormControlLabel,
   Tooltip,
-  Tabs,
-  Tab
+  Pagination,
+  CircularProgress
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Search as SearchIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -301,54 +301,15 @@ const AdminUsers = () => {
   const [editingUserData, setEditingUserData] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active'); // 'all', 'active', 'deactivated'
-
-  const filteredUsers = useMemo(() => {
-    let filtered = users;
-
-    // 狀態過濾
-    if (statusFilter === 'active') {
-      filtered = filtered.filter(u => !u.deactivated);
-    } else if (statusFilter === 'deactivated') {
-      filtered = filtered.filter(u => u.deactivated);
-    }
-    // statusFilter === 'all' 時不過濾
-
-    // 搜尋過濾
-    const trimmedSearch = searchKeyword.trim();
-    if (!trimmedSearch) {
-      return filtered;
-    }
-
-    const normalizedSearch = trimmedSearch.toLowerCase();
-    return filtered.filter((u) => {
-      const englishFullName = `${u.given_name || ''} ${u.surname || ''}`.trim();
-      const reversedEnglishFullName = `${u.surname || ''} ${u.given_name || ''}`.trim();
-
-      const candidates = [
-        u.id?.toString() || '',
-        u.employee_number || '',
-        englishFullName,
-        reversedEnglishFullName,
-        u.surname || '',
-        u.given_name || '',
-        u.display_name || '',
-        u.name_zh || '',
-        u.alias || ''
-      ];
-
-      return candidates.some((candidate) => {
-        const value = candidate.toString();
-        return (
-          value.toLowerCase().includes(normalizedSearch) ||
-          value.includes(trimmedSearch)
-        );
-      });
-    });
-  }, [users, searchKeyword, statusFilter]);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(15); // 每頁顯示數量
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
 
   const handleSearch = useCallback(() => {
     setSearchKeyword(searchTerm);
+    setPage(1); // 搜尋時重置到第一頁
   }, [searchTerm]);
 
   const handleSearchKeyPress = useCallback((e) => {
@@ -360,23 +321,43 @@ const AdminUsers = () => {
   // 處理搜尋輸入框的變化 - 只更新本地狀態，不觸發任何 API 調用
   const handleSearchTermChange = useCallback((e) => {
     setSearchTerm(e.target.value);
-    // 注意：這裡只更新 searchTerm，不會觸發任何後端 API 調用
-    // 只有點擊搜尋按鈕或按 Enter 鍵時才會更新 searchKeyword，觸發前端過濾
   }, []);
 
-  // 只在組件初始化時獲取用戶列表一次
+  // 處理分頁變化
+  const handlePageChange = useCallback((event, value) => {
+    setPage(value);
+  }, []);
+
+  // 當 page 或 searchKeyword 變化時重新獲取數據
   useEffect(() => {
     fetchUsers();
-  }, []); // 空依賴數組確保只執行一次
+  }, [page, searchKeyword]);
 
   const fetchUsers = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await axios.get('/api/admin/users');
+      const params = {
+        page,
+        limit
+      };
+      
+      if (searchKeyword.trim()) {
+        params.search = searchKeyword.trim();
+      }
+
+      const response = await axios.get('/api/admin/users', { params });
       setUsers(response.data.users || []);
+      
+      if (response.data.pagination) {
+        setTotal(response.data.pagination.total || 0);
+        setTotalPages(response.data.pagination.totalPages || 1);
+      }
     } catch (error) {
       console.error('Fetch users error:', error);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [page, limit, searchKeyword]);
 
   const handleOpen = useCallback(() => {
     setEditing(null);
@@ -397,6 +378,7 @@ const AdminUsers = () => {
   }, []);
 
   const handleSuccess = useCallback(() => {
+    // 重新獲取當前頁的數據
     fetchUsers();
   }, [fetchUsers]);
 
@@ -511,51 +493,61 @@ const AdminUsers = () => {
         </Box>
       </Paper>
 
-      <Paper 
-        elevation={2}
-        sx={{ 
-          mb: 3,
-          borderRadius: 2,
-          overflow: 'hidden'
-        }}
-      >
-        <Tabs
-          value={statusFilter}
-          onChange={(e, newValue) => setStatusFilter(newValue)}
-          sx={{
-            borderBottom: 1,
-            borderColor: 'divider',
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 500,
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              minHeight: { xs: 48, sm: 64 },
-              padding: { xs: '12px 16px', sm: '16px 24px' },
-              '&.Mui-selected': {
-                fontWeight: 600
-              }
-            },
-            '& .MuiTabs-indicator': {
-              height: 3
-            }
+      {total > 0 && (
+        <Paper 
+          elevation={2}
+          sx={{ 
+            p: { xs: 2, sm: 3 },
+            mb: 3,
+            borderRadius: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
         >
-          <Tab value="all" label={t('adminUsers.filter.all') || '全部'} />
-          <Tab value="active" label={t('adminUsers.filter.active') || '啟用中'} />
-          <Tab value="deactivated" label={t('adminUsers.filter.deactivated') || '已停用'} />
-        </Tabs>
-      </Paper>
+          <Typography variant="body2" color="text.secondary">
+            總共: {total} {t('adminUsers.title') || '用戶'}
+          </Typography>
+        </Paper>
+      )}
 
-      <UsersTable 
-        users={filteredUsers} 
-        onEdit={handleEdit}
-        onToggleForcePasswordChange={handleToggleForcePasswordChange}
-        i18n={i18n}
-        t={t}
-        isMobile={isMobile}
-        isTablet={isTablet}
-        isHRMember={isHRMember}
-      />
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <>
+          <UsersTable 
+            users={users} 
+            onEdit={handleEdit}
+            onToggleForcePasswordChange={handleToggleForcePasswordChange}
+            i18n={i18n}
+            t={t}
+            isMobile={isMobile}
+            isTablet={isTablet}
+            isHRMember={isHRMember}
+          />
+          
+          {totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+                size={isMobile ? 'small' : 'medium'}
+                showFirstButton
+                showLastButton
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    fontSize: { xs: '0.875rem', sm: '1rem' }
+                  }
+                }}
+              />
+            </Box>
+          )}
+        </>
+      )}
 
       <UserFormDialog
         open={open}

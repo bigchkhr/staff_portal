@@ -977,6 +977,7 @@
     "chineseName": "中文名称",
     "requiresBalance": "需余额限制",
     "allowScheduleInput": "允许排班表输入",
+    "availableInFlow": "在申请流程中可用",
     "status": "状态",
     "actions": "操作",
     "yes": "是",

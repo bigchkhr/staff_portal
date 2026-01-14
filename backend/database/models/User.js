@@ -57,21 +57,48 @@ class User {
         'positions.name_zh as position_name_zh'
       );
 
+    // 建立計數查詢（用於獲取總數）- 直接從 users 表計數以避免 join 導致的重複
+    let countQuery = knex('users');
+
     if (options.department_id) {
       query = query.where('users.department_id', options.department_id);
+      countQuery = countQuery.where('users.department_id', options.department_id);
     }
 
     if (options.search) {
-      query = query.where(function() {
+      const searchCondition = function() {
         this.where('users.employee_number', 'like', `%${options.search}%`)
           .orWhere('users.surname', 'like', `%${options.search}%`)
           .orWhere('users.given_name', 'like', `%${options.search}%`)
           .orWhere('users.display_name', 'like', `%${options.search}%`)
+          .orWhere('users.name_zh', 'like', `%${options.search}%`)
+          .orWhere('users.alias', 'like', `%${options.search}%`)
           .orWhere('users.email', 'like', `%${options.search}%`);
-      });
+      };
+      query = query.where(searchCondition);
+      countQuery = countQuery.where(searchCondition);
     }
 
-    return await query.orderBy('users.created_at', 'desc');
+    // 獲取總數
+    const totalCount = await countQuery.count('users.id as count').first();
+    const countValue = totalCount?.count;
+    const total = typeof countValue === 'string' ? parseInt(countValue, 10) : (countValue || 0);
+
+    // 分頁支持
+    if (options.page && options.limit) {
+      const offset = (options.page - 1) * options.limit;
+      query = query.limit(options.limit).offset(offset);
+    }
+
+    const users = await query.orderBy('users.created_at', 'desc');
+
+    return {
+      users,
+      total,
+      page: options.page || 1,
+      limit: options.limit || total,
+      totalPages: options.limit ? Math.ceil(total / options.limit) : 1
+    };
   }
 
   static async findByEmployeeNumber(employeeNumber) {

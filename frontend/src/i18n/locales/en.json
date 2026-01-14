@@ -1037,6 +1037,7 @@
     "chineseName": "Chinese Name",
     "requiresBalance": "Requires Balance",
     "allowScheduleInput": "Allow Schedule Input",
+    "availableInFlow": "Available in Application Flow",
     "status": "Status",
     "actions": "Actions",
     "yes": "Yes",

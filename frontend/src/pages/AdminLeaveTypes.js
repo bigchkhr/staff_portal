@@ -45,7 +45,8 @@ const AdminLeaveTypes = () => {
     name_zh: '',
     requires_balance: true,
     is_active: true,
-    allow_schedule_input: false
+    allow_schedule_input: false,
+    is_available_in_flow: true
   });
 
   useEffect(() => {
@@ -69,7 +70,8 @@ const AdminLeaveTypes = () => {
       name_zh: '',
       requires_balance: true,
       is_active: true,
-      allow_schedule_input: false
+      allow_schedule_input: false,
+      is_available_in_flow: true
     });
     setOpen(true);
   };
@@ -82,7 +84,8 @@ const AdminLeaveTypes = () => {
       name_zh: leaveType.name_zh,
       requires_balance: leaveType.requires_balance,
       is_active: leaveType.is_active !== undefined ? leaveType.is_active : true,
-      allow_schedule_input: leaveType.allow_schedule_input !== undefined ? leaveType.allow_schedule_input : false
+      allow_schedule_input: leaveType.allow_schedule_input !== undefined ? leaveType.allow_schedule_input : false,
+      is_available_in_flow: leaveType.is_available_in_flow !== undefined ? leaveType.is_available_in_flow : true
     });
     setOpen(true);
   };
@@ -227,6 +230,17 @@ const AdminLeaveTypes = () => {
                         sx={{ mt: 0.5 }}
                       />
                     </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {t('adminLeaveTypes.availableInFlow')}
+                      </Typography>
+                      <Chip
+                        label={lt.is_available_in_flow ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
+                        color={lt.is_available_in_flow ? 'primary' : 'default'}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    </Grid>
                   </Grid>
 
                   <Divider sx={{ my: 1.5 }} />
@@ -278,6 +292,7 @@ const AdminLeaveTypes = () => {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.chineseName')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.requiresBalance')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.allowScheduleInput')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.availableInFlow')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.status')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminLeaveTypes.actions')}</TableCell>
                 </TableRow>
@@ -320,6 +335,14 @@ const AdminLeaveTypes = () => {
                         <Chip
                           label={lt.allow_schedule_input ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
                           color={lt.allow_schedule_input ? 'success' : 'default'}
+                          size="small"
+                          sx={{ fontWeight: 500 }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <Chip
+                          label={lt.is_available_in_flow ? t('adminLeaveTypes.yes') : t('adminLeaveTypes.no')}
+                          color={lt.is_available_in_flow ? 'primary' : 'default'}
                           size="small"
                           sx={{ fontWeight: 500 }}
                         />
@@ -419,6 +442,15 @@ const AdminLeaveTypes = () => {
                 />
               }
               label={t('adminLeaveTypes.allowScheduleInput')}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.is_available_in_flow}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_available_in_flow: e.target.checked }))}
+                />
+              }
+              label={t('adminLeaveTypes.availableInFlow')}
             />
             <FormControlLabel
               control={

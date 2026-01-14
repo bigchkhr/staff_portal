@@ -19,7 +19,8 @@ import {
   useTheme,
   useMediaQuery,
   CircularProgress,
-  Alert
+  Alert,
+  Pagination
 } from '@mui/material';
 import { Visibility as VisibilityIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -36,22 +37,38 @@ const ApprovalList = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(15); // 每頁顯示數量
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchPendingApprovals();
-  }, []);
+  }, [page]);
 
   const fetchPendingApprovals = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/approvals/pending');
+      const response = await axios.get('/api/approvals/pending', {
+        params: { page, limit }
+      });
       setApplications(response.data.applications || []);
+      
+      // 更新分頁信息
+      if (response.data.pagination) {
+        setTotal(response.data.pagination.total || 0);
+        setTotalPages(response.data.pagination.totalPages || 1);
+      }
     } catch (error) {
       console.error('Fetch pending approvals error:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (event, value) => {
+    setPage(value);
   };
 
   const getCurrentStage = (application) => {
@@ -426,6 +443,25 @@ const ApprovalList = () => {
           </TableContainer>
         )}
       </Paper>
+      
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            size={isMobile ? 'small' : 'medium'}
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontSize: { xs: '0.875rem', sm: '1rem' }
+              }
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };

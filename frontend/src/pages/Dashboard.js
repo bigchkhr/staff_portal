@@ -29,16 +29,29 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Stack
+  Stack,
+  Pagination,
+  Switch,
+  FormControlLabel,
+  Checkbox,
+  FormGroup,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemIcon
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  List as ListIcon
+  List as ListIcon,
+  Article as ArticleIcon,
+  Visibility as VisibilityIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { formatDate } from '../utils/dateFormat';
 import Swal from 'sweetalert2';
@@ -46,6 +59,7 @@ import Swal from 'sweetalert2';
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
   const { user, isSystemAdmin, isDeptHead } = useAuth();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -95,6 +109,27 @@ const Dashboard = () => {
     priority: 1
   });
 
+  // 最新消息狀態
+  const [newsList, setNewsList] = useState([]);
+  const [loadingNews, setLoadingNews] = useState(false);
+  const [newsPage, setNewsPage] = useState(1);
+  const [viewingNews, setViewingNews] = useState(null);
+  const [newsDetailOpen, setNewsDetailOpen] = useState(false);
+  const [newsDialogOpen, setNewsDialogOpen] = useState(false);
+  const [editingNews, setEditingNews] = useState(null);
+  const [savingNews, setSavingNews] = useState(false);
+  const [newsForm, setNewsForm] = useState({
+    title: '',
+    content: '',
+    is_pinned: false,
+    is_all_employees: false,
+    group_ids: []
+  });
+  const [newsGroups, setNewsGroups] = useState([]);
+  const [loadingNewsGroups, setLoadingNewsGroups] = useState(false);
+  const [isNewsGroupManager, setIsNewsGroupManager] = useState(false);
+  const itemsPerPage = 15;
+
   const isHRMember = user?.is_hr_member || user?.is_system_admin;
 
   useEffect(() => {
@@ -102,8 +137,16 @@ const Dashboard = () => {
       fetchHRTodos();
       fetchPayrollAlertItems();
     }
+    checkNewsGroupManager();
     fetchMyTodos();
+    fetchNews();
   }, [isHRMember]);
+
+  useEffect(() => {
+    if (isNewsGroupManager) {
+      fetchNewsGroups();
+    }
+  }, [isNewsGroupManager]);
 
   // 獲取 HR 待處理清單
   const fetchHRTodos = async () => {
@@ -159,6 +202,281 @@ const Dashboard = () => {
       console.error('Fetch my todos error:', error);
     } finally {
       setLoadingMyTodos(false);
+    }
+  };
+
+  // 獲取最新消息
+  const fetchNews = async () => {
+    try {
+      setLoadingNews(true);
+      const response = await axios.get('/api/news');
+      setNewsList(response.data.news || []);
+    } catch (error) {
+      console.error('Fetch news error:', error);
+    } finally {
+      setLoadingNews(false);
+    }
+  };
+
+  // 檢查是否為消息群組管理員
+  const checkNewsGroupManager = async () => {
+    try {
+      const response = await axios.get('/api/news-groups/check-manager');
+      setIsNewsGroupManager(response.data.isManager || false);
+    } catch (error) {
+      console.error('Check news group manager error:', error);
+      setIsNewsGroupManager(false);
+    }
+  };
+
+  // 獲取消息群組列表
+  const fetchNewsGroups = async () => {
+    try {
+      setLoadingNewsGroups(true);
+      const response = await axios.get('/api/news-groups?closed=false');
+      setNewsGroups(response.data.groups || []);
+    } catch (error) {
+      console.error('Fetch news groups error:', error);
+    } finally {
+      setLoadingNewsGroups(false);
+    }
+  };
+
+  // 查看消息詳情
+  const handleViewNewsDetail = async (newsId) => {
+    try {
+      const response = await axios.get(`/api/news/${newsId}`);
+      setViewingNews(response.data.news);
+      setNewsDetailOpen(true);
+    } catch (error) {
+      console.error('Fetch news detail error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: '錯誤',
+        text: '獲取消息詳情時發生錯誤',
+        confirmButtonText: '確定',
+        confirmButtonColor: '#d33'
+      });
+    }
+  };
+
+  // 關閉消息詳情對話框
+  const handleCloseNewsDetail = () => {
+    setNewsDetailOpen(false);
+    setViewingNews(null);
+  };
+
+  // 刪除消息
+  const handleDeleteNews = async (newsId) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: '確認刪除',
+      text: '確定要刪除此消息嗎？',
+      showCancelButton: true,
+      confirmButtonText: '確定',
+      cancelButtonText: '取消',
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await axios.delete(`/api/news/${newsId}`);
+      await Swal.fire({
+        icon: 'success',
+        title: '成功',
+        text: '消息已刪除',
+        confirmButtonText: '確定',
+        confirmButtonColor: '#3085d6'
+      });
+      await fetchNews();
+    } catch (error) {
+      console.error('Delete news error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: '刪除失敗',
+        text: error.response?.data?.message || '刪除消息時發生錯誤',
+        confirmButtonText: '確定',
+        confirmButtonColor: '#d33'
+      });
+    }
+  };
+
+  // 檢查用戶是否可以編輯/刪除消息
+  const canEditNews = (news) => {
+    // 消息群組管理員可以編輯所有消息，或者創建者可以編輯自己的消息
+    return isNewsGroupManager || news.created_by_id === user?.id;
+  };
+
+  // 打開發布消息對話框
+  const handleOpenNewsDialog = (news = null) => {
+    if (news) {
+      setEditingNews(news);
+      // 如果 is_all_employees 為 true，則選擇所有群組
+      const selectedGroupIds = news.is_all_employees 
+        ? newsGroups.map(g => g.id)
+        : (news.group_ids || []);
+      setNewsForm({
+        title: news.title || '',
+        content: news.content || '',
+        is_pinned: news.is_pinned || false,
+        is_all_employees: false, // 不再使用這個欄位，改為通過群組選擇判斷
+        group_ids: selectedGroupIds
+      });
+    } else {
+      setEditingNews(null);
+      setNewsForm({
+        title: '',
+        content: '',
+        is_pinned: false,
+        is_all_employees: false,
+        group_ids: []
+      });
+    }
+    setNewsDialogOpen(true);
+  };
+
+  // 關閉發布消息對話框
+  const handleCloseNewsDialog = () => {
+    setNewsDialogOpen(false);
+    setEditingNews(null);
+    setNewsForm({
+      title: '',
+      content: '',
+      is_pinned: false,
+      is_all_employees: false,
+      group_ids: []
+    });
+  };
+
+  // 處理群組選擇變化
+  const handleGroupSelectionChange = (groupId) => {
+    const currentGroupIds = newsForm.group_ids || [];
+    const isSelected = currentGroupIds.includes(groupId);
+    
+    let newGroupIds;
+    if (isSelected) {
+      // 取消選擇
+      newGroupIds = currentGroupIds.filter(id => id !== groupId);
+    } else {
+      // 選擇
+      newGroupIds = [...currentGroupIds, groupId];
+    }
+    
+    setNewsForm({
+      ...newsForm,
+      group_ids: newGroupIds
+    });
+  };
+
+  // 處理全選/取消全選
+  const handleSelectAllGroups = () => {
+    const allGroupIds = newsGroups.map(g => g.id);
+    const currentGroupIds = newsForm.group_ids || [];
+    const isAllSelected = allGroupIds.length > 0 && 
+      allGroupIds.every(id => currentGroupIds.includes(id));
+    
+    if (isAllSelected) {
+      // 取消全選
+      setNewsForm({
+        ...newsForm,
+        group_ids: []
+      });
+    } else {
+      // 全選
+      setNewsForm({
+        ...newsForm,
+        group_ids: allGroupIds
+      });
+    }
+  };
+
+  // 發布消息
+  const handleCreateNews = async () => {
+    if (savingNews) return;
+
+    try {
+      setSavingNews(true);
+
+      if (!newsForm.title || newsForm.title.trim() === '') {
+        await Swal.fire({
+          icon: 'warning',
+          title: '提示',
+          text: '請輸入消息標題',
+          confirmButtonText: '確定',
+          confirmButtonColor: '#3085d6'
+        });
+        setSavingNews(false);
+        return;
+      }
+
+      if (!newsForm.content || newsForm.content.trim() === '') {
+        await Swal.fire({
+          icon: 'warning',
+          title: '提示',
+          text: '請輸入消息內容',
+          confirmButtonText: '確定',
+          confirmButtonColor: '#3085d6'
+        });
+        setSavingNews(false);
+        return;
+      }
+
+      // 檢查是否選擇了群組
+      const selectedGroupIds = newsForm.group_ids || [];
+      if (selectedGroupIds.length === 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: '提示',
+          text: '請至少選擇一個群組',
+          confirmButtonText: '確定',
+          confirmButtonColor: '#3085d6'
+        });
+        setSavingNews(false);
+        return;
+      }
+
+      // 如果選擇了所有群組，則設置 is_all_employees = true
+      const allGroupIds = newsGroups.map(g => g.id);
+      const isAllSelected = allGroupIds.length > 0 && 
+        allGroupIds.every(id => selectedGroupIds.includes(id));
+      
+      const newsData = {
+        title: newsForm.title.trim(),
+        content: newsForm.content.trim(),
+        is_pinned: newsForm.is_pinned || false,
+        is_all_employees: isAllSelected,
+        group_ids: isAllSelected ? [] : selectedGroupIds
+      };
+
+      if (editingNews) {
+        await axios.put(`/api/news/${editingNews.id}`, newsData);
+      } else {
+        await axios.post('/api/news', newsData);
+      }
+      
+      handleCloseNewsDialog();
+      setSavingNews(false);
+      await fetchNews();
+      
+      await Swal.fire({
+        icon: 'success',
+        title: '成功',
+        text: editingNews ? '消息更新成功' : '消息發布成功',
+        confirmButtonText: '確定',
+        confirmButtonColor: '#3085d6'
+      });
+    } catch (error) {
+      console.error('Create news error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: '發布失敗',
+        text: error.response?.data?.message || '發布消息時發生錯誤',
+        confirmButtonText: '確定',
+        confirmButtonColor: '#d33'
+      });
+      setSavingNews(false);
     }
   };
 
@@ -1457,6 +1775,340 @@ const Dashboard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 最新消息列表 */}
+      <Box sx={{ mt: 4 }}>
+        <Divider sx={{ mb: 3 }} />
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: isMobile ? 'flex-start' : 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? 2 : 0,
+            mb: 2 
+          }}
+        >
+          <Typography variant="h5" gutterBottom={isMobile}>
+            <ArticleIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+            最新消息
+          </Typography>
+          {isNewsGroupManager && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleOpenNewsDialog}
+              fullWidth={isMobile}
+              size={isMobile ? 'medium' : 'medium'}
+            >
+              發布消息
+            </Button>
+          )}
+        </Box>
+
+        {loadingNews ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : newsList.length === 0 ? (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body1" color="text.secondary">
+              暫無最新消息
+            </Typography>
+          </Paper>
+        ) : (
+          <>
+            <Stack spacing={2}>
+              {newsList
+                .slice((newsPage - 1) * itemsPerPage, newsPage * itemsPerPage)
+                .map((news) => (
+                  <Card key={news.id} variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                        {news.is_pinned && (
+                          <Chip
+                            label="置頂"
+                            color="warning"
+                            size="small"
+                            sx={{ mt: 0.5 }}
+                          />
+                        )}
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="h6" gutterBottom>
+                            {news.title}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary"
+                            sx={{ 
+                              mb: 1,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                          >
+                            {news.content}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 2, mt: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              發布者: {news.creator_display_name || news.creator_email || '未知'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              發布時間: {formatDate(news.created_at)}
+                            </Typography>
+                            {news.attachment_count > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                附件: {news.attachment_count} 個
+                              </Typography>
+                            )}
+                            <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<VisibilityIcon />}
+                                onClick={() => handleViewNewsDetail(news.id)}
+                              >
+                                查看詳情
+                              </Button>
+                              {canEditNews(news) && (
+                                <>
+                                  <IconButton
+                                    size="small"
+                                    color="primary"
+                                    onClick={() => handleOpenNewsDialog(news)}
+                                    title="編輯"
+                                  >
+                                    <EditIcon />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDeleteNews(news.id)}
+                                    title="刪除"
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </>
+                              )}
+                            </Box>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+            </Stack>
+            
+            {newsList.length > itemsPerPage && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                <Pagination
+                  count={Math.ceil(newsList.length / itemsPerPage)}
+                  page={newsPage}
+                  onChange={(event, value) => setNewsPage(value)}
+                  color="primary"
+                  size={isMobile ? 'small' : 'medium'}
+                />
+              </Box>
+            )}
+          </>
+        )}
+      </Box>
+
+      {/* 消息詳情對話框 */}
+      <Dialog
+        open={newsDetailOpen}
+        onClose={handleCloseNewsDetail}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {viewingNews?.is_pinned && (
+              <Chip label="置頂" color="warning" size="small" />
+            )}
+            <Typography variant="h6" component="span">
+              {viewingNews?.title}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {viewingNews && (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  發布者: {viewingNews.creator_display_name || viewingNews.creator_email || '未知'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  發布時間: {formatDate(viewingNews.created_at)}
+                </Typography>
+              </Box>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
+                {viewingNews.content}
+              </Typography>
+              {viewingNews.attachment_count > 0 && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle2" gutterBottom>
+                    附件 ({viewingNews.attachment_count} 個)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    請前往消息管理頁面查看和下載附件
+                  </Typography>
+                </>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseNewsDetail} variant="outlined">
+            關閉
+          </Button>
+          </DialogActions>
+        </Dialog>
+
+      {/* 發布消息對話框 */}
+      {isNewsGroupManager && (
+        <Dialog
+          open={newsDialogOpen}
+          onClose={handleCloseNewsDialog}
+          maxWidth="md"
+          fullWidth
+          fullScreen={isMobile}
+        >
+          <DialogTitle>
+            {editingNews ? '編輯消息' : '發布新消息'}
+          </DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="消息標題"
+                  value={newsForm.title}
+                  onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="消息內容"
+                  multiline
+                  rows={6}
+                  value={newsForm.content}
+                  onChange={(e) => setNewsForm({ ...newsForm, content: e.target.value })}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={newsForm.is_pinned}
+                      onChange={(e) => setNewsForm({ ...newsForm, is_pinned: e.target.checked })}
+                    />
+                  }
+                  label="置頂消息"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" gutterBottom>
+                  選擇接收群組
+                </Typography>
+                {loadingNewsGroups ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : (
+                  <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
+                    <List dense>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={handleSelectAllGroups}>
+                          <ListItemIcon>
+                            <Checkbox
+                              edge="start"
+                              checked={
+                                newsGroups.length > 0 &&
+                                newsGroups.every(g => (newsForm.group_ids || []).includes(g.id))
+                              }
+                              indeterminate={
+                                (newsForm.group_ids || []).length > 0 &&
+                                (newsForm.group_ids || []).length < newsGroups.length
+                              }
+                              tabIndex={-1}
+                              disableRipple
+                            />
+                          </ListItemIcon>
+                          <ListItemText 
+                            primary="全選所有群組（發送給所有員工）"
+                            primaryTypographyProps={{ fontWeight: 'bold' }}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      <Divider />
+                      {newsGroups.map((group) => {
+                        const isSelected = (newsForm.group_ids || []).includes(group.id);
+                        return (
+                          <ListItem key={group.id} disablePadding>
+                            <ListItemButton onClick={() => handleGroupSelectionChange(group.id)}>
+                              <ListItemIcon>
+                                <Checkbox
+                                  edge="start"
+                                  checked={isSelected}
+                                  tabIndex={-1}
+                                  disableRipple
+                                />
+                              </ListItemIcon>
+                              <ListItemText 
+                                primary={group.name_zh || group.name}
+                                secondary={group.description || ''}
+                              />
+                            </ListItemButton>
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  </Paper>
+                )}
+                {newsForm.group_ids && newsForm.group_ids.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    已選擇 {newsForm.group_ids.length} 個群組
+                  </Typography>
+                )}
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions sx={{ flexDirection: isMobile ? 'column-reverse' : 'row', gap: isMobile ? 1 : 0 }}>
+            <Button
+              onClick={handleCloseNewsDialog}
+              fullWidth={isMobile}
+              size={isMobile ? 'large' : 'medium'}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleCreateNews}
+              variant="contained"
+              fullWidth={isMobile}
+              size={isMobile ? 'large' : 'medium'}
+              disabled={savingNews}
+            >
+              {savingNews ? (
+                <>
+                  <CircularProgress size={16} sx={{ mr: 1 }} />
+                  {editingNews ? '更新中...' : '發布中...'}
+                </>
+              ) : (
+                editingNews ? '更新' : '發布'
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 };

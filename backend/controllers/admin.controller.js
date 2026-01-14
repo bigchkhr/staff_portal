@@ -99,15 +99,27 @@ class AdminController {
 
   async getUsers(req, res) {
     try {
-      const { department_id, search } = req.query;
+      const { department_id, search, page, limit } = req.query;
       const options = {};
 
       if (department_id) options.department_id = department_id;
       if (search) options.search = search;
+      
+      // 分頁參數
+      if (page) options.page = parseInt(page);
+      if (limit) options.limit = parseInt(limit);
 
-      const users = await User.findAll(options);
+      const result = await User.findAll(options);
 
-      res.json({ users });
+      res.json({
+        users: result.users,
+        pagination: {
+          total: result.total,
+          page: result.page,
+          limit: result.limit,
+          totalPages: result.totalPages
+        }
+      });
     } catch (error) {
       console.error('Get users error:', error);
       res.status(500).json({ message: '獲取用戶列表時發生錯誤' });

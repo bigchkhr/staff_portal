@@ -287,7 +287,9 @@ class LeaveController {
         start_date_from,
         start_date_to,
         end_date_from,
-        end_date_to
+        end_date_to,
+        page,
+        limit
       } = req.query;
       
       const options = {};
@@ -304,6 +306,10 @@ class LeaveController {
       if (start_date_to) options.start_date_to = start_date_to;
       if (end_date_from) options.end_date_from = end_date_from;
       if (end_date_to) options.end_date_to = end_date_to;
+      
+      // 分頁參數
+      if (page) options.page = parseInt(page);
+      if (limit) options.limit = parseInt(limit);
       
       // leave/history 只顯示使用者本人的申請，HR Group 成員亦是
       // 除非明確指定 user_id 或 applicant_id 參數（用於其他場景，如管理員查看）
@@ -322,12 +328,12 @@ class LeaveController {
         options.approver_id = req.user.id;
       }
 
-      const applications = await LeaveApplication.findAll(options);
+      const result = await LeaveApplication.findAll(options);
 
       // 為每個申請添加相關的銷假交易（reversal_transactions）
       const knex = require('../config/database');
       const applicationsWithReversals = await Promise.all(
-        applications.map(async (app) => {
+        result.applications.map(async (app) => {
           // 查詢與此申請相關的有效銷假交易（只顯示已批准的）
           const reversalTransactions = await knex('leave_applications')
             .leftJoin('users', 'leave_applications.user_id', 'users.id')
@@ -363,7 +369,15 @@ class LeaveController {
         })
       );
 
-      res.json({ applications: applicationsWithReversals });
+      res.json({ 
+        applications: applicationsWithReversals,
+        pagination: {
+          total: result.total,
+          page: result.page,
+          limit: result.limit,
+          totalPages: result.totalPages
+        }
+      });
     } catch (error) {
       console.error('Get applications error:', error);
       res.status(500).json({ message: '獲取申請列表時發生錯誤' });

@@ -28,7 +28,8 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  CircularProgress
+  CircularProgress,
+  Pagination
 } from '@mui/material';
 import { Search as SearchIcon, Undo as UndoIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +50,10 @@ const LeaveHistory = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedApplication, setSelectedApplication] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(15); // 每頁顯示數量
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
   
   // 獲取當前年份作為預設值
@@ -71,6 +76,12 @@ const LeaveHistory = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (user) {
+      fetchApplications();
+    }
+  }, [page]);
+
   const fetchLeaveTypes = async () => {
     try {
       const response = await axios.get('/api/leave-types');
@@ -87,7 +98,10 @@ const LeaveHistory = () => {
       setLoading(true);
       
       // 構建查詢參數
-      const params = {};
+      const params = {
+        page,
+        limit
+      };
       
       // 進階搜尋參數
       if (filterStatus) params.status = filterStatus;
@@ -120,6 +134,12 @@ const LeaveHistory = () => {
       
       setAllApplications(myApplications);
       setApplications(myApplications);
+      
+      // 更新分頁信息
+      if (response.data.pagination) {
+        setTotal(response.data.pagination.total || 0);
+        setTotalPages(response.data.pagination.totalPages || 1);
+      }
     } catch (error) {
       console.error('Fetch applications error:', error);
     } finally {
@@ -128,6 +148,7 @@ const LeaveHistory = () => {
   };
 
   const handleApplyFilter = () => {
+    setPage(1); // 應用過濾時重置到第一頁
     fetchApplications();
   };
 
@@ -138,7 +159,12 @@ const LeaveHistory = () => {
     setFilterYear(currentYear.toString()); // 清除時重置為當前年份
     setDateFrom('');
     setDateTo('');
+    setPage(1); // 清除過濾時重置到第一頁
     fetchApplications();
+  };
+
+  const handlePageChange = (event, value) => {
+    setPage(value);
   };
 
   const getStatusColor = (application) => {
@@ -951,7 +977,25 @@ const LeaveHistory = () => {
           </TableContainer>
         )}
       </Paper>
-
+      
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={handlePageChange}
+            color="primary"
+            size={isMobile ? 'small' : 'medium'}
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontSize: { xs: '0.875rem', sm: '1rem' }
+              }
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };

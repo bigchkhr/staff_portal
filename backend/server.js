@@ -20,7 +20,6 @@ const path = require('path');
 const {
   helmetConfig,
   apiLimiter,
-  chatLimiter,
   requestSizeLimit,
   securityLogger
 } = require('./middleware/security');
@@ -84,15 +83,8 @@ app.use(cors(corsOptions));
 app.use(express.json(requestSizeLimit.json));
 app.use(express.urlencoded(requestSizeLimit.urlencoded));
 
-// API Rate Limiting（排除聊天室路由，因為聊天室需要更頻繁的請求）
-app.use('/api', (req, res, next) => {
-  // 如果請求是聊天室相關的，跳過全局 rate limiter
-  if (req.path.startsWith('/chat')) {
-    return next();
-  }
-  // 其他 API 使用全局 rate limiter
-  return apiLimiter(req, res, next);
-});
+// API Rate Limiting
+app.use('/api', apiLimiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -112,12 +104,12 @@ const adminRoutes = require('./routes/admin.routes');
 const documentRoutes = require('./routes/document.routes');
 const todoRoutes = require('./routes/todo.routes');
 const formLibraryRoutes = require('./routes/formLibrary.routes');
-const announcementRoutes = require('./routes/announcement.routes');
 const publicHolidayRoutes = require('./routes/publicHoliday.routes');
 const externalLinkRoutes = require('./routes/externalLink.routes');
 const scheduleRoutes = require('./routes/schedule.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
-const chatRoutes = require('./routes/chat.routes');
+const newsRoutes = require('./routes/news.routes');
+const newsGroupRoutes = require('./routes/newsGroup.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -133,13 +125,12 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/todos', todoRoutes);
 app.use('/api/form-library', formLibraryRoutes);
-app.use('/api/announcements', announcementRoutes);
 app.use('/api/public-holidays', publicHolidayRoutes);
 app.use('/api/external-links', externalLinkRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/attendances', attendanceRoutes);
-// 聊天室路由使用專門的 rate limiter（允許更頻繁的請求）
-app.use('/api/chat', chatLimiter, chatRoutes);
+app.use('/api/news', newsRoutes);
+app.use('/api/news-groups', newsGroupRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
