@@ -37,39 +37,9 @@ if (process.env.NODE_ENV === 'production') {
 // 信任代理（如果使用 nginx 或 load balancer）
 app.set('trust proxy', 1);
 
-// CORS Configuration
-let allowedOrigins = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000'
-];
-
-// 如果有 CloudFront URL，也加入允許列表
-if (process.env.CLOUDFRONT_URL) {
-  allowedOrigins.push(process.env.CLOUDFRONT_URL);
-}
-
-// 如果有前端 URL，也加入允許列表
-if (process.env.FRONTEND_URL) {
-  allowedOrigins.push(process.env.FRONTEND_URL);
-}
-
+// CORS Configuration - 允許所有來源
 const corsOptions = {
-  origin: function (origin, callback) {
-    // 允許沒有 origin 的請求（例如：Postman、移動應用、服務器端請求）
-    if (!origin) return callback(null, true);
-    
-    // 開發環境允許所有來源（方便開發）
-    if (process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    
-    // 生產環境：檢查 origin 是否在允許列表中
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('不允許的 CORS 來源'));
-    }
-  },
+  origin: true, // 允許所有來源
   credentials: true, // 允許發送 cookies
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -141,11 +111,8 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log('=== CORS Configuration ===');
-  console.log('允許的來源:', allowedOrigins);
+  console.log('允許的來源: 所有來源 (無限制)');
   console.log('環境:', process.env.NODE_ENV || 'development');
-  if (process.env.CLOUDFRONT_URL) {
-    console.log('CloudFront URL:', process.env.CLOUDFRONT_URL);
-  }
   console.log('==========================');
 });
 

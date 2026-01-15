@@ -113,22 +113,18 @@ const Login = () => {
       }}
     >
       <Container component="main" maxWidth="xs" sx={{ position: 'relative', zIndex: 1 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            position: 'relative'
-          }}
-        >
         <IconButton
           onClick={(e) => setLangAnchorEl(e.currentTarget)}
           sx={{
             position: 'absolute',
-            top: 0,
-            right: 0,
-            mt: 2,
-            mr: 2
+            top: 16,
+            right: 16,
+            zIndex: 10,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 255, 255, 1)',
+            },
+            boxShadow: 2
           }}
           title={t('language.selectLanguage')}
         >
@@ -149,6 +145,14 @@ const Login = () => {
             {t('language.en')}
           </MenuItem>
         </Menu>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            position: 'relative'
+          }}
+        >
         <Paper 
           elevation={3} 
           sx={{ 
