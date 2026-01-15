@@ -260,6 +260,93 @@ class DepartmentGroup {
     
     return flow;
   }
+
+  // 檢查使用者是否屬於授權群組的批核成員
+  static async isApproverMember(userId, departmentGroupId) {
+    const group = await knex('department_groups')
+      .where('id', departmentGroupId)
+      .first();
+    
+    if (!group) {
+      return false;
+    }
+
+    // 檢查使用者是否屬於任何一個授權群組（checker, approver_1, approver_2, approver_3）
+    const delegationGroupIds = [
+      group.checker_id,
+      group.approver_1_id,
+      group.approver_2_id,
+      group.approver_3_id
+    ].filter(id => id !== null && id !== undefined);
+
+    if (delegationGroupIds.length === 0) {
+      return false;
+    }
+
+    // 檢查使用者是否屬於任何一個授權群組
+    const isInAnyDelegationGroup = await knex('delegation_groups')
+      .whereIn('id', delegationGroupIds)
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .first();
+
+    return !!isInAnyDelegationGroup;
+  }
+
+  // 獲取用戶有權限發布消息的部門群組（用戶所屬的 delegation group 是該部門群組的 checker/approver）
+  static async getAccessibleForNews(userId, closedFilter = false) {
+    // 獲取用戶所屬的授權群組
+    const userDelegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .where('closed', false)
+      .select('id');
+    
+    const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+    if (userDelegationGroupIds.length === 0) {
+      return [];
+    }
+
+    // 獲取所有部門群組
+    let query = knex('department_groups')
+      .leftJoin('delegation_groups as checker', 'department_groups.checker_id', 'checker.id')
+      .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
+      .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
+      .leftJoin('delegation_groups as approver_3', 'department_groups.approver_3_id', 'approver_3.id')
+      .select(
+        'department_groups.*',
+        'checker.name as checker_name',
+        'checker.name_zh as checker_name_zh',
+        'approver_1.name as approver_1_name',
+        'approver_1.name_zh as approver_1_name_zh',
+        'approver_2.name as approver_2_name',
+        'approver_2.name_zh as approver_2_name_zh',
+        'approver_3.name as approver_3_name',
+        'approver_3.name_zh as approver_3_name_zh'
+      );
+
+    // 根據 closed 參數篩選
+    if (closedFilter !== undefined && closedFilter !== null && closedFilter !== '') {
+      const isClosed = closedFilter === 'true' || closedFilter === true;
+      query = query.where('department_groups.closed', isClosed);
+    }
+
+    const allGroups = await query.orderBy('department_groups.name');
+
+    // 過濾出用戶有權限的部門群組（用戶所屬的 delegation group 是該部門群組的 checker/approver）
+    const accessibleGroups = allGroups.filter(deptGroup => {
+      const checkerId = deptGroup.checker_id ? Number(deptGroup.checker_id) : null;
+      const approver1Id = deptGroup.approver_1_id ? Number(deptGroup.approver_1_id) : null;
+      const approver2Id = deptGroup.approver_2_id ? Number(deptGroup.approver_2_id) : null;
+      const approver3Id = deptGroup.approver_3_id ? Number(deptGroup.approver_3_id) : null;
+
+      return userDelegationGroupIds.includes(checkerId) ||
+             userDelegationGroupIds.includes(approver1Id) ||
+             userDelegationGroupIds.includes(approver2Id) ||
+             userDelegationGroupIds.includes(approver3Id);
+    });
+
+    return accessibleGroups.map(formatGroupRecord);
+  }
 }
 
 module.exports = DepartmentGroup;

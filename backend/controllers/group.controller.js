@@ -1,31 +1,36 @@
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
-const GroupContact = require('../database/models/GroupContact');
 
 class GroupController {
   // ========== Department Groups ==========
   
   async getDepartmentGroups(req, res) {
     try {
-      const { closed, forCalendar } = req.query; // 支援 closed 參數篩選：'true', 'false', 或 undefined (全部)
+      const { closed, forCalendar, forNews } = req.query; // 支援 closed, forCalendar, forNews 參數
       // forCalendar: 如果為 'true'，只返回用戶是approver成員的群組（用於群組假期週曆）
+      // forNews: 如果為 'true'，只返回用戶有權限發布消息的群組
       
       let groups = await DepartmentGroup.findAll(closed);
       
       // 如果請求是用於群組假期週曆，只返回用戶是approver成員的群組
       if (forCalendar === 'true') {
         const userId = req.user.id;
-        const GroupContact = require('../database/models/GroupContact');
         
         // 過濾出用戶是approver成員的群組
         const accessibleGroups = [];
         for (const group of groups) {
-          const isApprover = await GroupContact.isApproverMember(userId, group.id);
+          const isApprover = await DepartmentGroup.isApproverMember(userId, group.id);
           if (isApprover) {
             accessibleGroups.push(group);
           }
         }
         groups = accessibleGroups;
+      }
+      
+      // 如果請求是用於發布消息，只返回用戶有權限發布消息的群組
+      if (forNews === 'true') {
+        const userId = req.user.id;
+        groups = await DepartmentGroup.getAccessibleForNews(userId, closed);
       }
       
       res.json({ groups });
@@ -234,8 +239,7 @@ class GroupController {
       }
 
       // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）
-      const GroupContact = require('../database/models/GroupContact');
-      const isApprover = await GroupContact.isApproverMember(userId, id);
+      const isApprover = await DepartmentGroup.isApproverMember(userId, id);
       if (isApprover) {
         const members = await DepartmentGroup.getMembers(id);
         console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員（批核成員權限）`);
@@ -485,247 +489,6 @@ class GroupController {
     }
   }
 
-  // ========== Group Contacts ==========
-  
-  // 獲取用戶可以瀏覽聯絡人的部門群組列表（包括直接所屬和通過授權群組關聯的）
-  async getAccessibleDepartmentGroupsForContacts(req, res) {
-    try {
-      const userId = req.user.id;
-      const User = require('../database/models/User');
-      const DepartmentGroup = require('../database/models/DepartmentGroup');
-      
-      // 獲取用戶直接所屬的部門群組
-      const directDepartmentGroups = await User.getDepartmentGroups(userId);
-      
-      // 獲取用戶所屬的授權群組
-      const userDelegationGroups = await User.getDelegationGroups(userId);
-      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
-      
-      // 獲取所有部門群組
-      const allDepartmentGroups = await DepartmentGroup.findAll();
-      
-      // 過濾出用戶通過授權群組可以訪問的部門群組
-      const accessibleViaDelegation = allDepartmentGroups.filter(deptGroup => {
-        const checkerId = deptGroup.checker_id ? Number(deptGroup.checker_id) : null;
-        const approver1Id = deptGroup.approver_1_id ? Number(deptGroup.approver_1_id) : null;
-        const approver2Id = deptGroup.approver_2_id ? Number(deptGroup.approver_2_id) : null;
-        const approver3Id = deptGroup.approver_3_id ? Number(deptGroup.approver_3_id) : null;
-
-        return userDelegationGroupIds.includes(checkerId) ||
-               userDelegationGroupIds.includes(approver1Id) ||
-               userDelegationGroupIds.includes(approver2Id) ||
-               userDelegationGroupIds.includes(approver3Id);
-      });
-      
-      // 合併並去重（使用 id 作為唯一標識）
-      const directGroupIds = directDepartmentGroups.map(g => g.id);
-      const allAccessibleGroups = [...directDepartmentGroups];
-      
-      accessibleViaDelegation.forEach(group => {
-        if (!directGroupIds.includes(group.id)) {
-          allAccessibleGroups.push(group);
-        }
-      });
-      
-      res.json({ groups: allAccessibleGroups });
-    } catch (error) {
-      console.error('Get accessible department groups for contacts error:', error);
-      res.status(500).json({ message: '獲取可訪問的部門群組列表時發生錯誤' });
-    }
-  }
-  
-  // 獲取群組聯絡人清單（部門群組成員或授權群組成員可以瀏覽）
-  async getGroupContacts(req, res) {
-    try {
-      const { departmentGroupId } = req.params;
-      const userId = req.user.id;
-
-      // 檢查使用者是否可以瀏覽（部門群組成員或授權群組成員）
-      const canView = await GroupContact.canViewContacts(userId, departmentGroupId);
-      if (!canView) {
-        return res.status(403).json({ message: '您不屬於此群組或相關授權群組，無權限瀏覽聯絡人清單' });
-      }
-
-      const contacts = await GroupContact.findAll(departmentGroupId);
-      res.json({ contacts });
-    } catch (error) {
-      console.error('Get group contacts error:', error);
-      res.status(500).json({ message: '獲取群組聯絡人清單時發生錯誤' });
-    }
-  }
-
-  // 獲取單一聯絡人（部門群組成員或授權群組成員可以瀏覽）
-  async getGroupContact(req, res) {
-    try {
-      const { id, departmentGroupId } = req.params;
-      const userId = req.user.id;
-
-      const contact = await GroupContact.findById(id);
-      if (!contact) {
-        return res.status(404).json({ message: '聯絡人不存在' });
-      }
-
-      // 驗證聯絡人是否屬於指定的部門群組
-      if (contact.department_group_id !== Number(departmentGroupId)) {
-        return res.status(400).json({ message: '聯絡人不屬於指定的部門群組' });
-      }
-
-      // 檢查使用者是否可以瀏覽（部門群組成員或授權群組成員）
-      const canView = await GroupContact.canViewContacts(userId, contact.department_group_id);
-      if (!canView) {
-        return res.status(403).json({ message: '您不屬於此群組或相關授權群組，無權限瀏覽聯絡人' });
-      }
-
-      res.json({ contact });
-    } catch (error) {
-      console.error('Get group contact error:', error);
-      res.status(500).json({ message: '獲取聯絡人時發生錯誤' });
-    }
-  }
-
-  // 新增群組聯絡人（只有授權群組的批核成員才可新增）
-  async createGroupContact(req, res) {
-    try {
-      const { departmentGroupId } = req.params;
-      const userId = req.user.id;
-      const contactData = req.body;
-
-      // 檢查使用者是否為授權群組的批核成員
-      const isApprover = await GroupContact.isApproverMember(userId, departmentGroupId);
-      if (!isApprover) {
-        return res.status(403).json({ message: '只有授權群組的批核成員才可新增聯絡人' });
-      }
-
-      // 驗證必填欄位
-      if (!contactData.name) {
-        return res.status(400).json({ message: '請填寫聯絡人姓名' });
-      }
-
-      // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'company_name', 'company_name_zh', 'phone', 'email', 'address', 'position', 'notes'];
-      const filteredData = {
-        department_group_id: Number(departmentGroupId)
-      };
-
-      for (const key of allowedFields) {
-        if (key in contactData) {
-          if (key === 'phone') {
-            // 處理電話號碼數組
-            if (Array.isArray(contactData[key])) {
-              const phoneArray = contactData[key].filter(p => p && p.trim() !== '');
-              filteredData[key] = phoneArray.length > 0 ? phoneArray : null;
-            } else {
-              filteredData[key] = contactData[key] === '' ? null : contactData[key];
-            }
-          } else {
-            filteredData[key] = contactData[key] === '' ? null : contactData[key];
-          }
-        }
-      }
-
-      const contact = await GroupContact.create(filteredData);
-      res.status(201).json({ 
-        message: '聯絡人新增成功',
-        contact 
-      });
-    } catch (error) {
-      console.error('Create group contact error:', error);
-      res.status(500).json({ 
-        message: '新增聯絡人時發生錯誤',
-        error: error.message
-      });
-    }
-  }
-
-  // 更新群組聯絡人（只有授權群組的批核成員才可修改）
-  async updateGroupContact(req, res) {
-    try {
-      const { id, departmentGroupId } = req.params;
-      const userId = req.user.id;
-      const contactData = req.body;
-
-      const contact = await GroupContact.findById(id);
-      if (!contact) {
-        return res.status(404).json({ message: '聯絡人不存在' });
-      }
-
-      // 驗證聯絡人是否屬於指定的部門群組
-      if (contact.department_group_id !== Number(departmentGroupId)) {
-        return res.status(400).json({ message: '聯絡人不屬於指定的部門群組' });
-      }
-
-      // 檢查使用者是否為授權群組的批核成員
-      const isApprover = await GroupContact.isApproverMember(userId, contact.department_group_id);
-      if (!isApprover) {
-        return res.status(403).json({ message: '只有授權群組的批核成員才可修改聯絡人' });
-      }
-
-      // 過濾和處理資料
-      const allowedFields = ['name', 'name_zh', 'company_name', 'company_name_zh', 'phone', 'email', 'address', 'position', 'notes'];
-      const filteredData = {};
-
-      for (const key of allowedFields) {
-        if (key in contactData) {
-          if (key === 'phone') {
-            // 處理電話號碼數組
-            if (Array.isArray(contactData[key])) {
-              const phoneArray = contactData[key].filter(p => p && p.trim() !== '');
-              filteredData[key] = phoneArray.length > 0 ? phoneArray : null;
-            } else {
-              filteredData[key] = contactData[key] === '' ? null : contactData[key];
-            }
-          } else {
-            filteredData[key] = contactData[key] === '' ? null : contactData[key];
-          }
-        }
-      }
-
-      const updatedContact = await GroupContact.update(id, filteredData);
-      res.json({ 
-        message: '聯絡人更新成功',
-        contact: updatedContact 
-      });
-    } catch (error) {
-      console.error('Update group contact error:', error);
-      res.status(500).json({ 
-        message: '更新聯絡人時發生錯誤',
-        error: error.message
-      });
-    }
-  }
-
-  // 刪除群組聯絡人（只有授權群組的批核成員才可刪除）
-  async deleteGroupContact(req, res) {
-    try {
-      const { id, departmentGroupId } = req.params;
-      const userId = req.user.id;
-
-      const contact = await GroupContact.findById(id);
-      if (!contact) {
-        return res.status(404).json({ message: '聯絡人不存在' });
-      }
-
-      // 驗證聯絡人是否屬於指定的部門群組
-      if (contact.department_group_id !== Number(departmentGroupId)) {
-        return res.status(400).json({ message: '聯絡人不屬於指定的部門群組' });
-      }
-
-      // 檢查使用者是否為授權群組的批核成員
-      const isApprover = await GroupContact.isApproverMember(userId, contact.department_group_id);
-      if (!isApprover) {
-        return res.status(403).json({ message: '只有授權群組的批核成員才可刪除聯絡人' });
-      }
-
-      await GroupContact.delete(id);
-      res.json({ message: '聯絡人刪除成功' });
-    } catch (error) {
-      console.error('Delete group contact error:', error);
-      res.status(500).json({ 
-        message: '刪除聯絡人時發生錯誤',
-        error: error.message
-      });
-    }
-  }
 }
 
 module.exports = new GroupController();

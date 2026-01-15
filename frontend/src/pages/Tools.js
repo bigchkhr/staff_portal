@@ -11,9 +11,9 @@ import {
   useMediaQuery
 } from '@mui/material';
 import {
-  People as PeopleIcon,
   Description as DescriptionIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Contacts as ContactsIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -26,10 +26,10 @@ const Tools = () => {
 
   const toolItems = [
     {
-      key: 'groupContacts',
-      icon: <PeopleIcon sx={{ fontSize: 48 }} />,
-      path: '/group-contacts',
-      translationKey: 'groupContacts'
+      key: 'myContacts',
+      icon: <ContactsIcon sx={{ fontSize: 48 }} />,
+      path: '/my-contacts',
+      translationKey: 'myContacts'
     },
     {
       key: 'formLibrary',

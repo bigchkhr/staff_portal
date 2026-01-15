@@ -47,7 +47,10 @@ import {
   Delete as DeleteIcon,
   List as ListIcon,
   Article as ArticleIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  AttachFile as AttachFileIcon,
+  Download as DownloadIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -125,8 +128,10 @@ const Dashboard = () => {
     is_all_employees: false,
     group_ids: []
   });
-  const [newsGroups, setNewsGroups] = useState([]);
-  const [loadingNewsGroups, setLoadingNewsGroups] = useState(false);
+  const [newsAttachments, setNewsAttachments] = useState([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [departmentGroups, setDepartmentGroups] = useState([]);
+  const [loadingDepartmentGroups, setLoadingDepartmentGroups] = useState(false);
   const [isNewsGroupManager, setIsNewsGroupManager] = useState(false);
   const itemsPerPage = 15;
 
@@ -143,10 +148,9 @@ const Dashboard = () => {
   }, [isHRMember]);
 
   useEffect(() => {
-    if (isNewsGroupManager) {
-      fetchNewsGroups();
-    }
-  }, [isNewsGroupManager]);
+    // 所有用戶都可以獲取他們有權限發布消息的部門群組列表
+    fetchDepartmentGroups();
+  }, []);
 
   // 獲取 HR 待處理清單
   const fetchHRTodos = async () => {
@@ -229,16 +233,17 @@ const Dashboard = () => {
     }
   };
 
-  // 獲取消息群組列表
-  const fetchNewsGroups = async () => {
+  // 獲取部門群組列表（只獲取用戶有權限發布消息的群組）
+  const fetchDepartmentGroups = async () => {
     try {
-      setLoadingNewsGroups(true);
-      const response = await axios.get('/api/news-groups?closed=false');
-      setNewsGroups(response.data.groups || []);
+      setLoadingDepartmentGroups(true);
+      // 使用 forNews=true 參數，只獲取用戶有權限發布消息的部門群組
+      const response = await axios.get('/api/groups/department?closed=false&forNews=true');
+      setDepartmentGroups(response.data.groups || []);
     } catch (error) {
-      console.error('Fetch news groups error:', error);
+      console.error('Fetch department groups error:', error);
     } finally {
-      setLoadingNewsGroups(false);
+      setLoadingDepartmentGroups(false);
     }
   };
 
@@ -304,18 +309,31 @@ const Dashboard = () => {
   };
 
   // 檢查用戶是否可以編輯/刪除消息
+  // 注意：前端的檢查只是初步判斷，真正的權限檢查在後端
   const canEditNews = (news) => {
-    // 消息群組管理員可以編輯所有消息，或者創建者可以編輯自己的消息
-    return isNewsGroupManager || news.created_by_id === user?.id;
+    // 消息群組管理員、HR Group 成員可以編輯所有消息，或者創建者可以編輯自己的消息
+    // 或者如果用戶有權限的部門群組列表中有消息的群組，也可以編輯
+    if (isNewsGroupManager || isHRMember || news.created_by_id === user?.id) {
+      return true;
+    }
+    
+    // 檢查消息的群組是否在用戶有權限的部門群組中
+    if (news.group_ids && news.group_ids.length > 0 && departmentGroups.length > 0) {
+      const accessibleGroupIds = departmentGroups.map(g => Number(g.id));
+      const hasAccessToAllGroups = news.group_ids.every(id => accessibleGroupIds.includes(Number(id)));
+      return hasAccessToAllGroups;
+    }
+    
+    return false;
   };
 
   // 打開發布消息對話框
-  const handleOpenNewsDialog = (news = null) => {
+  const handleOpenNewsDialog = async (news = null) => {
     if (news) {
       setEditingNews(news);
       // 如果 is_all_employees 為 true，則選擇所有群組
       const selectedGroupIds = news.is_all_employees 
-        ? newsGroups.map(g => g.id)
+        ? departmentGroups.map(g => g.id)
         : (news.group_ids || []);
       setNewsForm({
         title: news.title || '',
@@ -324,6 +342,14 @@ const Dashboard = () => {
         is_all_employees: false, // 不再使用這個欄位，改為通過群組選擇判斷
         group_ids: selectedGroupIds
       });
+      // 獲取現有附件
+      try {
+        const response = await axios.get(`/api/news/${news.id}`);
+        setNewsAttachments(response.data.news?.attachments || []);
+      } catch (error) {
+        console.error('Fetch attachments error:', error);
+        setNewsAttachments([]);
+      }
     } else {
       setEditingNews(null);
       setNewsForm({
@@ -333,6 +359,7 @@ const Dashboard = () => {
         is_all_employees: false,
         group_ids: []
       });
+      setNewsAttachments([]);
     }
     setNewsDialogOpen(true);
   };
@@ -348,6 +375,7 @@ const Dashboard = () => {
       is_all_employees: false,
       group_ids: []
     });
+    setNewsAttachments([]);
   };
 
   // 處理群組選擇變化
@@ -372,7 +400,7 @@ const Dashboard = () => {
 
   // 處理全選/取消全選
   const handleSelectAllGroups = () => {
-    const allGroupIds = newsGroups.map(g => g.id);
+    const allGroupIds = departmentGroups.map(g => g.id);
     const currentGroupIds = newsForm.group_ids || [];
     const isAllSelected = allGroupIds.length > 0 && 
       allGroupIds.every(id => currentGroupIds.includes(id));
@@ -390,6 +418,76 @@ const Dashboard = () => {
         group_ids: allGroupIds
       });
     }
+  };
+
+  // 處理附件上傳（暫存到 modal，等待保存時才上傳）
+  const handleAttachmentUpload = (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // 統一處理：無論是創建還是編輯模式，都先暫存到本地狀態
+    const newAttachments = Array.from(files).map((file, index) => ({
+      id: `temp-${Date.now()}-${index}-${Math.random()}`,
+      file_name: file.name,
+      file: file,
+      file_size: file.size,
+      file_type: file.type,
+      is_temp: true
+    }));
+    setNewsAttachments([...newsAttachments, ...newAttachments]);
+    event.target.value = ''; // 重置文件輸入
+  };
+
+  // 刪除附件（從暫存列表或從服務器）
+  const handleDeleteAttachment = async (attachment) => {
+    if (attachment.is_temp) {
+      // 刪除暫存附件
+      setNewsAttachments(newsAttachments.filter(a => a.id !== attachment.id));
+    } else if (editingNews && editingNews.id) {
+      // 刪除服務器上的附件
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: '確認刪除',
+        text: '確定要刪除此附件嗎？',
+        showCancelButton: true,
+        confirmButtonText: '確定',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6'
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        await axios.delete(`/api/news/${editingNews.id}/attachments/${attachment.id}`);
+        setNewsAttachments(newsAttachments.filter(a => a.id !== attachment.id));
+        await Swal.fire({
+          icon: 'success',
+          title: '成功',
+          text: '附件已刪除',
+          confirmButtonText: '確定',
+          confirmButtonColor: '#3085d6'
+        });
+      } catch (error) {
+        console.error('Delete attachment error:', error);
+        await Swal.fire({
+          icon: 'error',
+          title: '刪除失敗',
+          text: error.response?.data?.message || '刪除附件時發生錯誤',
+          confirmButtonText: '確定',
+          confirmButtonColor: '#d33'
+        });
+      }
+    }
+  };
+
+  // 格式化文件大小
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   // 發布消息
@@ -424,7 +522,10 @@ const Dashboard = () => {
       }
 
       // 檢查是否選擇了群組
-      const selectedGroupIds = newsForm.group_ids || [];
+      const selectedGroupIds = (newsForm.group_ids || [])
+        .map(id => Number(id))
+        .filter(id => !isNaN(id) && id > 0);
+      
       if (selectedGroupIds.length === 0) {
         await Swal.fire({
           icon: 'warning',
@@ -438,8 +539,9 @@ const Dashboard = () => {
       }
 
       // 如果選擇了所有群組，則設置 is_all_employees = true
-      const allGroupIds = newsGroups.map(g => g.id);
+      const allGroupIds = departmentGroups.map(g => Number(g.id)).filter(id => !isNaN(id) && id > 0);
       const isAllSelected = allGroupIds.length > 0 && 
+        selectedGroupIds.length === allGroupIds.length &&
         allGroupIds.every(id => selectedGroupIds.includes(id));
       
       const newsData = {
@@ -450,10 +552,54 @@ const Dashboard = () => {
         group_ids: isAllSelected ? [] : selectedGroupIds
       };
 
-      if (editingNews) {
-        await axios.put(`/api/news/${editingNews.id}`, newsData);
+      // 準備附件（只處理暫存的新附件）
+      const tempAttachments = newsAttachments.filter(a => a.is_temp);
+      const hasNewAttachments = tempAttachments.length > 0;
+
+      if (hasNewAttachments) {
+        // 如果有新附件，使用 FormData
+        const formData = new FormData();
+        
+        // 添加消息數據
+        formData.append('title', newsData.title);
+        formData.append('content', newsData.content);
+        formData.append('is_pinned', newsData.is_pinned);
+        formData.append('is_all_employees', newsData.is_all_employees);
+        
+        // 添加群組 ID 數組
+        if (Array.isArray(newsData.group_ids)) {
+          newsData.group_ids.forEach(id => {
+            formData.append('group_ids[]', id);
+          });
+        }
+
+        // 添加新附件
+        tempAttachments.forEach(attachment => {
+          formData.append('files', attachment.file);
+        });
+
+        if (editingNews && editingNews.id) {
+          // 編輯現有消息（同時上傳新附件）
+          await axios.put(`/api/news/${editingNews.id}`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+        } else {
+          // 創建新消息（同時上傳附件）
+          await axios.post('/api/news', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+        }
       } else {
-        await axios.post('/api/news', newsData);
+        // 如果沒有新附件，使用普通 JSON
+        if (editingNews && editingNews.id) {
+          await axios.put(`/api/news/${editingNews.id}`, newsData);
+        } else {
+          await axios.post('/api/news', newsData);
+        }
       }
       
       handleCloseNewsDialog();
@@ -1793,7 +1939,8 @@ const Dashboard = () => {
             <ArticleIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
             最新消息
           </Typography>
-          {isNewsGroupManager && (
+          {/* 如果用戶有權限的部門群組列表不為空，或者是用戶是消息群組管理員/HR成員，則顯示發布按鈕 */}
+          {(departmentGroups.length > 0 || isNewsGroupManager || isHRMember) && (
             <Button
               variant="contained"
               startIcon={<AddIcon />}
@@ -1949,15 +2096,34 @@ const Dashboard = () => {
               <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
                 {viewingNews.content}
               </Typography>
-              {viewingNews.attachment_count > 0 && (
+              {viewingNews.attachments && viewingNews.attachments.length > 0 && (
                 <>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="subtitle2" gutterBottom>
-                    附件 ({viewingNews.attachment_count} 個)
+                    附件 ({viewingNews.attachments.length} 個)
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    請前往消息管理頁面查看和下載附件
-                  </Typography>
+                  <List dense>
+                    {viewingNews.attachments.map((attachment) => (
+                      <ListItem
+                        key={attachment.id}
+                        secondaryAction={
+                          <IconButton
+                            edge="end"
+                            onClick={() => {
+                              window.open(`/api/news/${viewingNews.id}/attachments/${attachment.id}/download`, '_blank');
+                            }}
+                          >
+                            <DownloadIcon />
+                          </IconButton>
+                        }
+                      >
+                        <ListItemText
+                          primary={attachment.file_name}
+                          secondary={`${formatFileSize(attachment.file_size || 0)}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
                 </>
               )}
             </>
@@ -1971,7 +2137,8 @@ const Dashboard = () => {
         </Dialog>
 
       {/* 發布消息對話框 */}
-      {isNewsGroupManager && (
+      {/* 如果用戶有權限的部門群組列表不為空，或者是用戶是消息群組管理員/HR成員，則顯示對話框 */}
+      {(departmentGroups.length > 0 || isNewsGroupManager || isHRMember) && (
         <Dialog
           open={newsDialogOpen}
           onClose={handleCloseNewsDialog}
@@ -2017,9 +2184,9 @@ const Dashboard = () => {
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="subtitle2" gutterBottom>
-                  選擇接收群組
+                  選擇接收群組（部門群組）
                 </Typography>
-                {loadingNewsGroups ? (
+                {loadingDepartmentGroups ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
                     <CircularProgress size={24} />
                   </Box>
@@ -2032,12 +2199,12 @@ const Dashboard = () => {
                             <Checkbox
                               edge="start"
                               checked={
-                                newsGroups.length > 0 &&
-                                newsGroups.every(g => (newsForm.group_ids || []).includes(g.id))
+                                departmentGroups.length > 0 &&
+                                departmentGroups.every(g => (newsForm.group_ids || []).includes(g.id))
                               }
                               indeterminate={
                                 (newsForm.group_ids || []).length > 0 &&
-                                (newsForm.group_ids || []).length < newsGroups.length
+                                (newsForm.group_ids || []).length < departmentGroups.length
                               }
                               tabIndex={-1}
                               disableRipple
@@ -2050,7 +2217,7 @@ const Dashboard = () => {
                         </ListItemButton>
                       </ListItem>
                       <Divider />
-                      {newsGroups.map((group) => {
+                      {departmentGroups.map((group) => {
                         const isSelected = (newsForm.group_ids || []).includes(group.id);
                         return (
                           <ListItem key={group.id} disablePadding>
@@ -2078,6 +2245,65 @@ const Dashboard = () => {
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                     已選擇 {newsForm.group_ids.length} 個群組
                   </Typography>
+                )}
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="subtitle2" gutterBottom>
+                  附件
+                </Typography>
+                <Box sx={{ mb: 2 }}>
+                  <input
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tiff,.tif,.doc,.docx"
+                    style={{ display: 'none' }}
+                    id="news-attachment-upload"
+                    multiple
+                    type="file"
+                    onChange={handleAttachmentUpload}
+                    disabled={uploadingAttachments || savingNews}
+                  />
+                  <label htmlFor="news-attachment-upload">
+                    <Button
+                      variant="outlined"
+                      component="span"
+                      startIcon={<AttachFileIcon />}
+                      disabled={uploadingAttachments || savingNews}
+                      fullWidth
+                    >
+                      {uploadingAttachments ? '上傳中...' : '選擇附件'}
+                    </Button>
+                  </label>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    支援格式：PDF、JPG、JPEG、PNG、GIF、BMP、WEBP、TIFF、DOC、DOCX（每個檔案最大 10MB）
+                  </Typography>
+                </Box>
+                {newsAttachments.length > 0 && (
+                  <Paper variant="outlined" sx={{ p: 1 }}>
+                    <List dense>
+                      {newsAttachments.map((attachment) => (
+                        <ListItem
+                          key={attachment.id}
+                          secondaryAction={
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => handleDeleteAttachment(attachment)}
+                              disabled={savingNews}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          }
+                        >
+                          <ListItemIcon>
+                            <AttachFileIcon fontSize="small" />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={attachment.file_name}
+                            secondary={attachment.is_temp ? `暫存 - ${formatFileSize(attachment.file_size || 0)}` : formatFileSize(attachment.file_size || 0)}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Paper>
                 )}
               </Grid>
             </Grid>

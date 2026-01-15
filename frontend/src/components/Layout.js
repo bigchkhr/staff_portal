@@ -45,6 +45,7 @@ import {
   Build as BuildIcon,
   CalendarToday as CalendarTodayIcon,
   AccessTime as AccessTimeIcon,
+  Contacts as ContactsIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
