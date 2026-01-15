@@ -1275,6 +1275,187 @@ class AttendanceController {
       res.status(500).json({ message: '獲取可訪問的考勤群組列表時發生錯誤', error: error.message });
     }
   }
+
+  // 獲取當前用戶的打卡記錄（用於 My Attendance 頁面）
+  async getMyClockRecords(req, res) {
+    try {
+      const userId = req.user.id;
+      const { start_date, end_date } = req.query;
+
+      if (!start_date || !end_date) {
+        return res.status(400).json({ message: '請提供開始日期和結束日期' });
+      }
+
+      // 獲取當前用戶信息
+      const currentUser = await User.findById(userId);
+      if (!currentUser || !currentUser.employee_number) {
+        return res.status(400).json({ message: '用戶沒有員工編號' });
+      }
+
+      // 獲取打卡記錄
+      const clockRecords = await ClockRecord.findByEmployeeAndDateRange(
+        currentUser.employee_number,
+        start_date,
+        end_date
+      );
+
+      // 獲取排班數據
+      const schedules = await Schedule.findAll({
+        user_id: userId,
+        start_date,
+        end_date
+      });
+
+      // 按日期組織數據
+      const dateMap = new Map();
+      
+      // 初始化日期範圍內的所有日期（使用本地日期格式，避免時區問題）
+      const start = new Date(start_date + 'T00:00:00');
+      const end = new Date(end_date + 'T23:59:59');
+      let currentDate = new Date(start);
+      while (currentDate <= end) {
+        // 使用本地時間的年份、月份、日期，避免UTC轉換
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        dateMap.set(dateStr, {
+          attendance_date: dateStr,
+          schedule: null,
+          clock_records: [],
+          attendance: null
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // 添加排班數據
+      schedules.forEach(schedule => {
+        let dateStr;
+        if (schedule.schedule_date instanceof Date) {
+          // 使用本地時間的年份、月份、日期
+          const year = schedule.schedule_date.getFullYear();
+          const month = String(schedule.schedule_date.getMonth() + 1).padStart(2, '0');
+          const day = String(schedule.schedule_date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          // 已經是字符串格式，直接使用（移除時間部分）
+          dateStr = String(schedule.schedule_date).split('T')[0].split(' ')[0];
+        }
+        
+        if (dateMap.has(dateStr)) {
+          dateMap.get(dateStr).schedule = {
+            start_time: schedule.start_time,
+            end_time: schedule.end_time,
+            leave_type_name_zh: schedule.leave_type_name_zh,
+            leave_type_name: schedule.leave_type_name,
+            leave_type_code: schedule.leave_type_code,
+            leave_session: schedule.leave_session
+          };
+        } else {
+          // 如果日期不在範圍內，也添加（可能是數據問題，但應該顯示）
+          dateMap.set(dateStr, {
+            attendance_date: dateStr,
+            schedule: {
+              start_time: schedule.start_time,
+              end_time: schedule.end_time,
+              leave_type_name_zh: schedule.leave_type_name_zh,
+              leave_type_name: schedule.leave_type_name,
+              leave_type_code: schedule.leave_type_code,
+              leave_session: schedule.leave_session
+            },
+            clock_records: [],
+            attendance: null
+          });
+        }
+      });
+
+      // 添加打卡記錄
+      clockRecords.forEach(record => {
+        let dateStr;
+        if (record.attendance_date instanceof Date) {
+          // 使用本地時間的年份、月份、日期
+          const year = record.attendance_date.getFullYear();
+          const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
+          const day = String(record.attendance_date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          // 已經是字符串格式，直接使用（移除時間部分）
+          dateStr = String(record.attendance_date).split('T')[0].split(' ')[0];
+        }
+        
+        if (dateMap.has(dateStr)) {
+          dateMap.get(dateStr).clock_records.push(record);
+        } else {
+          // 如果日期不在範圍內，也添加（可能是數據問題，但應該顯示）
+          if (!dateMap.has(dateStr)) {
+            dateMap.set(dateStr, {
+              attendance_date: dateStr,
+              schedule: null,
+              clock_records: [],
+              attendance: null
+            });
+          }
+          dateMap.get(dateStr).clock_records.push(record);
+        }
+      });
+
+      // 構建考勤信息（從打卡記錄）
+      dateMap.forEach((item, dateStr) => {
+        if (item.clock_records.length > 0) {
+          const validRecords = item.clock_records
+            .filter(r => r.is_valid === true)
+            .sort((a, b) => {
+              const timeA = a.clock_time || '';
+              const timeB = b.clock_time || '';
+              return timeA.localeCompare(timeB);
+            });
+          
+          const allRecordsSorted = item.clock_records.sort((a, b) => {
+            const timeA = a.clock_time || '';
+            const timeB = b.clock_time || '';
+            return timeA.localeCompare(timeB);
+          });
+
+          const clockInRecord = validRecords.length > 0 ? validRecords[0] : 
+            (allRecordsSorted.length > 0 ? allRecordsSorted[0] : null);
+          const timeOffStartRecord = validRecords.length > 1 ? validRecords[1] : 
+            (allRecordsSorted.length > 1 ? allRecordsSorted[1] : null);
+          const timeOffEndRecord = validRecords.length > 2 ? validRecords[2] : 
+            (allRecordsSorted.length > 2 ? allRecordsSorted[2] : null);
+          const clockOutRecord = validRecords.length > 3 ? validRecords[3] : 
+            (allRecordsSorted.length > 3 ? allRecordsSorted[3] : null);
+          
+          const remarksRecord = validRecords.length > 0 ? validRecords[0] : 
+            (allRecordsSorted.length > 0 ? allRecordsSorted[0] : null);
+          
+          item.attendance = {
+            clock_in_time: clockInRecord?.clock_time || null,
+            clock_out_time: clockOutRecord?.clock_time || null,
+            time_off_start: timeOffStartRecord?.clock_time || null,
+            time_off_end: timeOffEndRecord?.clock_time || null,
+            remarks: remarksRecord?.remarks || null
+          };
+        }
+      });
+
+      // 轉換為數組並按日期排序
+      const result = Array.from(dateMap.values()).sort((a, b) => {
+        return new Date(a.attendance_date) - new Date(b.attendance_date);
+      });
+
+      res.json({ 
+        attendance: result,
+        user: {
+          id: currentUser.id,
+          employee_number: currentUser.employee_number,
+          display_name: currentUser.display_name || currentUser.name_zh || currentUser.name
+        }
+      });
+    } catch (error) {
+      console.error('Get my clock records error:', error);
+      res.status(500).json({ message: '獲取打卡記錄失敗', error: error.message });
+    }
+  }
 }
 
 module.exports = new AttendanceController();

@@ -26,6 +26,18 @@ const ShiftManagement = () => {
 
   const shiftItems = [
     {
+      key: 'myRoster',
+      icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
+      path: '/my-roster',
+      translationKey: 'myRoster'
+    },
+    {
+      key: 'myAttendance',
+      icon: <AccessTimeIcon sx={{ fontSize: 48 }} />,
+      path: '/my-attendance',
+      translationKey: 'myAttendance'
+    },
+    {
       key: 'schedule',
       icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
       path: '/schedule',
@@ -44,6 +56,7 @@ const ShiftManagement = () => {
       translationKey: 'groupLeaveCalendar'
     }
   ];
+
 
   const handleItemClick = (path) => {
     navigate(path);

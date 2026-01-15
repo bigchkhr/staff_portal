@@ -45,6 +45,8 @@ import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
 import ShiftManagement from './pages/ShiftManagement';
+import MyRoster from './pages/MyRoster';
+import MyAttendance from './pages/MyAttendance';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -108,6 +110,8 @@ function App() {
             <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
+            <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />
+            <Route path="/my-attendance" element={<PrivateRoute><MyAttendance /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

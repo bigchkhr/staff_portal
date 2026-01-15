@@ -177,8 +177,12 @@ class ScheduleController {
           const scheduleWithLeave = this.createScheduleFromLeave(member, dateStr, departmentGroupId, leaveApplications);
           if (scheduleWithLeave) {
             allSchedules.push(scheduleWithLeave);
+          } else {
+            // 即使沒有排班記錄也沒有假期申請，也要創建一個空的排班記錄
+            // 這樣前端才能顯示所有成員的所有日期
+            const emptySchedule = this.createEmptySchedule(member, dateStr, departmentGroupId);
+            allSchedules.push(emptySchedule);
           }
-          // 注意：如果沒有排班記錄也沒有假期申請，不創建記錄（這樣前端會顯示 ---）
         }
       }
     }
@@ -254,6 +258,26 @@ class ScheduleController {
     }
     
     return null;
+  }
+  
+  // 輔助方法：創建空的排班記錄（用於顯示沒有排班記錄也沒有假期申請的情況）
+  createEmptySchedule(member, scheduleDateStr, departmentGroupId) {
+    return {
+      id: null,
+      user_id: member.id,
+      department_group_id: departmentGroupId,
+      schedule_date: scheduleDateStr,
+      start_time: null,
+      end_time: null,
+      leave_type_id: null,
+      leave_session: null,
+      user_name: member.display_name || member.name,
+      user_name_zh: member.name_zh,
+      employee_number: member.employee_number,
+      leave_type_code: null,
+      leave_type_name: null,
+      leave_type_name_zh: null
+    };
   }
   
   // 輔助方法：獲取指定日期的假期時段（AM/PM/null）
@@ -660,7 +684,7 @@ class ScheduleController {
     return false;
   }
 
-  // 獲取用戶有權限查看的排班群組列表（僅顯示用戶直接所屬的群組）
+  // 獲取用戶有權限查看的排班群組列表（包括直接所屬和通過授權群組關聯的）
   async getAccessibleScheduleGroups(req, res) {
     try {
       const userId = req.user.id;
@@ -674,13 +698,40 @@ class ScheduleController {
         return res.json({ groups: allGroups });
       }
 
-      // 只獲取用戶直接所屬的部門群組（不包括通過批核權限可以訪問的群組）
+      // 獲取用戶直接所屬的部門群組（群組成員可以查看）
       const directDepartmentGroups = await User.getDepartmentGroups(userId);
       
-      // 只返回未關閉的群組
-      const openGroups = directDepartmentGroups.filter(group => !group.closed);
+      // 獲取用戶所屬的授權群組
+      const userDelegationGroups = await User.getDelegationGroups(userId);
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
       
-      res.json({ groups: openGroups });
+      // 獲取所有未關閉的部門群組
+      const allDepartmentGroups = await DepartmentGroup.findAll({ closed: false });
+      
+      // 過濾出用戶通過授權群組可以訪問的部門群組（approver1, approver2, approver3, checker）
+      const accessibleViaDelegation = allDepartmentGroups.filter(deptGroup => {
+        const checkerId = deptGroup.checker_id ? Number(deptGroup.checker_id) : null;
+        const approver1Id = deptGroup.approver_1_id ? Number(deptGroup.approver_1_id) : null;
+        const approver2Id = deptGroup.approver_2_id ? Number(deptGroup.approver_2_id) : null;
+        const approver3Id = deptGroup.approver_3_id ? Number(deptGroup.approver_3_id) : null;
+
+        return userDelegationGroupIds.includes(checkerId) ||
+               userDelegationGroupIds.includes(approver1Id) ||
+               userDelegationGroupIds.includes(approver2Id) ||
+               userDelegationGroupIds.includes(approver3Id);
+      });
+      
+      // 合併並去重（使用 id 作為唯一標識）
+      const directGroupIds = directDepartmentGroups.map(g => g.id);
+      const allAccessibleGroups = [...directDepartmentGroups.filter(g => !g.closed)];
+      
+      accessibleViaDelegation.forEach(group => {
+        if (!directGroupIds.includes(group.id)) {
+          allAccessibleGroups.push(group);
+        }
+      });
+      
+      res.json({ groups: allAccessibleGroups });
     } catch (error) {
       console.error('Get accessible schedule groups error:', error);
       res.status(500).json({ message: '獲取可訪問的排班群組列表時發生錯誤', error: error.message });

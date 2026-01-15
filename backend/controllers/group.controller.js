@@ -7,8 +7,27 @@ class GroupController {
   
   async getDepartmentGroups(req, res) {
     try {
-      const { closed } = req.query; // 支援 closed 參數篩選：'true', 'false', 或 undefined (全部)
-      const groups = await DepartmentGroup.findAll(closed);
+      const { closed, forCalendar } = req.query; // 支援 closed 參數篩選：'true', 'false', 或 undefined (全部)
+      // forCalendar: 如果為 'true'，只返回用戶是approver成員的群組（用於群組假期週曆）
+      
+      let groups = await DepartmentGroup.findAll(closed);
+      
+      // 如果請求是用於群組假期週曆，只返回用戶是approver成員的群組
+      if (forCalendar === 'true') {
+        const userId = req.user.id;
+        const GroupContact = require('../database/models/GroupContact');
+        
+        // 過濾出用戶是approver成員的群組
+        const accessibleGroups = [];
+        for (const group of groups) {
+          const isApprover = await GroupContact.isApproverMember(userId, group.id);
+          if (isApprover) {
+            accessibleGroups.push(group);
+          }
+        }
+        groups = accessibleGroups;
+      }
+      
       res.json({ groups });
     } catch (error) {
       console.error('Get department groups error:', error);
@@ -186,6 +205,8 @@ class GroupController {
   async getDepartmentGroupMembers(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
       console.log(`[getDepartmentGroupMembers] 請求獲取群組 ID ${id} 的成員`);
       
       if (!id || isNaN(Number(id))) {
@@ -195,9 +216,37 @@ class GroupController {
         });
       }
 
-      const members = await DepartmentGroup.getMembers(id);
-      console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員`);
-      res.json({ members });
+      // 系統管理員可以查看所有群組的成員
+      if (isSystemAdmin) {
+        const members = await DepartmentGroup.getMembers(id);
+        console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員`);
+        return res.json({ members });
+      }
+
+      // 檢查用戶是否可以查看此群組的成員
+      // 1. 檢查是否為群組成員
+      const Schedule = require('../database/models/Schedule');
+      const isMember = await Schedule.isUserInGroup(userId, id);
+      if (isMember) {
+        const members = await DepartmentGroup.getMembers(id);
+        console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員（群組成員權限）`);
+        return res.json({ members });
+      }
+
+      // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）
+      const GroupContact = require('../database/models/GroupContact');
+      const isApprover = await GroupContact.isApproverMember(userId, id);
+      if (isApprover) {
+        const members = await DepartmentGroup.getMembers(id);
+        console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員（批核成員權限）`);
+        return res.json({ members });
+      }
+
+      // 如果既不是群組成員也不是批核成員，拒絕訪問
+      return res.status(403).json({ 
+        message: '您沒有權限查看此群組的成員',
+        error: 'Permission denied'
+      });
     } catch (error) {
       console.error('[getDepartmentGroupMembers] 獲取部門群組成員時發生錯誤:', error);
       console.error('錯誤訊息:', error.message);

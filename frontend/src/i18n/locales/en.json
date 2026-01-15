@@ -56,6 +56,8 @@
     "chatRoom": "Message Delivery",
     "myApplications": "My Applications",
     "myApprovals": "My Approvals",
+    "myRoster": "My Roster",
+    "myAttendance": "My Attendance",
     "schedule": "Schedule",
     "attendance": "Attendance",
     "shiftManagement": "Shift Management",
@@ -714,7 +716,8 @@
   "shiftManagement": {
     "title": "Shift Management",
     "schedule": "Schedule",
-    "attendance": "Attendance"
+    "attendance": "Attendance",
+    "managementTools": "Management Tools"
   },
   "groupContacts": {
     "title": "Group Contacts",
@@ -1274,8 +1277,8 @@
     "selectCSVFile": "Select CSV File",
     "import": "Import",
     "importing": "Importing...",
-    "csvFormatDescription": "Please upload a CSV file exported from the POS system. The CSV format should include the following fields:",
-    "csvFormatExample": "Column A: Number (not used)\nColumn B: Branch Code\nColumn C: Run Date (not used)\nColumn D: Employee ID\nColumn E: Employee Name\nColumn F: TILL (not used)\nColumn G: Clock in/Clock out\nColumn H: Date\nColumn I: Time",
+    "csvFormatDescription": "",
+    "csvFormatExample": "",
     "invalidFileType": "Please select a CSV file",
     "pleaseSelectFile": "Please select a file to import",
     "csvEmptyOrInvalid": "CSV file is empty or invalid format",
@@ -1308,6 +1311,31 @@
     "selectGroupsFirst": "Please select groups first",
     "today": "Today",
     "noLeave": "No Leave",
-    "noLeaveThisWeek": "No one is on leave this week"
+    "noLeaveThisWeek": "No one is on leave this week",
+    "permissionDenied": "Only authorized personnel can view"
+  },
+  "myRoster": {
+    "title": "My Roster",
+    "today": "Today",
+    "workTime": "Work Time",
+    "leave": "Leave",
+    "noSchedule": "No Schedule"
+  },
+  "myAttendance": {
+    "title": "My Attendance",
+    "today": "Today",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "date": "Date",
+    "schedule": "Schedule",
+    "clockRecords": "Clock Records",
+    "status": "Status",
+    "remarks": "Remarks",
+    "noSchedule": "No Schedule",
+    "noClockRecords": "No Clock Records",
+    "noData": "No attendance data",
+    "attended": "Attended",
+    "absent": "Absent",
+    "pendingReview": "Pending Review"
   }
 }

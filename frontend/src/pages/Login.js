@@ -113,38 +113,6 @@ const Login = () => {
       }}
     >
       <Container component="main" maxWidth="xs" sx={{ position: 'relative', zIndex: 1 }}>
-        <IconButton
-          onClick={(e) => setLangAnchorEl(e.currentTarget)}
-          sx={{
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            zIndex: 10,
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            '&:hover': {
-              backgroundColor: 'rgba(255, 255, 255, 1)',
-            },
-            boxShadow: 2
-          }}
-          title={t('language.selectLanguage')}
-        >
-          <LanguageIcon />
-        </IconButton>
-        <Menu
-          anchorEl={langAnchorEl}
-          open={Boolean(langAnchorEl)}
-          onClose={() => setLangAnchorEl(null)}
-        >
-          <MenuItem onClick={() => handleLanguageChange('zh-TW')}>
-            {t('language.zhTW')}
-          </MenuItem>
-          <MenuItem onClick={() => handleLanguageChange('zh-CN')}>
-            {t('language.zhCN')}
-          </MenuItem>
-          <MenuItem onClick={() => handleLanguageChange('en')}>
-            {t('language.en')}
-          </MenuItem>
-        </Menu>
         <Box
           sx={{
             display: 'flex',
@@ -159,9 +127,42 @@ const Login = () => {
             p: 4, 
             width: '100%',
             backgroundColor: 'rgba(255, 255, 255, 0.65)',
-            backdropFilter: 'blur(10px)'
+            backdropFilter: 'blur(10px)',
+            position: 'relative'
           }}
         >
+          <IconButton
+            onClick={(e) => setLangAnchorEl(e.currentTarget)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 10,
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 1)',
+              },
+              boxShadow: 2
+            }}
+            title={t('language.selectLanguage')}
+          >
+            <LanguageIcon />
+          </IconButton>
+          <Menu
+            anchorEl={langAnchorEl}
+            open={Boolean(langAnchorEl)}
+            onClose={() => setLangAnchorEl(null)}
+          >
+            <MenuItem onClick={() => handleLanguageChange('zh-TW')}>
+              {t('language.zhTW')}
+            </MenuItem>
+            <MenuItem onClick={() => handleLanguageChange('zh-CN')}>
+              {t('language.zhCN')}
+            </MenuItem>
+            <MenuItem onClick={() => handleLanguageChange('en')}>
+              {t('language.en')}
+            </MenuItem>
+          </Menu>
           <Box
             sx={{
               display: 'flex',

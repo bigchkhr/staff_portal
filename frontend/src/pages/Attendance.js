@@ -32,7 +32,8 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction
+  ListItemSecondaryAction,
+  Alert
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
@@ -86,6 +87,7 @@ const Attendance = ({ noLayout = false }) => {
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [canEdit, setCanEdit] = useState(false); // 檢查用戶是否為 checker、approver1、approver2、approver3
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -95,6 +97,7 @@ const Attendance = ({ noLayout = false }) => {
     if (selectedGroupId) {
       fetchGroupMembers();
       fetchAttendanceComparison();
+      checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate]);
 
@@ -102,21 +105,6 @@ const Attendance = ({ noLayout = false }) => {
     try {
       const response = await axios.get('/api/attendances/accessible-groups');
       const groups = response.data.groups || [];
-      
-      // 如果用戶沒有任何可訪問的群組，顯示錯誤
-      if (groups.length === 0) {
-        Swal.fire({
-          icon: 'warning',
-          title: t('attendance.error'),
-          text: t('attendance.noPermissionMessage'),
-          confirmButtonText: t('attendance.confirm')
-        }).then(() => {
-          // 可以選擇重定向到首頁或其他頁面
-          window.location.href = '/';
-        });
-        return;
-      }
-      
       setDepartmentGroups(groups);
       
       if (groups.length === 1) {
@@ -124,11 +112,16 @@ const Attendance = ({ noLayout = false }) => {
       }
     } catch (error) {
       console.error('Fetch department groups error:', error);
-      Swal.fire({
-        icon: 'error',
-        title: t('attendance.error'),
-        text: error.response?.data?.message || t('attendance.fetchGroupsFailed')
-      });
+      // 如果是權限錯誤，設置空數組
+      if (error.response?.status === 403) {
+        setDepartmentGroups([]);
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: t('attendance.error'),
+          text: error.response?.data?.message || t('attendance.fetchGroupsFailed')
+        });
+      }
     }
   };
 
@@ -151,6 +144,37 @@ const Attendance = ({ noLayout = false }) => {
         title: t('attendance.error'),
         text: error.response?.data?.message || t('attendance.fetchMembersFailed')
       });
+    }
+  };
+
+  const checkEditPermission = () => {
+    // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
+    try {
+      const group = departmentGroups.find(g => g.id === selectedGroupId);
+      if (!group) {
+        setCanEdit(false);
+        return;
+      }
+
+      // 檢查用戶是否為系統管理員
+      if (user.is_system_admin) {
+        setCanEdit(true);
+        return;
+      }
+
+      // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
+      const userDelegationGroups = user.delegation_groups || [];
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+      const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
+      const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+      const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+      const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+
+      setCanEdit(isChecker || isApprover1 || isApprover2 || isApprover3);
+    } catch (error) {
+      console.error('Check edit permission error:', error);
+      setCanEdit(false);
     }
   };
 
@@ -873,31 +897,37 @@ const Attendance = ({ noLayout = false }) => {
                   >
                     {t('attendance.refresh')}
                   </Button>
-                  <Button
-                    variant="outlined"
-                    color="secondary"
-                    onClick={() => setCsvImportDialogOpen(true)}
-                    startIcon={<UploadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      boxShadow: 1,
-                      '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s',
-                      },
-                    }}
-                  >
-                    {t('attendance.importCSV')}
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={() => setCsvImportDialogOpen(true)}
+                      startIcon={<UploadIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: 1,
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {t('attendance.importCSV')}
+                    </Button>
+                  )}
                 </Box>
               </Grid>
             </Grid>
           </Card>
 
-          {loading ? (
+          {departmentGroups.length === 0 ? (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {t('attendance.noPermissionMessage')}
+            </Alert>
+          ) : loading ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <Typography variant="h6" color="text.secondary">
                 {t('common.loading')}

@@ -56,6 +56,8 @@
     "chatRoom": "訊息傳遞",
     "myApplications": "我的申請",
     "myApprovals": "我的批核",
+    "myRoster": "我的更份",
+    "myAttendance": "我的考勤",
     "schedule": "編更",
     "attendance": "打卡管理",
     "shiftManagement": "更表",
@@ -714,7 +716,8 @@
   "shiftManagement": {
     "title": "更表",
     "schedule": "編更",
-    "attendance": "打卡管理"
+    "attendance": "打卡管理",
+    "managementTools": "管理工具"
   },
   "groupContacts": {
     "title": "群組聯絡人",
@@ -1236,8 +1239,8 @@
     "selectCSVFile": "選擇CSV文件",
     "import": "匯入",
     "importing": "匯入中...",
-    "csvFormatDescription": "請上傳POS系統導出的CSV文件。CSV格式應包含以下欄位：",
-    "csvFormatExample": "欄A: 數位(不參考)\n欄B: 分行代碼\n欄C: 運行日期(不參考)\n欄D: 員工ID\n欄E: 員工姓名\n欄F: TILL(不參考)\n欄G: Clock in/Clock out\n欄H: 日期\n欄I: 時間",
+    "csvFormatDescription": "",
+    "csvFormatExample": "",
     "invalidFileType": "請選擇CSV文件",
     "pleaseSelectFile": "請選擇要匯入的文件",
     "csvEmptyOrInvalid": "CSV文件為空或格式無效",
@@ -1286,8 +1289,8 @@
     "selectCSVFile": "選擇CSV文件",
     "import": "匯入",
     "importing": "匯入中...",
-    "csvFormatDescription": "請上傳POS系統導出的CSV文件。CSV格式應包含以下欄位：",
-    "csvFormatExample": "欄A: 數位(不參考)\n欄B: 分行代碼\n欄C: 運行日期(不參考)\n欄D: 員工ID\n欄E: 員工姓名\n欄F: TILL(不參考)\n欄G: Clock in/Clock out\n欄H: 日期\n欄I: 時間",
+    "csvFormatDescription": "",
+    "csvFormatExample": "",
     "invalidFileType": "請選擇CSV文件",
     "pleaseSelectFile": "請選擇要匯入的文件",
     "csvEmptyOrInvalid": "CSV文件為空或格式無效",
@@ -1320,6 +1323,31 @@
     "selectGroupsFirst": "請先選擇群組",
     "today": "今天",
     "noLeave": "無放假",
-    "noLeaveThisWeek": "本週無人放假"
+    "noLeaveThisWeek": "本週無人放假",
+    "permissionDenied": "只有獲授權人士才可查看"
+  },
+  "myRoster": {
+    "title": "我的更份",
+    "today": "今天",
+    "workTime": "工作時間",
+    "leave": "假期",
+    "noSchedule": "無排班"
+  },
+  "myAttendance": {
+    "title": "我的考勤",
+    "today": "今天",
+    "startDate": "開始日期",
+    "endDate": "結束日期",
+    "date": "日期",
+    "schedule": "排班",
+    "clockRecords": "打卡記錄",
+    "status": "狀態",
+    "remarks": "備註",
+    "noSchedule": "無排班",
+    "noClockRecords": "無打卡記錄",
+    "noData": "暫無考勤數據",
+    "attended": "已出勤",
+    "absent": "缺勤",
+    "pendingReview": "待審核"
   }
 }

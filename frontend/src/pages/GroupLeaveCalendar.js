@@ -83,7 +83,8 @@ const GroupLeaveCalendar = () => {
 
   const fetchDepartmentGroups = async () => {
     try {
-      const response = await axios.get('/api/groups/department?closed=false');
+      // 添加 forCalendar=true 參數，只獲取用戶是approver成員的群組
+      const response = await axios.get('/api/groups/department?closed=false&forCalendar=true');
       const groups = response.data.groups || [];
       setDepartmentGroups(groups);
       
@@ -93,6 +94,10 @@ const GroupLeaveCalendar = () => {
       }
     } catch (error) {
       console.error('Fetch department groups error:', error);
+      // 如果是權限錯誤，設置空數組
+      if (error.response?.status === 403) {
+        setDepartmentGroups([]);
+      }
     }
   };
 
@@ -620,6 +625,9 @@ const GroupLeaveCalendar = () => {
   const weekStartStr = currentWeek.startOf('isoWeek').format('YYYY-MM-DD');
   const weekEndStr = currentWeek.endOf('isoWeek').format('YYYY-MM-DD');
 
+  // 檢查用戶是否有權限查看群組假期週曆
+  const hasPermission = departmentGroups.length > 0;
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
@@ -646,39 +654,45 @@ const GroupLeaveCalendar = () => {
             </Box>
           </Box>
 
-          <Box sx={{ mb: 3 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={6}>
-                <Button
-                  variant="outlined"
-                  onClick={handleOpenGroupSelectDialog}
-                  fullWidth
-                  sx={{ 
-                    justifyContent: 'flex-start',
-                    textTransform: 'none',
-                    height: '56px'
-                  }}
-                >
-                  {selectedGroupIds.length === 0 
-                    ? t('groupLeaveCalendar.selectGroups')
-                    : selectedGroupIds.map(id => {
-                        const group = departmentGroups.find(g => g.id === id);
-                        return group 
-                          ? (i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
-                              ? group.name_zh || group.name 
-                              : group.name)
-                          : id;
-                      }).join(', ')
-                  }
-                </Button>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="body1" sx={{ textAlign: 'right' }}>
-                  {weekStartStr} ~ {weekEndStr}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Box>
+          {!hasPermission ? (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              {t('groupLeaveCalendar.permissionDenied')}
+            </Alert>
+          ) : (
+            <>
+              <Box sx={{ mb: 3 }}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={6}>
+                    <Button
+                      variant="outlined"
+                      onClick={handleOpenGroupSelectDialog}
+                      fullWidth
+                      sx={{ 
+                        justifyContent: 'flex-start',
+                        textTransform: 'none',
+                        height: '56px'
+                      }}
+                    >
+                      {selectedGroupIds.length === 0 
+                        ? t('groupLeaveCalendar.selectGroups')
+                        : selectedGroupIds.map(id => {
+                            const group = departmentGroups.find(g => g.id === id);
+                            return group 
+                              ? (i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
+                                  ? group.name_zh || group.name 
+                                  : group.name)
+                              : id;
+                          }).join(', ')
+                      }
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body1" sx={{ textAlign: 'right' }}>
+                      {weekStartStr} ~ {weekEndStr}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
 
           {/* 群組選擇對話框 */}
           <Dialog 
@@ -911,6 +925,8 @@ const GroupLeaveCalendar = () => {
                 );
               })}
             </Box>
+          )}
+            </>
           )}
         </Paper>
       </Container>

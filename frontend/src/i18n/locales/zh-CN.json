@@ -56,6 +56,8 @@
     "chatRoom": "訊息傳遞",
     "myApplications": "我的申请",
     "myApprovals": "我的批核",
+    "myRoster": "我的更份",
+    "myAttendance": "我的考勤",
     "schedule": "排班",
     "attendance": "考勤管理",
     "shiftManagement": "班表",
@@ -709,7 +711,8 @@
   "shiftManagement": {
     "title": "更表",
     "schedule": "排班表",
-    "attendance": "考勤管理"
+    "attendance": "考勤管理",
+    "managementTools": "管理工具"
   },
   "groupContacts": {
     "title": "群组联系人",
@@ -1214,8 +1217,8 @@
     "selectCSVFile": "选择CSV文件",
     "import": "导入",
     "importing": "导入中...",
-    "csvFormatDescription": "请上传POS系统导出的CSV文件。CSV格式应包含以下字段：",
-    "csvFormatExample": "栏A: 数位(不参考)\n栏B: 分行代码\n栏C: 运行日期(不参考)\n栏D: 员工ID\n栏E: 员工姓名\n栏F: TILL(不参考)\n栏G: Clock in/Clock out\n栏H: 日期\n栏I: 时间",
+    "csvFormatDescription": "",
+    "csvFormatExample": "",
     "invalidFileType": "请选择CSV文件",
     "pleaseSelectFile": "请选择要导入的文件",
     "csvEmptyOrInvalid": "CSV文件为空或格式无效",
@@ -1249,5 +1252,29 @@
     "today": "今天",
     "noLeave": "无放假",
     "noLeaveThisWeek": "本周无人放假"
+  },
+  "myRoster": {
+    "title": "我的更份",
+    "today": "今天",
+    "workTime": "工作时间",
+    "leave": "假期",
+    "noSchedule": "无排班"
+  },
+  "myAttendance": {
+    "title": "我的考勤",
+    "today": "今天",
+    "startDate": "开始日期",
+    "endDate": "结束日期",
+    "date": "日期",
+    "schedule": "排班",
+    "clockRecords": "打卡记录",
+    "status": "状态",
+    "remarks": "备注",
+    "noSchedule": "无排班",
+    "noClockRecords": "无打卡记录",
+    "noData": "暂无考勤数据",
+    "attended": "已出勤",
+    "absent": "缺勤",
+    "pendingReview": "待审核"
   }
 }
