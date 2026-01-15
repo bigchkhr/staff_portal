@@ -66,14 +66,15 @@ class User {
     }
 
     if (options.search) {
+      const searchTerm = options.search.toLowerCase();
       const searchCondition = function() {
-        this.where('users.employee_number', 'like', `%${options.search}%`)
-          .orWhere('users.surname', 'like', `%${options.search}%`)
-          .orWhere('users.given_name', 'like', `%${options.search}%`)
-          .orWhere('users.display_name', 'like', `%${options.search}%`)
-          .orWhere('users.name_zh', 'like', `%${options.search}%`)
-          .orWhere('users.alias', 'like', `%${options.search}%`)
-          .orWhere('users.email', 'like', `%${options.search}%`);
+        this.whereRaw('LOWER(users.employee_number) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.surname) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.given_name) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.display_name) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.name_zh) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.alias) LIKE ?', [`%${searchTerm}%`])
+          .orWhereRaw('LOWER(users.email) LIKE ?', [`%${searchTerm}%`]);
       };
       query = query.where(searchCondition);
       countQuery = countQuery.where(searchCondition);
@@ -184,29 +185,48 @@ class User {
       .first();
     
     if (!application) {
+      console.log(`[canViewApplication] 申請不存在: applicationId=${leaveApplicationId}`);
       return false;
     }
 
     // 檢查是否為 HR 成員
     const isHRMember = await this.isHRMember(userId);
     if (isHRMember) {
+      console.log(`[canViewApplication] 用戶是 HR 成員，允許查看: userId=${userId}, applicationId=${leaveApplicationId}`);
       return true;
     }
+
+    // 將 userId 轉換為數字以確保類型一致
+    const userIdNum = Number(userId);
+    console.log(`[canViewApplication] 檢查權限: userId=${userId} (轉換為數字: ${userIdNum}), applicationId=${leaveApplicationId}`);
+    console.log(`[canViewApplication] 申請信息: user_id=${application.user_id} (type: ${typeof application.user_id}), checker_id=${application.checker_id} (type: ${typeof application.checker_id}), approver_1_id=${application.approver_1_id} (type: ${typeof application.approver_1_id}), approver_2_id=${application.approver_2_id} (type: ${typeof application.approver_2_id}), approver_3_id=${application.approver_3_id} (type: ${typeof application.approver_3_id})`);
 
     // 檢查是否為申請人
-    if (application.user_id === userId) {
+    if (Number(application.user_id) === userIdNum) {
+      console.log(`[canViewApplication] 用戶是申請人，允許查看`);
       return true;
     }
 
-    // 檢查是否為直接批核者
-    const isDirectApprover = [
+    // 檢查是否為直接批核者（將所有 ID 轉換為數字進行比較）
+    const approverIds = [
       application.checker_id,
       application.approver_1_id,
       application.approver_2_id,
       application.approver_3_id
-    ].includes(userId);
+    ];
+    console.log(`[canViewApplication] 批核者 ID 列表: ${JSON.stringify(approverIds)}`);
+    const isDirectApprover = approverIds.some(id => {
+      if (id === null || id === undefined) {
+        return false;
+      }
+      const idNum = Number(id);
+      const match = idNum === userIdNum;
+      console.log(`[canViewApplication] 比較: id=${id} (轉換為數字: ${idNum}) === userIdNum=${userIdNum} => ${match}`);
+      return match;
+    });
 
     if (isDirectApprover) {
+      console.log(`[canViewApplication] 用戶是直接批核者，允許查看`);
       return true;
     }
 
@@ -215,19 +235,26 @@ class User {
     const DepartmentGroup = require('./DepartmentGroup');
     const userDelegationGroups = await this.getDelegationGroups(userId);
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+    console.log(`[canViewApplication] 用戶的授權群組 ID: ${JSON.stringify(userDelegationGroupIds)}`);
 
     if (userDelegationGroupIds.length === 0) {
+      console.log(`[canViewApplication] 用戶不屬於任何授權群組，拒絕訪問`);
       return false;
     }
 
     // 獲取申請人所屬的部門群組
     const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
+    console.log(`[canViewApplication] 申請人所屬的部門群組數量: ${departmentGroups ? departmentGroups.length : 0}`);
     
     if (departmentGroups && departmentGroups.length > 0) {
       const deptGroup = departmentGroups[0];
       const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+      console.log(`[canViewApplication] 批核流程步驟數: ${approvalFlow ? approvalFlow.length : 0}`);
       
-      // 檢查用戶是否屬於批核流程中任何階段的授權群組，且該階段已設置
+      // 檢查用戶是否屬於批核流程中任何階段的授權群組
+      // 對於已完成的申請（非 pending），即使批核者 ID 為 null，只要用戶屬於該階段的授權群組，也應該允許查看
+      const isCompleted = application.status && application.status !== 'pending';
+      
       for (const step of approvalFlow) {
         if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
           // 檢查該階段是否已設置（有對應的 approver_id）
@@ -243,14 +270,18 @@ class User {
             stepIsSet = !!(application.approver_3_id);
           }
           
-          // 如果用戶屬於該階段的授權群組，且該階段已設置，允許查看
-          if (stepIsSet) {
+          console.log(`[canViewApplication] 檢查步驟 ${step.level}: delegation_group_id=${step.delegation_group_id}, stepIsSet=${stepIsSet}, isCompleted=${isCompleted}`);
+          
+          // 如果用戶屬於該階段的授權群組，且（該階段已設置 或 申請已完成），允許查看
+          if (stepIsSet || isCompleted) {
+            console.log(`[canViewApplication] 用戶屬於批核流程中的 ${step.level} 階段授權群組，${stepIsSet ? '且該階段已設置' : '且申請已完成'}，允許查看`);
             return true;
           }
         }
       }
     }
 
+    console.log(`[canViewApplication] 所有權限檢查都失敗，拒絕訪問`);
     return false;
   }
 
@@ -525,18 +556,21 @@ class User {
       return true;
     }
 
+    // 將 userId 轉換為數字以確保類型一致
+    const userIdNum = Number(userId);
+
     // 檢查是否為申請人
-    if (application.user_id === userId) {
+    if (Number(application.user_id) === userIdNum) {
       return true;
     }
 
-    // 檢查是否為直接批核者（checker、approver1、approver2、approver3）
+    // 檢查是否為直接批核者（將所有 ID 轉換為數字進行比較）
     const isDirectApprover = [
       application.checker_id,
       application.approver_1_id,
       application.approver_2_id,
       application.approver_3_id
-    ].includes(userId);
+    ].some(id => id !== null && Number(id) === userIdNum);
 
     if (isDirectApprover) {
       return true;
@@ -558,7 +592,10 @@ class User {
       const deptGroup = departmentGroups[0];
       const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
       
-      // 檢查用戶是否屬於批核流程中任何階段的授權群組，且該階段已設置
+      // 檢查用戶是否屬於批核流程中任何階段的授權群組
+      // 對於已完成的申請（非 pending），即使批核者 ID 為 null，只要用戶屬於該階段的授權群組，也應該允許查看
+      const isCompleted = application.status && application.status !== 'pending';
+      
       for (const step of approvalFlow) {
         if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
           // 檢查該階段是否已設置（有對應的 approver_id）
@@ -574,8 +611,8 @@ class User {
             stepIsSet = !!(application.approver_3_id);
           }
           
-          // 如果用戶屬於該階段的授權群組，且該階段已設置，允許查看
-          if (stepIsSet) {
+          // 如果用戶屬於該階段的授權群組，且（該階段已設置 或 申請已完成），允許查看
+          if (stepIsSet || isCompleted) {
             return true;
           }
         }
@@ -601,18 +638,21 @@ class User {
       return true;
     }
 
+    // 將 userId 轉換為數字以確保類型一致
+    const userIdNum = Number(userId);
+
     // 檢查是否為申請人
-    if (application.user_id === userId) {
+    if (Number(application.user_id) === userIdNum) {
       return true;
     }
 
-    // 檢查是否為直接批核者（checker、approver1、approver2、approver3）
+    // 檢查是否為直接批核者（將所有 ID 轉換為數字進行比較）
     const isDirectApprover = [
       application.checker_id,
       application.approver_1_id,
       application.approver_2_id,
       application.approver_3_id
-    ].includes(userId);
+    ].some(id => id !== null && Number(id) === userIdNum);
 
     if (isDirectApprover) {
       return true;
@@ -634,7 +674,10 @@ class User {
       const deptGroup = departmentGroups[0];
       const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
       
-      // 檢查用戶是否屬於批核流程中任何階段的授權群組，且該階段已設置
+      // 檢查用戶是否屬於批核流程中任何階段的授權群組
+      // 對於已完成的申請（非 pending），即使批核者 ID 為 null，只要用戶屬於該階段的授權群組，也應該允許查看
+      const isCompleted = application.status && application.status !== 'pending';
+      
       for (const step of approvalFlow) {
         if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
           // 檢查該階段是否已設置（有對應的 approver_id）
@@ -650,8 +693,8 @@ class User {
             stepIsSet = !!(application.approver_3_id);
           }
           
-          // 如果用戶屬於該階段的授權群組，且該階段已設置，允許查看
-          if (stepIsSet) {
+          // 如果用戶屬於該階段的授權群組，且（該階段已設置 或 申請已完成），允許查看
+          if (stepIsSet || isCompleted) {
             return true;
           }
         }

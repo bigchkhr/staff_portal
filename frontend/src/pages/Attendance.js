@@ -100,18 +100,34 @@ const Attendance = ({ noLayout = false }) => {
 
   const fetchDepartmentGroups = async () => {
     try {
-      const response = await axios.get('/api/schedules/accessible-groups');
-      setDepartmentGroups(response.data.groups || []);
+      const response = await axios.get('/api/attendances/accessible-groups');
+      const groups = response.data.groups || [];
       
-      if (response.data.groups && response.data.groups.length === 1) {
-        setSelectedGroupId(response.data.groups[0].id);
+      // 如果用戶沒有任何可訪問的群組，顯示錯誤
+      if (groups.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: t('attendance.error'),
+          text: t('attendance.noPermissionMessage'),
+          confirmButtonText: t('attendance.confirm')
+        }).then(() => {
+          // 可以選擇重定向到首頁或其他頁面
+          window.location.href = '/';
+        });
+        return;
+      }
+      
+      setDepartmentGroups(groups);
+      
+      if (groups.length === 1) {
+        setSelectedGroupId(groups[0].id);
       }
     } catch (error) {
       console.error('Fetch department groups error:', error);
       Swal.fire({
         icon: 'error',
         title: t('attendance.error'),
-        text: t('attendance.fetchGroupsFailed')
+        text: error.response?.data?.message || t('attendance.fetchGroupsFailed')
       });
     }
   };
@@ -183,7 +199,7 @@ const Attendance = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'error',
         title: t('attendance.error'),
-        text: '缺少考勤日期信息，請重新選擇'
+        text: t('attendance.missingAttendanceDate')
       });
       return;
     }
@@ -301,11 +317,11 @@ const Attendance = ({ noLayout = false }) => {
 
       // 確保有必要的參數
       if (!editingAttendance.attendance_date) {
-        throw new Error('缺少必要的參數：attendance_date');
+        throw new Error(t('attendance.missingAttendanceDateParam'));
       }
       
       if (!editingAttendance.employee_number && !editingAttendance.user_id) {
-        throw new Error('缺少必要的參數：employee_number 或 user_id');
+        throw new Error(t('attendance.missingEmployeeParam'));
       }
 
       // 分離需要處理的記錄
@@ -325,10 +341,10 @@ const Attendance = ({ noLayout = false }) => {
 
           // 處理時間更新（如果有修改）
           if (record.editableTime && record.editableTime.trim() !== '') {
-            // 驗證時間格式
-            const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+            // 驗證時間格式（支援 0-32 小時）
+            const timeRegex = /^([0-2][0-9]|3[0-2]):[0-5][0-9]$/;
             if (!timeRegex.test(record.editableTime)) {
-              throw new Error(`時間格式不正確: ${record.editableTime}，應為 HH:mm 格式`);
+              throw new Error(t('attendance.invalidTimeFormat', { time: record.editableTime }));
             }
 
             const timeStr = record.editableTime + ':00'; // 轉換為 HH:mm:ss 格式
@@ -346,10 +362,10 @@ const Attendance = ({ noLayout = false }) => {
         } else {
           // 新記錄，需要新增（只新增有效的記錄）
           if (record.is_valid && record.editableTime && record.editableTime.trim() !== '') {
-            // 驗證時間格式
-            const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+            // 驗證時間格式（支援 0-32 小時）
+            const timeRegex = /^([0-2][0-9]|3[0-2]):[0-5][0-9]$/;
             if (!timeRegex.test(record.editableTime)) {
-              throw new Error(`時間格式不正確: ${record.editableTime}，應為 HH:mm 格式`);
+              throw new Error(t('attendance.invalidTimeFormat', { time: record.editableTime }));
             }
 
             const timeStr = record.editableTime + ':00';
@@ -480,7 +496,7 @@ const Attendance = ({ noLayout = false }) => {
     
     // 檢查缺勤
     if (sortedRecords.length === 0) {
-      issues.push('缺勤');
+      issues.push(t('attendance.absent'));
     } else {
       // 檢查遲到：第一個有效打卡時間大於排班的開始時間
       if (scheduleStartTime && clockInTime) {
@@ -506,7 +522,7 @@ const Attendance = ({ noLayout = false }) => {
         // 第一個有效打卡時間大於排班開始時間，則為遲到
         if (clockInTotalMinutes > scheduleTotalMinutes) {
           const lateMinutes = clockInTotalMinutes - scheduleTotalMinutes;
-          issues.push(`遲到${lateMinutes}分鐘`);
+          issues.push(t('attendance.lateMinutes', { minutes: lateMinutes }));
         }
       }
       
@@ -519,11 +535,11 @@ const Attendance = ({ noLayout = false }) => {
         if (scheduleEndMinutes !== null && clockOutMinutes !== null) {
           if (clockOutMinutes < scheduleEndMinutes) {
             const earlyMinutes = scheduleEndMinutes - clockOutMinutes;
-            issues.push(`早退${earlyMinutes}分鐘`);
+            issues.push(t('attendance.earlyLeaveMinutes', { minutes: earlyMinutes }));
           } else if (clockOutMinutes > scheduleEndMinutes) {
             const overtimeMinutes = clockOutMinutes - scheduleEndMinutes;
             if (overtimeMinutes >= 15) {
-              issues.push(`超時工作${overtimeMinutes}分鐘`);
+              issues.push(t('attendance.overtimeMinutes', { minutes: overtimeMinutes }));
             }
           }
         }
@@ -537,7 +553,7 @@ const Attendance = ({ noLayout = false }) => {
     } else {
       // 如果沒有問題，可以清空備註或顯示正常
       if (editRemarks.trim() === '') {
-        setEditRemarks('正常');
+        setEditRemarks(t('attendance.normal'));
       }
     }
   };
@@ -616,16 +632,20 @@ const Attendance = ({ noLayout = false }) => {
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map(v => v.trim());
-        if (values.length < 6) continue; // 跳過不完整的行
+        if (values.length < 9) continue; // 跳過不完整的行（新格式需要至少 9 欄）
 
-        // 根據 POS CSV 格式：欄A=employee_number, 欄B=name, 欄C=branch_code, 欄D=date, 欄E=clock_time, 欄F=in_out
+        // 跳過第一列（欄A: 數位）
+        const dataValues = values.slice(1);
+        
+        // 根據新的 POS CSV 格式（跳過第一列後）：
+        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名, 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
         const row = {
-          employee_number: values[0] || '',
-          name: values[1] || '',
-          branch_code: values[2] || '',
-          date: values[3] || '',
-          clock_time: values[4] || '',
-          in_out: values[5] || ''
+          employee_number: dataValues[2] || '', // 欄D: 員工ID (跳過第一列後索引為2)
+          name: dataValues[3] || '', // 欄E: 員工姓名 (跳過第一列後索引為3)
+          branch_code: dataValues[0] || '', // 欄B: 分行代碼 (跳過第一列後索引為0)
+          date: dataValues[6] || '', // 欄H: 日期 (跳過第一列後索引為6)
+          clock_time: dataValues[7] || '', // 欄I: 時間 (跳過第一列後索引為7)
+          in_out: dataValues[5] || '' // 欄G: Clock in/Clock out (跳過第一列後索引為5)
         };
 
         if (row.employee_number && row.date && row.clock_time && row.in_out) {
@@ -1301,24 +1321,24 @@ const Attendance = ({ noLayout = false }) => {
                                     if (timeValue === '') {
                                       isValidInput = true;
                                     }
-                                    // 單個數字 0-2（小時第一位）
-                                    else if (/^[0-2]$/.test(timeValue)) {
+                                    // 單個數字 0-3（小時第一位，支援 0-32）
+                                    else if (/^[0-3]$/.test(timeValue)) {
                                       isValidInput = true;
                                     }
-                                    // 兩位數字 00-23（小時）
-                                    else if (/^([0-1][0-9]|2[0-3])$/.test(timeValue)) {
+                                    // 兩位數字 00-32（小時）
+                                    else if (/^([0-2][0-9]|3[0-2])$/.test(timeValue)) {
                                       isValidInput = true;
                                     }
-                                    // 小時加冒號，如 "12:"
-                                    else if (/^([0-1][0-9]|2[0-3]):$/.test(timeValue)) {
+                                    // 小時加冒號，如 "12:" 或 "32:"
+                                    else if (/^([0-2][0-9]|3[0-2]):$/.test(timeValue)) {
                                       isValidInput = true;
                                     }
-                                    // 小時加冒號加單個數字 0-5（分鐘第一位），如 "12:3"
-                                    else if (/^([0-1][0-9]|2[0-3]):[0-5]$/.test(timeValue)) {
+                                    // 小時加冒號加單個數字 0-5（分鐘第一位），如 "12:3" 或 "32:3"
+                                    else if (/^([0-2][0-9]|3[0-2]):[0-5]$/.test(timeValue)) {
                                       isValidInput = true;
                                     }
                                     // 完整的 HH:mm 格式
-                                    else if (/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(timeValue)) {
+                                    else if (/^([0-2][0-9]|3[0-2]):[0-5][0-9]$/.test(timeValue)) {
                                       isValidInput = true;
                                     }
                                     
@@ -1378,12 +1398,12 @@ const Attendance = ({ noLayout = false }) => {
                   </Typography>
                   {editingAttendance && editingAttendance.clock_records && editingAttendance.clock_records.length > 0 && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
-                      （共有 {editingAttendance.clock_records.length} 條打卡記錄，但所有記錄都已被標記為有效）
+                      {t('attendance.allRecordsValid', { count: editingAttendance.clock_records.length })}
                     </Typography>
                   )}
                   {editingAttendance && (!editingAttendance.clock_records || editingAttendance.clock_records.length === 0) && (
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
-                      （該日期暫無打卡記錄，請先匯入 CSV 數據）
+                      {t('attendance.noRecordsImportCSV')}
                     </Typography>
                   )}
                 </Box>
@@ -1413,7 +1433,7 @@ const Attendance = ({ noLayout = false }) => {
                       }}
                       startIcon={<CheckCircleIcon />}
                     >
-                      {t('attendance.autoCompare') || '自動對比'}
+                      {t('attendance.autoCompare')}
                     </Button>
                   </Box>
                 </Grid>
@@ -1494,14 +1514,6 @@ const Attendance = ({ noLayout = false }) => {
           </DialogTitle>
           <DialogContent sx={{ p: 3, mt: 2 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {t('attendance.csvFormatDescription')}
-              </Typography>
-              <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
-                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                  {t('attendance.csvFormatExample')}
-                </Typography>
-              </Box>
               <input
                 accept=".csv"
                 style={{ display: 'none' }}

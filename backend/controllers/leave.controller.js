@@ -399,7 +399,10 @@ class LeaveController {
 
       // 檢查權限：使用統一的權限檢查方法
       const canView = await User.canViewApplication(req.user.id, id);
-      // console.log(`[getApplicationById] 權限檢查結果: canView=${canView}, userId=${req.user.id}, applicationId=${id}`);
+      console.log(`[getApplicationById] 權限檢查結果: canView=${canView}, userId=${req.user.id} (type: ${typeof req.user.id}), applicationId=${id}`);
+      if (application) {
+        console.log(`[getApplicationById] 申請信息: checker_id=${application.checker_id} (type: ${typeof application.checker_id}), approver_1_id=${application.approver_1_id} (type: ${typeof application.approver_1_id}), approver_2_id=${application.approver_2_id} (type: ${typeof application.approver_2_id}), user_id=${application.user_id} (type: ${typeof application.user_id})`);
+      }
 
       if (!canView) {
         console.log(`[getApplicationById] 返回 403: 無權限查看此申請`);

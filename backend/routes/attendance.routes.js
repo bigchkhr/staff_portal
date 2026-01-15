@@ -6,6 +6,9 @@ const { authenticate } = require('../middleware/auth');
 // 所有路由都需要認證
 router.use(authenticate);
 
+// 獲取用戶有權限查看的考勤群組列表
+router.get('/accessible-groups', attendanceController.getAccessibleAttendanceGroups.bind(attendanceController));
+
 // 取得考勤列表
 router.get('/', attendanceController.getAttendances.bind(attendanceController));
 

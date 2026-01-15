@@ -1370,16 +1370,20 @@ const Schedule = ({ noLayout = false }) => {
 
       for (let i = 1; i < lines.length; i++) {
         const values = lines[i].split(',').map(v => v.trim());
-        if (values.length < 6) continue; // 跳過不完整的行
+        if (values.length < 9) continue; // 跳過不完整的行（新格式需要至少 9 欄）
 
-        // 根據 POS CSV 格式：欄A=employee_number, 欄B=name, 欄C=branch_code, 欄D=date, 欄E=clock_time, 欄F=in_out
+        // 跳過第一列（欄A: 數位）
+        const dataValues = values.slice(1);
+        
+        // 根據新的 POS CSV 格式（跳過第一列後）：
+        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名, 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
         const row = {
-          employee_number: values[0] || '',
-          name: values[1] || '',
-          branch_code: values[2] || '',
-          date: values[3] || '',
-          clock_time: values[4] || '',
-          in_out: values[5] || ''
+          employee_number: dataValues[2] || '', // 欄D: 員工ID (跳過第一列後索引為2)
+          name: dataValues[3] || '', // 欄E: 員工姓名 (跳過第一列後索引為3)
+          branch_code: dataValues[0] || '', // 欄B: 分行代碼 (跳過第一列後索引為0)
+          date: dataValues[6] || '', // 欄H: 日期 (跳過第一列後索引為6)
+          clock_time: dataValues[7] || '', // 欄I: 時間 (跳過第一列後索引為7)
+          in_out: dataValues[5] || '' // 欄G: Clock in/Clock out (跳過第一列後索引為5)
         };
 
         if (row.employee_number && row.date && row.clock_time && row.in_out) {

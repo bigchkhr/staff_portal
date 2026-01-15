@@ -239,6 +239,28 @@ class AttendanceController {
         return res.status(400).json({ message: '用戶沒有員工編號，無法更新打卡記錄' });
       }
 
+      // 檢查用戶是否有權限更新此用戶的考勤記錄
+      const currentUserId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      const userGroups = await DepartmentGroup.findByUserId(user.id);
+      if (userGroups.length === 0) {
+        return res.status(403).json({ message: '該用戶不屬於任何群組，無法更新考勤記錄' });
+      }
+      // 檢查當前用戶是否至少是該用戶所屬群組之一的批核成員
+      let hasPermission = isSystemAdmin;
+      if (!hasPermission) {
+        for (const group of userGroups) {
+          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
+          if (canView) {
+            hasPermission = true;
+            break;
+          }
+        }
+      }
+      if (!hasPermission) {
+        return res.status(403).json({ message: '您沒有權限更新此用戶的考勤記錄（必須是該用戶所屬群組的 checker、approver1、approver2 或 approver3）' });
+      }
+
       // 更新打卡記錄到 clock_records 表
       // 只有在有實際的時間值（不是 null 或空字符串）時才處理
       const hasActualTimeInput = (clock_in_time && clock_in_time.trim() !== '') ||
@@ -340,6 +362,28 @@ class AttendanceController {
         return res.status(400).json({ message: '用戶沒有員工編號，無法刪除打卡記錄' });
       }
 
+      // 檢查用戶是否有權限刪除此用戶的考勤記錄
+      const currentUserId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      const userGroups = await DepartmentGroup.findByUserId(user.id);
+      if (userGroups.length === 0) {
+        return res.status(403).json({ message: '該用戶不屬於任何群組，無法刪除考勤記錄' });
+      }
+      // 檢查當前用戶是否至少是該用戶所屬群組之一的批核成員
+      let hasPermission = isSystemAdmin;
+      if (!hasPermission) {
+        for (const group of userGroups) {
+          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
+          if (canView) {
+            hasPermission = true;
+            break;
+          }
+        }
+      }
+      if (!hasPermission) {
+        return res.status(403).json({ message: '您沒有權限刪除此用戶的考勤記錄（必須是該用戶所屬群組的 checker、approver1、approver2 或 approver3）' });
+      }
+
       // 刪除該員工該日期的所有打卡記錄
       await knex('clock_records')
         .where('employee_number', user.employee_number)
@@ -364,6 +408,14 @@ class AttendanceController {
 
       if (!department_group_id || !start_date || !end_date) {
         return res.status(400).json({ message: '請提供部門群組ID、開始日期和結束日期' });
+      }
+
+      // 檢查用戶是否有權限查看此群組的考勤
+      const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      const canView = await this.canViewGroupAttendance(userId, department_group_id, isSystemAdmin);
+      if (!canView) {
+        return res.status(403).json({ message: '您沒有權限查看此群組的考勤記錄' });
       }
 
       // 獲取群組成員
@@ -521,7 +573,7 @@ class AttendanceController {
               'clock_records.name',
               'clock_records.branch_code',
               'clock_records.attendance_date',
-              knex.raw("to_char(clock_records.clock_time, 'HH24:MI:SS') as clock_time"),
+              'clock_records.clock_time', // 現在是 VARCHAR 類型，直接使用
               'clock_records.in_out',
               'clock_records.is_valid',
               'clock_records.remarks',
@@ -718,10 +770,29 @@ class AttendanceController {
   async importClockRecordsFromCSV(req, res) {
     try {
       const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
       const csvData = req.body.data; // 期望格式: [{employee_number, name, branch_code, date, clock_time, in_out}, ...]
 
       if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
         return res.status(400).json({ message: '請提供有效的CSV數據' });
+      }
+
+      // 檢查用戶是否有權限匯入考勤（必須是系統管理員或批核成員）
+      // 注意：CSV 匯入不特定於某個群組，所以我們檢查用戶是否至少是一個群組的批核成員
+      if (!isSystemAdmin) {
+        // 獲取所有未關閉的群組，檢查用戶是否至少是一個群組的批核成員
+        const allGroups = await DepartmentGroup.findAll({ closed: false });
+        let hasPermission = false;
+        for (const group of allGroups) {
+          const canView = await this.canViewGroupAttendance(userId, group.id, false);
+          if (canView) {
+            hasPermission = true;
+            break;
+          }
+        }
+        if (!hasPermission) {
+          return res.status(403).json({ message: '您沒有權限匯入考勤記錄（必須是群組的 checker、approver1、approver2 或 approver3）' });
+        }
       }
 
       const clockRecords = [];
@@ -851,8 +922,40 @@ class AttendanceController {
       }
 
       const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
       const updates = [];
       const errors = [];
+
+      // 先獲取所有要更新的記錄，檢查權限
+      const recordIds = clock_records.map(r => r.id).filter(id => id);
+      if (recordIds.length === 0) {
+        return res.status(400).json({ message: '請提供有效的記錄 ID' });
+      }
+
+      const existingRecords = await knex('clock_records')
+        .whereIn('id', recordIds)
+        .select('id', 'employee_number');
+
+      // 檢查權限：獲取所有涉及的員工編號，檢查用戶是否有權限
+      if (!isSystemAdmin) {
+        const employeeNumbers = [...new Set(existingRecords.map(r => r.employee_number))];
+        for (const empNum of employeeNumbers) {
+          const user = await User.findByEmployeeNumber(empNum);
+          if (!user) continue;
+          const userGroups = await DepartmentGroup.findByUserId(user.id);
+          let hasPermission = false;
+          for (const group of userGroups) {
+            const canView = await this.canViewGroupAttendance(userId, group.id, false);
+            if (canView) {
+              hasPermission = true;
+              break;
+            }
+          }
+          if (!hasPermission) {
+            return res.status(403).json({ message: `您沒有權限更新員工編號 ${empNum} 的考勤記錄（必須是該員工所屬群組的 checker、approver1、approver2 或 approver3）` });
+          }
+        }
+      }
 
       for (const record of clock_records) {
         if (!record.id) {
@@ -926,8 +1029,40 @@ class AttendanceController {
       }
 
       const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
       const updates = [];
       const errors = [];
+
+      // 先獲取所有要更新的記錄，檢查權限
+      const recordIds = clock_records.map(r => r.id).filter(id => id);
+      if (recordIds.length === 0) {
+        return res.status(400).json({ message: '請提供有效的記錄 ID' });
+      }
+
+      const existingRecords = await knex('clock_records')
+        .whereIn('id', recordIds)
+        .select('id', 'employee_number');
+
+      // 檢查權限：獲取所有涉及的員工編號，檢查用戶是否有權限
+      if (!isSystemAdmin) {
+        const employeeNumbers = [...new Set(existingRecords.map(r => r.employee_number))];
+        for (const empNum of employeeNumbers) {
+          const user = await User.findByEmployeeNumber(empNum);
+          if (!user) continue;
+          const userGroups = await DepartmentGroup.findByUserId(user.id);
+          let hasPermission = false;
+          for (const group of userGroups) {
+            const canView = await this.canViewGroupAttendance(userId, group.id, false);
+            if (canView) {
+              hasPermission = true;
+              break;
+            }
+          }
+          if (!hasPermission) {
+            return res.status(403).json({ message: `您沒有權限更新員工編號 ${empNum} 的考勤記錄（必須是該員工所屬群組的 checker、approver1、approver2 或 approver3）` });
+          }
+        }
+      }
 
       for (const record of clock_records) {
         if (!record.id) {
@@ -940,10 +1075,10 @@ class AttendanceController {
           continue;
         }
 
-        // 驗證時間格式 (HH:mm:ss)
-        const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        // 驗證時間格式 (HH:mm:ss)，支援 0-32 小時
+        const timeRegex = /^([0-2][0-9]|3[0-2]):[0-5][0-9]:[0-5][0-9]$/;
         if (!timeRegex.test(record.clock_time)) {
-          errors.push(`時間格式不正確: id=${record.id}, clock_time=${record.clock_time}，應為 HH:mm:ss 格式`);
+          errors.push(`時間格式不正確: id=${record.id}, clock_time=${record.clock_time}，應為 HH:mm:ss 格式（小時範圍：0-32）`);
           continue;
         }
 
@@ -1029,6 +1164,28 @@ class AttendanceController {
         return res.status(400).json({ message: '用戶沒有員工編號，無法更新備註' });
       }
 
+      // 檢查用戶是否有權限更新此用戶的考勤備註
+      const currentUserId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      const userGroups = await DepartmentGroup.findByUserId(user.id);
+      if (userGroups.length === 0) {
+        return res.status(403).json({ message: '該用戶不屬於任何群組，無法更新備註' });
+      }
+      // 檢查當前用戶是否至少是該用戶所屬群組之一的批核成員
+      let hasPermission = isSystemAdmin;
+      if (!hasPermission) {
+        for (const group of userGroups) {
+          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
+          if (canView) {
+            hasPermission = true;
+            break;
+          }
+        }
+      }
+      if (!hasPermission) {
+        return res.status(403).json({ message: '您沒有權限更新此用戶的考勤備註（必須是該用戶所屬群組的 checker、approver1、approver2 或 approver3）' });
+      }
+
       // 處理 attendance_date：確保是 YYYY-MM-DD 格式
       let finalAttendanceDate = attendance_date;
       if (finalAttendanceDate instanceof Date) {
@@ -1073,6 +1230,49 @@ class AttendanceController {
     } catch (error) {
       console.error('Update attendance remarks error:', error);
       res.status(500).json({ message: '更新備註失敗', error: error.message });
+    }
+  }
+
+  // 檢查用戶是否有權限訪問某個群組的考勤（必須是 checker、approver1、approver2 或 approver3）
+  async canViewGroupAttendance(userId, departmentGroupId, isSystemAdmin = false) {
+    // 系統管理員可以查看所有群組
+    if (isSystemAdmin) {
+      return true;
+    }
+
+    // 檢查是否為批核成員（checker, approver_1, approver_2, approver_3）
+    const canEdit = await Schedule.canEditSchedule(userId, departmentGroupId);
+    return canEdit;
+  }
+
+  // 獲取用戶有權限查看的考勤群組列表（僅顯示用戶作為 checker/approver 可以訪問的群組）
+  async getAccessibleAttendanceGroups(req, res) {
+    try {
+      const userId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+      
+      // 系統管理員可以查看所有群組
+      if (isSystemAdmin) {
+        const allGroups = await DepartmentGroup.findAll({ closed: false });
+        return res.json({ groups: allGroups });
+      }
+
+      // 獲取所有未關閉的部門群組
+      const allGroups = await DepartmentGroup.findAll({ closed: false });
+      
+      // 過濾出用戶作為 checker/approver 可以訪問的群組
+      const accessibleGroups = [];
+      for (const group of allGroups) {
+        const canView = await this.canViewGroupAttendance(userId, group.id, false);
+        if (canView) {
+          accessibleGroups.push(group);
+        }
+      }
+      
+      res.json({ groups: accessibleGroups });
+    } catch (error) {
+      console.error('Get accessible attendance groups error:', error);
+      res.status(500).json({ message: '獲取可訪問的考勤群組列表時發生錯誤', error: error.message });
     }
   }
 }
