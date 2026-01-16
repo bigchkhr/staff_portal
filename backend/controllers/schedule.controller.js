@@ -50,28 +50,76 @@ class ScheduleController {
           groupIds.includes(s.department_group_id)
         );
         
-        // 獲取所有群組的成員
-        const allMembers = [];
-        for (const groupId of groupIds) {
-          const members = await DepartmentGroup.getMembers(groupId);
-          allMembers.push(...members);
+        // 如果指定了 user_id，只返回該用戶的排班
+        let targetMembers = [];
+        if (filters.user_id) {
+          // 找到指定的用戶
+          const targetUser = await User.findById(filters.user_id);
+          if (targetUser) {
+            // 檢查該用戶是否屬於這些群組
+            const userGroupsForTarget = await DepartmentGroup.findByUserId(filters.user_id);
+            const targetUserGroupIds = userGroupsForTarget.map(g => g.id);
+            const hasCommonGroup = groupIds.some(gid => targetUserGroupIds.includes(gid));
+            if (hasCommonGroup) {
+              targetMembers = [targetUser];
+            } else {
+              // 如果指定用戶不屬於當前用戶的群組，返回空數組
+              return res.json({ schedules: [] });
+            }
+          } else {
+            return res.json({ schedules: [] });
+          }
+        } else {
+          // 獲取所有群組的成員
+          for (const groupId of groupIds) {
+            const members = await DepartmentGroup.getMembers(groupId);
+            targetMembers.push(...members);
+          }
+          // 去重
+          targetMembers = Array.from(new Map(targetMembers.map(m => [m.id, m])).values());
         }
-        // 去重
-        const uniqueMembers = Array.from(new Map(allMembers.map(m => [m.id, m])).values());
         
-        // 獲取所有群組成員的假期申請
-        const leaveApplications = await this.getLeaveApplicationsForGroups(
-          groupIds,
-          filters.start_date,
-          filters.end_date
-        );
+        // 如果指定了 user_id，只獲取該用戶的假期申請
+        let leaveApplications = [];
+        if (filters.user_id) {
+          const leaveResult = await LeaveApplication.findAll({
+            user_id: filters.user_id,
+            status: 'approved',
+            start_date_from: filters.start_date,
+            end_date_to: filters.end_date
+          });
+          const allLeaveApplications = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
+          leaveApplications = allLeaveApplications.filter(leave => {
+            // 排除已銷假的假期
+            if (leave.is_reversed) {
+              return false;
+            }
+            // 排除銷假交易本身
+            if (leave.is_reversal_transaction) {
+              return false;
+            }
+            return true;
+          });
+        } else {
+          // 獲取所有群組成員的假期申請
+          leaveApplications = await this.getLeaveApplicationsForGroups(
+            groupIds,
+            filters.start_date,
+            filters.end_date
+          );
+        }
         
-        // 生成完整的排班資料（使用第一個群組ID作為默認值）
+        // 如果指定了 user_id，使用該用戶所屬的第一個群組ID
+        const targetGroupId = filters.user_id 
+          ? (await DepartmentGroup.findByUserId(filters.user_id))[0]?.id || groupIds[0]
+          : groupIds[0];
+        
+        // 生成完整的排班資料
         const schedulesWithLeave = this.generateSchedulesForMembersAndDates(
-          uniqueMembers,
+          targetMembers,
           filters.start_date,
           filters.end_date,
-          groupIds[0], // 使用第一個群組ID
+          targetGroupId,
           filteredSchedules,
           leaveApplications
         );

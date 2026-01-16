@@ -91,17 +91,36 @@ const MyRoster = () => {
   const getScheduleForDate = (date) => {
     const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
     return schedules.find(s => {
+      if (!s || !s.schedule_date) return false;
+      
       let sDateStr = s.schedule_date;
+      
+      // 處理 Date 對象
       if (sDateStr instanceof Date) {
-        sDateStr = dayjs(sDateStr).format('YYYY-MM-DD');
-      } else if (sDateStr && typeof sDateStr === 'string') {
+        sDateStr = dayjs(sDateStr).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      } 
+      // 處理字符串
+      else if (typeof sDateStr === 'string') {
+        // 移除時間部分（如果有）
         if (sDateStr.includes('T')) {
           sDateStr = sDateStr.split('T')[0];
         }
+        // 移除空格後的時間部分（如果有）
+        if (sDateStr.includes(' ')) {
+          sDateStr = sDateStr.split(' ')[0];
+        }
+        // 確保只取前10個字符（YYYY-MM-DD）
         if (sDateStr.length > 10) {
           sDateStr = sDateStr.substring(0, 10);
         }
+        // 使用 dayjs 標準化日期格式
+        const parsed = dayjs(sDateStr);
+        if (parsed.isValid()) {
+          sDateStr = parsed.format('YYYY-MM-DD');
+        }
       }
+      
+      // 嚴格比較日期字符串
       return sDateStr === dateStr;
     });
   };

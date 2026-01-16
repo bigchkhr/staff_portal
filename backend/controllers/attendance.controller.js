@@ -269,13 +269,9 @@ class AttendanceController {
                                   (time_off_end && time_off_end.trim() !== '');
       
       if (hasActualTimeInput) {
-        // 只刪除手動創建的記錄（created_by_id 不為 null）
-        // 保留從 CSV 導入的記錄
-        await knex('clock_records')
-          .where('employee_number', user.employee_number)
-          .where('attendance_date', finalAttendanceDate)
-          .whereNotNull('created_by_id')
-          .delete();
+        // 重要：不要刪除現有的打卡記錄！
+        // 只創建新的打卡記錄，保留所有現有的打卡記錄（包括從 CSV 導入的）
+        // 這樣可以避免在更新考勤時意外刪除原本的打卡記錄
         
         // 創建新的打卡記錄
         const clockRecords = [];
@@ -1299,6 +1295,25 @@ class AttendanceController {
         end_date
       );
 
+      console.log(`Found ${clockRecords.length} clock records for employee ${currentUser.employee_number} from ${start_date} to ${end_date}`);
+      
+      // 統計審核狀態
+      const validCount = clockRecords.filter(r => r.is_valid === true).length;
+      const invalidCount = clockRecords.filter(r => r.is_valid === false || r.is_valid === null).length;
+      console.log(`Clock records stats: ${validCount} valid, ${invalidCount} invalid/unreviewed`);
+      
+      if (clockRecords.length > 0) {
+        console.log('Sample clock record:', {
+          id: clockRecords[0].id,
+          employee_number: clockRecords[0].employee_number,
+          attendance_date: clockRecords[0].attendance_date,
+          attendance_date_type: typeof clockRecords[0].attendance_date,
+          clock_time: clockRecords[0].clock_time,
+          in_out: clockRecords[0].in_out,
+          is_valid: clockRecords[0].is_valid
+        });
+      }
+
       // 獲取排班數據
       const schedules = await Schedule.findAll({
         user_id: userId,
@@ -1306,12 +1321,18 @@ class AttendanceController {
         end_date
       });
 
+      console.log(`Found ${schedules.length} schedules for user ${userId} from ${start_date} to ${end_date}`);
+
       // 按日期組織數據
       const dateMap = new Map();
       
       // 初始化日期範圍內的所有日期（使用本地日期格式，避免時區問題）
-      const start = new Date(start_date + 'T00:00:00');
-      const end = new Date(end_date + 'T23:59:59');
+      // 使用 dayjs 或直接解析日期字符串，避免時區轉換問題
+      const startParts = start_date.split('-');
+      const endParts = end_date.split('-');
+      const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
+      const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
+      
       let currentDate = new Date(start);
       while (currentDate <= end) {
         // 使用本地時間的年份、月份、日期，避免UTC轉換
@@ -1319,6 +1340,14 @@ class AttendanceController {
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const day = String(currentDate.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${day}`;
+        
+        // 確保日期格式正確
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          console.warn(`Invalid date format generated: ${dateStr}`);
+          currentDate.setDate(currentDate.getDate() + 1);
+          continue;
+        }
+        
         dateMap.set(dateStr, {
           attendance_date: dateStr,
           schedule: null,
@@ -1327,6 +1356,8 @@ class AttendanceController {
         });
         currentDate.setDate(currentDate.getDate() + 1);
       }
+      
+      console.log(`Initialized ${dateMap.size} dates in dateMap from ${start_date} to ${end_date}`);
 
       // 添加排班數據
       schedules.forEach(schedule => {
@@ -1340,6 +1371,16 @@ class AttendanceController {
         } else {
           // 已經是字符串格式，直接使用（移除時間部分）
           dateStr = String(schedule.schedule_date).split('T')[0].split(' ')[0];
+          // 確保格式為 YYYY-MM-DD
+          if (dateStr.length > 10) {
+            dateStr = dateStr.substring(0, 10);
+          }
+        }
+        
+        // 確保日期格式正確（YYYY-MM-DD）
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          console.warn(`Invalid date format for schedule: ${dateStr}, schedule ID: ${schedule.id}`);
+          return; // 跳過格式不正確的記錄
         }
         
         if (dateMap.has(dateStr)) {
@@ -1370,32 +1411,69 @@ class AttendanceController {
       });
 
       // 添加打卡記錄
+      let mappedClockRecordsCount = 0;
+      let skippedClockRecordsCount = 0;
+      
       clockRecords.forEach(record => {
         let dateStr;
+        
+        // 處理日期格式
         if (record.attendance_date instanceof Date) {
           // 使用本地時間的年份、月份、日期
           const year = record.attendance_date.getFullYear();
           const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
           const day = String(record.attendance_date.getDate()).padStart(2, '0');
           dateStr = `${year}-${month}-${day}`;
-        } else {
+        } else if (record.attendance_date) {
           // 已經是字符串格式，直接使用（移除時間部分）
-          dateStr = String(record.attendance_date).split('T')[0].split(' ')[0];
+          dateStr = String(record.attendance_date);
+          // 移除時間部分
+          if (dateStr.includes('T')) {
+            dateStr = dateStr.split('T')[0];
+          }
+          if (dateStr.includes(' ')) {
+            dateStr = dateStr.split(' ')[0];
+          }
+          // 確保格式為 YYYY-MM-DD
+          if (dateStr.length > 10) {
+            dateStr = dateStr.substring(0, 10);
+          }
+        } else {
+          console.warn(`Clock record ${record.id} has no attendance_date`);
+          skippedClockRecordsCount++;
+          return;
+        }
+        
+        // 確保日期格式正確（YYYY-MM-DD）
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          console.warn(`Invalid date format for clock record: ${dateStr}, record ID: ${record.id}, original: ${record.attendance_date}`);
+          skippedClockRecordsCount++;
+          return; // 跳過格式不正確的記錄
         }
         
         if (dateMap.has(dateStr)) {
           dateMap.get(dateStr).clock_records.push(record);
+          mappedClockRecordsCount++;
         } else {
           // 如果日期不在範圍內，也添加（可能是數據問題，但應該顯示）
-          if (!dateMap.has(dateStr)) {
-            dateMap.set(dateStr, {
-              attendance_date: dateStr,
-              schedule: null,
-              clock_records: [],
-              attendance: null
-            });
-          }
-          dateMap.get(dateStr).clock_records.push(record);
+          dateMap.set(dateStr, {
+            attendance_date: dateStr,
+            schedule: null,
+            clock_records: [record],
+            attendance: null
+          });
+          mappedClockRecordsCount++;
+        }
+      });
+      
+      console.log(`Mapped ${mappedClockRecordsCount} clock records, skipped ${skippedClockRecordsCount}`);
+      
+      // 統計每個日期的記錄數量和審核狀態
+      dateMap.forEach((item, dateStr) => {
+        if (item.clock_records && item.clock_records.length > 0) {
+          const validCount = item.clock_records.filter(r => r.is_valid === true).length;
+          const invalidCount = item.clock_records.filter(r => r.is_valid === false || r.is_valid === null).length;
+          console.log(`Date ${dateStr}: ${item.clock_records.length} total records (${validCount} valid, ${invalidCount} invalid/unreviewed)`);
         }
       });
 
@@ -1442,6 +1520,15 @@ class AttendanceController {
       const result = Array.from(dateMap.values()).sort((a, b) => {
         return new Date(a.attendance_date) - new Date(b.attendance_date);
       });
+
+      // 統計信息
+      const stats = {
+        total_days: result.length,
+        days_with_schedule: result.filter(r => r.schedule).length,
+        days_with_clock_records: result.filter(r => r.clock_records && r.clock_records.length > 0).length,
+        total_clock_records: result.reduce((sum, r) => sum + (r.clock_records ? r.clock_records.length : 0), 0)
+      };
+      console.log('Attendance data stats:', stats);
 
       res.json({ 
         attendance: result,

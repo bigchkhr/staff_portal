@@ -149,12 +149,29 @@ class ClockRecord {
   // 根據員工編號和日期範圍取得打卡記錄
   static async findByEmployeeAndDateRange(employeeNumber, startDate, endDate) {
     try {
-      return await knex('clock_records')
+      const results = await knex('clock_records')
         .where('employee_number', employeeNumber)
         .where('attendance_date', '>=', startDate)
         .where('attendance_date', '<=', endDate)
         .orderBy('attendance_date', 'asc')
         .orderBy('clock_time', 'asc');
+      
+      // 格式化日期為 YYYY-MM-DD 字符串格式
+      return results.map(record => {
+        if (record.attendance_date) {
+          if (record.attendance_date instanceof Date) {
+            // 使用本地時間的年份、月份、日期
+            const year = record.attendance_date.getFullYear();
+            const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
+            const day = String(record.attendance_date.getDate()).padStart(2, '0');
+            record.attendance_date = `${year}-${month}-${day}`;
+          } else if (typeof record.attendance_date === 'string') {
+            // 移除時間部分
+            record.attendance_date = record.attendance_date.split('T')[0].split(' ')[0].substring(0, 10);
+          }
+        }
+        return record;
+      });
     } catch (error) {
       console.error('ClockRecord.findByEmployeeAndDateRange error:', error);
       throw error;

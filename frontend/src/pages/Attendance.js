@@ -207,9 +207,10 @@ const Attendance = ({ noLayout = false }) => {
     }
   };
 
-  const handleOpenEditDialog = (item) => {
+  const handleOpenEditDialog = async (item) => {
     console.log('handleOpenEditDialog - item:', item);
     console.log('item.attendance_date:', item?.attendance_date);
+    console.log('item.clock_records:', item?.clock_records);
     
     // 確保 item 有必要的屬性
     if (!item) {
@@ -235,10 +236,17 @@ const Attendance = ({ noLayout = false }) => {
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
     setEditRemarks(item.attendance?.remarks || '');
     
-    // 初始化打卡記錄列表，顯示所有記錄（包括有效的和無效的）
-    const clockRecords = item?.clock_records || [];
-    console.log('Opening edit dialog, clock_records:', clockRecords);
-    console.log('clock_records length:', clockRecords.length);
+    // 先使用 item 中的 clock_records
+    let clockRecords = item?.clock_records || [];
+    console.log('Initial clock_records from item:', clockRecords);
+    console.log('Initial clock_records length:', clockRecords.length);
+    console.log('item structure:', JSON.stringify(item, null, 2));
+    
+    // 確保 clock_records 是數組
+    if (!Array.isArray(clockRecords)) {
+      console.warn('clock_records is not an array, converting...', clockRecords);
+      clockRecords = [];
+    }
     
     // 顯示所有記錄，保留它們當前的 is_valid 狀態，並添加可編輯的時間字段
     setEditClockRecords(clockRecords.map(record => ({
@@ -246,6 +254,8 @@ const Attendance = ({ noLayout = false }) => {
       is_valid: record.is_valid === true, // 保留當前的有效性狀態
       editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '' // 可編輯的時間字符串
     })));
+    
+    console.log('Final editClockRecords:', clockRecords);
     
     // 不再需要單獨的 editClockTimes，因為時間編輯直接在 editClockRecords 中
     setEditClockTimes([]);
@@ -1031,7 +1041,8 @@ const Attendance = ({ noLayout = false }) => {
                                     // 確保 item 有 attendance_date，如果沒有則使用 dateStr
                                     const itemToEdit = item ? {
                                       ...item,
-                                      attendance_date: item.attendance_date || dateStr // 確保有 attendance_date
+                                      attendance_date: item.attendance_date || dateStr, // 確保有 attendance_date
+                                      clock_records: item.clock_records || [] // 確保有 clock_records 屬性，即使為空
                                     } : {
                                       user_id: userData.user_id,
                                       employee_number: userData.employee_number,
@@ -1042,6 +1053,9 @@ const Attendance = ({ noLayout = false }) => {
                                       clock_records: [] // 確保有 clock_records 屬性
                                     };
                                     console.log('Opening edit dialog with item:', itemToEdit);
+                                    console.log('itemToEdit.clock_records:', itemToEdit.clock_records);
+                                    console.log('itemToEdit.clock_records type:', typeof itemToEdit.clock_records);
+                                    console.log('itemToEdit.clock_records isArray:', Array.isArray(itemToEdit.clock_records));
                                     handleOpenEditDialog(itemToEdit);
                                   }}
                                   sx={{ 

@@ -51,8 +51,12 @@ const MyAttendance = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong').startOf('week'));
-  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('week'));
+  // 默認顯示最近7天（今天往前推6天，加上今天共7天）
+  const [startDate, setStartDate] = useState(() => {
+    const today = dayjs().tz('Asia/Hong_Kong');
+    return today.subtract(6, 'day').startOf('day');
+  });
+  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('day'));
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -79,15 +83,36 @@ const MyAttendance = () => {
       });
       
       // 轉換數據格式以匹配現有的顯示邏輯
-      const myData = (response.data.attendance || []).map(item => ({
-        user_id: response.data.user?.id || user.id,
-        employee_number: response.data.user?.employee_number || user.employee_number,
-        display_name: response.data.user?.display_name || user.display_name,
-        attendance_date: item.attendance_date,
-        schedule: item.schedule,
-        attendance: item.attendance,
-        clock_records: item.clock_records || []
-      }));
+      const myData = (response.data.attendance || []).map(item => {
+        const mappedItem = {
+          user_id: response.data.user?.id || user.id,
+          employee_number: response.data.user?.employee_number || user.employee_number,
+          display_name: response.data.user?.display_name || user.display_name,
+          attendance_date: item.attendance_date,
+          schedule: item.schedule,
+          attendance: item.attendance,
+          clock_records: item.clock_records || []
+        };
+        
+        // 調試日誌
+        if (mappedItem.clock_records.length > 0) {
+          const validCount = mappedItem.clock_records.filter(r => r.is_valid === true).length;
+          const invalidCount = mappedItem.clock_records.filter(r => r.is_valid === false || r.is_valid === null || r.is_valid === undefined).length;
+          console.log(`Date ${mappedItem.attendance_date} has ${mappedItem.clock_records.length} clock records (${validCount} valid, ${invalidCount} invalid/unreviewed):`, 
+            mappedItem.clock_records.map(r => ({
+              time: r.clock_time,
+              in_out: r.in_out,
+              is_valid: r.is_valid
+            }))
+          );
+        }
+        
+        return mappedItem;
+      });
+      
+      console.log(`Total attendance data: ${myData.length} days`);
+      console.log(`Days with clock records: ${myData.filter(d => d.clock_records && d.clock_records.length > 0).length}`);
+      console.log(`Total clock records: ${myData.reduce((sum, d) => sum + (d.clock_records ? d.clock_records.length : 0), 0)}`);
       
       setAttendanceData(myData);
     } catch (error) {
@@ -165,21 +190,24 @@ const MyAttendance = () => {
   };
 
   const handlePreviousWeek = () => {
-    const newStart = dayjs(startDate).subtract(7, 'day');
-    setStartDate(newStart.startOf('week'));
-    setEndDate(newStart.endOf('week'));
+    const daysDiff = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
+    const newEnd = dayjs(startDate).subtract(1, 'day');
+    setEndDate(newEnd.endOf('day'));
+    setStartDate(newEnd.subtract(daysDiff - 1, 'day').startOf('day'));
   };
 
   const handleNextWeek = () => {
-    const newStart = dayjs(startDate).add(7, 'day');
-    setStartDate(newStart.startOf('week'));
-    setEndDate(newStart.endOf('week'));
+    const daysDiff = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
+    const newStart = dayjs(endDate).add(1, 'day');
+    setStartDate(newStart.startOf('day'));
+    setEndDate(newStart.add(daysDiff - 1, 'day').endOf('day'));
   };
 
   const handleToday = () => {
     const today = dayjs().tz('Asia/Hong_Kong');
-    setStartDate(today.startOf('week'));
-    setEndDate(today.endOf('week'));
+    // 顯示最近7天
+    setStartDate(today.subtract(6, 'day').startOf('day'));
+    setEndDate(today.endOf('day'));
   };
 
   return (
@@ -215,8 +243,14 @@ const MyAttendance = () => {
                   label={t('myAttendance.startDate')}
                   value={startDate}
                   onChange={(newValue) => {
-                    setStartDate(newValue.startOf('day'));
-                    setEndDate(newValue.endOf('week'));
+                    if (newValue) {
+                      setStartDate(newValue.startOf('day'));
+                      // 如果結束日期早於開始日期，自動調整結束日期為開始日期後6天（共7天）
+                      const newEnd = dayjs(newValue).add(6, 'day');
+                      if (dayjs(endDate).isBefore(newEnd)) {
+                        setEndDate(newEnd.endOf('day'));
+                      }
+                    }
                   }}
                   format="DD/MM/YYYY"
                   slotProps={{ 
@@ -231,8 +265,14 @@ const MyAttendance = () => {
                   label={t('myAttendance.endDate')}
                   value={endDate}
                   onChange={(newValue) => {
-                    setEndDate(newValue.endOf('day'));
-                    setStartDate(newValue.startOf('week'));
+                    if (newValue) {
+                      setEndDate(newValue.endOf('day'));
+                      // 如果開始日期晚於結束日期，自動調整開始日期為結束日期前6天（共7天）
+                      const newStart = dayjs(newValue).subtract(6, 'day');
+                      if (dayjs(startDate).isAfter(newStart)) {
+                        setStartDate(newStart.startOf('day'));
+                      }
+                    }
                   }}
                   format="DD/MM/YYYY"
                   slotProps={{ 
@@ -303,18 +343,31 @@ const MyAttendance = () => {
                         <TableCell>
                           {item.clock_records && item.clock_records.length > 0 ? (
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                              {item.clock_records.map((record, idx) => (
-                                <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  {record.is_valid ? (
-                                    <CheckCircleIcon fontSize="small" color="success" />
-                                  ) : (
-                                    <CancelIcon fontSize="small" color="error" />
-                                  )}
-                                  <Typography variant="body2">
-                                    {formatTime(record.clock_time)} ({record.in_out})
-                                  </Typography>
-                                </Box>
-                              ))}
+                              {item.clock_records.map((record, idx) => {
+                                // 確保顯示所有記錄，包括未審核的（is_valid 為 false、null 或 undefined）
+                                const isValid = record.is_valid === true;
+                                const isUnreviewed = record.is_valid === false || record.is_valid === null || record.is_valid === undefined;
+                                
+                                return (
+                                  <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    {isValid ? (
+                                      <CheckCircleIcon fontSize="small" color="success" />
+                                    ) : isUnreviewed ? (
+                                      <CancelIcon fontSize="small" color="warning" />
+                                    ) : (
+                                      <CancelIcon fontSize="small" color="error" />
+                                    )}
+                                    <Typography variant="body2">
+                                      {formatTime(record.clock_time)} ({record.in_out})
+                                      {isUnreviewed && (
+                                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                          (待審核)
+                                        </Typography>
+                                      )}
+                                    </Typography>
+                                  </Box>
+                                );
+                              })}
                             </Box>
                           ) : (
                             <Typography variant="body2" color="text.secondary">
