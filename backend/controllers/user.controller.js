@@ -29,6 +29,7 @@ class UserController {
           position_id: user.position_id,
           position_name: user.position_name,
           position_name_zh: user.position_name_zh,
+          position_stream: user.position_stream || null,
           is_hr_member: isHRMember,
           department_groups: departmentGroups,
           delegation_groups: delegationGroups

@@ -314,7 +314,9 @@
     "expense": "费用",
     "extraWorkingHoursApplication": "额外工作时数申报",
     "outdoorWorkApplication": "外勤工作申请",
-    "leaveApplication": "假期申请"
+    "leaveApplication": "假期申请",
+    "searchPlaceholder": "搜索交易编号、申请人、员工编号、假期类型...",
+    "allStages": "全部阶段"
   },
   "changePassword": {
     "title": "更改密码",
@@ -453,6 +455,7 @@
     "stageApprover3": "最后阶段批核",
     "stageRejected": "拒绝",
     "stagePaperFlow": "纸本申请",
+    "stageCompleted": "已完成",
     "stageUnknown": "未知",
     "reversalLabel": "销假",
     "hrReversal": "销假",
@@ -1022,6 +1025,8 @@
     "actions": "操作",
     "editDialogTitle": "编辑职位",
     "addDialogTitle": "新增职位",
+    "displayOrder": "显示排序",
+    "displayOrderHelper": "用于在 /schedule、/attendance 和 /group-leave-calendar 页面中排序职位的显示顺序",
     "cancel": "取消",
     "save": "保存",
     "operationFailed": "操作失败"
@@ -1136,7 +1141,15 @@
     "hour": "小时",
     "minute": "分钟",
     "nextDay": "翌日",
-    "endTimeHelper": "可选择24-32小时表示跨日时间（如26:00表示翌日凌晨2:00）"
+    "startTimeHelper": "可输入HH:mm格式或4位数字（如2330），小时范围0-32",
+    "endTimeHelper": "可输入HH:mm格式或4位数字（如2600），小时范围0-32，例如：26:00表示次日凌晨2:00",
+    "invalidStartTime": "开始时间格式不正确（小时范围：0-32，分钟范围：0-59）",
+    "invalidStartTimeFormat": "开始时间格式不正确，请使用 HH:mm 格式（例如：23:30）或4位数字（例如：2330）",
+    "invalidEndTime": "结束时间格式不正确（小时范围：0-32，分钟范围：0-59）",
+    "invalidEndTimeFormat": "结束时间格式不正确，请使用 HH:mm 格式（例如：26:00）或4位数字（例如：2600）",
+    "store": "店铺",
+    "timeAndLeave": "时间与假期",
+    "csvImportFailed": "CSV导入失败"
   },
   "attendance": {
     "title": "考勤管理",
@@ -1174,6 +1187,7 @@
     "clockRecords": "打卡记录",
     "selectValidRecords": "选择有效记录",
     "noClockRecords": "暂无打卡记录",
+    "clickAddToCreate": "点击「新增时间」按钮来新增打卡记录",
     "autoSelectEarliest": "自动选取最早4个",
     "importCSV": "导入CSV",
     "selectCSVFile": "选择CSV文件",

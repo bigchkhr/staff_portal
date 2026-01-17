@@ -30,7 +30,8 @@ const AdminPositions = () => {
   const [formData, setFormData] = useState({
     name: '',
     name_zh: '',
-    description: ''
+    description: '',
+    display_order: ''
   });
 
   const trimmedSearch = searchTerm.trim();
@@ -71,7 +72,7 @@ const AdminPositions = () => {
 
   const handleOpen = () => {
     setEditing(null);
-    setFormData({ name: '', name_zh: '', description: '' });
+    setFormData({ name: '', name_zh: '', description: '', display_order: '' });
     setOpen(true);
   };
 
@@ -80,17 +81,23 @@ const AdminPositions = () => {
     setFormData({
       name: pos.name,
       name_zh: pos.name_zh,
-      description: pos.description || ''
+      description: pos.description || '',
+      display_order: pos.display_order || ''
     });
     setOpen(true);
   };
 
   const handleSubmit = async () => {
     try {
+      const submitData = {
+        ...formData,
+        display_order: formData.display_order === '' ? 0 : parseInt(formData.display_order) || 0
+      };
+      
       if (editing) {
-        await axios.put(`/api/admin/positions/${editing}`, formData);
+        await axios.put(`/api/admin/positions/${editing}`, submitData);
       } else {
-        await axios.post('/api/admin/positions', formData);
+        await axios.post('/api/admin/positions', submitData);
       }
       setOpen(false);
       fetchPositions();
@@ -134,6 +141,7 @@ const AdminPositions = () => {
                 <TableCell>{t('adminPositions.name')}</TableCell>
                 <TableCell>{t('adminPositions.chineseName')}</TableCell>
                 <TableCell>{t('adminPositions.description')}</TableCell>
+                <TableCell>{t('adminPositions.displayOrder')}</TableCell>
                 <TableCell>{t('adminPositions.actions')}</TableCell>
               </TableRow>
             </TableHead>
@@ -143,6 +151,7 @@ const AdminPositions = () => {
                   <TableCell>{pos.name}</TableCell>
                   <TableCell>{pos.name_zh}</TableCell>
                   <TableCell>{pos.description || '-'}</TableCell>
+                  <TableCell>{pos.display_order || 0}</TableCell>
                   <TableCell>
                     <IconButton size="small" onClick={() => handleEdit(pos)}>
                       <EditIcon />
@@ -177,6 +186,14 @@ const AdminPositions = () => {
               rows={3}
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+            />
+            <TextField
+              label={t('adminPositions.displayOrder')}
+              type="number"
+              value={formData.display_order}
+              onChange={(e) => setFormData(prev => ({ ...prev, display_order: e.target.value }))}
+              inputProps={{ min: 0 }}
+              helperText={t('adminPositions.displayOrderHelper')}
             />
           </Box>
         </DialogContent>

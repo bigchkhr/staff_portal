@@ -289,7 +289,21 @@ const MyRoster = () => {
                                 </Box>
                               )}
 
-                              {!schedule.start_time && !schedule.end_time && !getLeaveDisplayText(schedule) && (
+                              {schedule.store_code && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {t('schedule.store')}
+                                  </Typography>
+                                  <Chip
+                                    label={schedule.store_code}
+                                    color="secondary"
+                                    size="small"
+                                    sx={{ fontWeight: 600, mt: 0.5 }}
+                                  />
+                                </Box>
+                              )}
+
+                              {!schedule.start_time && !schedule.end_time && !getLeaveDisplayText(schedule) && !schedule.store_code && (
                                 <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
                                   {t('myRoster.noSchedule')}
                                 </Typography>

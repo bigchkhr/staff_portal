@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Paper,
@@ -20,9 +20,15 @@ import {
   useMediaQuery,
   CircularProgress,
   Alert,
-  Pagination
+  Pagination,
+  TextField,
+  InputAdornment,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
 } from '@mui/material';
-import { Visibility as VisibilityIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, Search as SearchIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -36,11 +42,14 @@ const ApprovalList = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [applications, setApplications] = useState([]);
+  const [allApplications, setAllApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit] = useState(15); // 每頁顯示數量
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState('');
+  const [stageFilter, setStageFilter] = useState('all');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -53,7 +62,8 @@ const ApprovalList = () => {
       const response = await axios.get('/api/approvals/pending', {
         params: { page, limit }
       });
-      setApplications(response.data.applications || []);
+      const fetchedApplications = response.data.applications || [];
+      setAllApplications(fetchedApplications);
       
       // 更新分頁信息
       if (response.data.pagination) {
@@ -83,6 +93,56 @@ const ApprovalList = () => {
     if (!application.approver_3_at && application.approver_3_id) return 'approver_3';
     return 'completed';
   };
+
+  // 過濾申請列表
+  const filteredApplications = useMemo(() => {
+    let filtered = [...allApplications];
+
+    // 搜尋過濾
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(app => {
+        const transactionId = app.transaction_id?.toString().toLowerCase() || '';
+        const applicantName = app.applicant_display_name?.toLowerCase() || '';
+        const employeeNumber = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
+        const leaveTypeName = app.leave_type_name_zh?.toLowerCase() || app.leave_type_name?.toLowerCase() || '';
+        
+        return transactionId.includes(searchLower) ||
+               applicantName.includes(searchLower) ||
+               employeeNumber.includes(searchLower) ||
+               leaveTypeName.includes(searchLower);
+      });
+    }
+
+    // 階段篩選
+    if (stageFilter !== 'all') {
+      filtered = filtered.filter(app => {
+        const stage = getCurrentStage(app);
+        return stage === stageFilter;
+      });
+    }
+
+    return filtered;
+  }, [allApplications, search, stageFilter]);
+
+  // 當過濾後的結果改變時，更新分頁
+  useEffect(() => {
+    const filteredTotal = filteredApplications.length;
+    const filteredTotalPages = Math.ceil(filteredTotal / limit);
+    setTotal(filteredTotal);
+    setTotalPages(filteredTotalPages);
+    // 如果當前頁超過總頁數，重置到第一頁
+    if (page > filteredTotalPages && filteredTotalPages > 0) {
+      setPage(1);
+    }
+  }, [filteredApplications, limit, page]);
+
+  // 獲取當前頁的申請
+  const paginatedApplications = useMemo(() => {
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return filteredApplications.slice(startIndex, endIndex);
+  }, [filteredApplications, page, limit]);
 
   const canApprove = (application) => {
     const stage = getCurrentStage(application);
@@ -329,15 +389,54 @@ const ApprovalList = () => {
       </Typography>
 
       <Paper sx={{ mt: 2, p: { xs: 1.5, sm: 2 } }}>
+        {/* 搜尋欄和篩選器 */}
+        <Box sx={{ mb: 2, display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+          <TextField
+            fullWidth
+            placeholder={t('approvalList.searchPlaceholder') || t('common.search')}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1); // 重置到第一頁
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+            size={isMobile ? "small" : "medium"}
+          />
+          <FormControl sx={{ minWidth: { xs: '100%', sm: 200 } }} size={isMobile ? "small" : "medium"}>
+            <InputLabel>{t('approvalList.currentStage')}</InputLabel>
+            <Select
+              value={stageFilter}
+              onChange={(e) => {
+                setStageFilter(e.target.value);
+                setPage(1); // 重置到第一頁
+              }}
+              label={t('approvalList.currentStage')}
+            >
+              <MenuItem value="all">{t('approvalList.allStages') || t('common.all')}</MenuItem>
+              <MenuItem value="checker">{t('approvalList.stageChecker')}</MenuItem>
+              <MenuItem value="approver_1">{t('approvalList.stageApprover1')}</MenuItem>
+              <MenuItem value="approver_2">{t('approvalList.stageApprover2')}</MenuItem>
+              <MenuItem value="approver_3">{t('approvalList.stageApprover3')}</MenuItem>
+              <MenuItem value="completed">{t('approvalList.stageCompleted')}</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+
         {isMobile ? (
           // 手機版：卡片式布局
           <Box>
-            {applications.length === 0 ? (
+            {paginatedApplications.length === 0 ? (
               <Alert severity="info" sx={{ mt: 2 }}>
                 {t('approvalList.noPendingApplications')}
               </Alert>
             ) : (
-              applications.map((app) => renderMobileCard(app))
+              paginatedApplications.map((app) => renderMobileCard(app))
             )}
           </Box>
         ) : (
@@ -365,12 +464,12 @@ const ApprovalList = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {applications.length === 0 ? (
+                {paginatedApplications.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} align="center">{t('approvalList.noPendingApplications')}</TableCell>
                   </TableRow>
                 ) : (
-                  applications.map((app) => {
+                  paginatedApplications.map((app) => {
                     const stage = getCurrentStage(app);
                     const canApproveThis = canApprove(app);
                     

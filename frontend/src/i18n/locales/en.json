@@ -314,7 +314,9 @@
     "expense": "Expense",
     "extraWorkingHoursApplication": "Extra Working Hours Application",
     "outdoorWorkApplication": "Outdoor Work Application",
-    "leaveApplication": "Leave Application"
+    "leaveApplication": "Leave Application",
+    "searchPlaceholder": "Search transaction ID, applicant, employee number, leave type...",
+    "allStages": "All Stages"
   },
   "changePassword": {
     "title": "Change Password",
@@ -458,6 +460,7 @@
     "stageApprover3": "Final Stage Approval",
     "stageRejected": "Rejected",
     "stagePaperFlow": "Paper Application",
+    "stageCompleted": "Completed",
     "stageUnknown": "Unknown",
     "reversalLabel": "Reversal",
     "hrReversal": "Reversal",
@@ -1082,6 +1085,8 @@
     "actions": "Actions",
     "editDialogTitle": "Edit Position",
     "addDialogTitle": "Add Position",
+    "displayOrder": "Display Order",
+    "displayOrderHelper": "Used to sort the display order of positions in /schedule, /attendance, and /group-leave-calendar pages",
     "cancel": "Cancel",
     "save": "Save",
     "operationFailed": "Operation failed"
@@ -1196,7 +1201,15 @@
     "hour": "Hour",
     "minute": "Minute",
     "nextDay": "Next Day",
-    "endTimeHelper": "You can select 24-32 hours to indicate overnight time (e.g., 26:00 means 2:00 AM next day)"
+    "startTimeHelper": "You can enter HH:mm format or 4 digits (e.g., 2330), hour range 0-32",
+    "endTimeHelper": "You can enter HH:mm format or 4 digits (e.g., 2600), hour range 0-32, e.g., 26:00 means 2:00 AM next day",
+    "invalidStartTime": "Invalid start time format (hour range: 0-32, minute range: 0-59)",
+    "invalidStartTimeFormat": "Invalid start time format, please use HH:mm format (e.g., 23:30) or 4 digits (e.g., 2330)",
+    "invalidEndTime": "Invalid end time format (hour range: 0-32, minute range: 0-59)",
+    "invalidEndTimeFormat": "Invalid end time format, please use HH:mm format (e.g., 26:00) or 4 digits (e.g., 2600)",
+    "store": "Store",
+    "timeAndLeave": "Time and Leave",
+    "csvImportFailed": "CSV import failed"
   },
   "attendance": {
     "title": "Attendance Management",
@@ -1234,6 +1247,7 @@
     "clockRecords": "Clock Records",
     "selectValidRecords": "Select Valid Records",
     "noClockRecords": "No clock records",
+    "clickAddToCreate": "Click \"Add Time\" button to create clock records",
     "autoSelectEarliest": "Auto Select Earliest 4",
     "importCSV": "Import CSV",
     "selectCSVFile": "Select CSV File",

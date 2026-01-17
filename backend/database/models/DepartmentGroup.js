@@ -175,8 +175,11 @@ class DepartmentGroup {
           'departments.name as department_name',
           'departments.name_zh as department_name_zh',
           'positions.name as position_name',
-          'positions.name_zh as position_name_zh'
-        );
+          'positions.name_zh as position_name_zh',
+          'positions.display_order as position_display_order'
+        )
+        .orderBy('positions.display_order', 'asc')
+        .orderBy('users.employee_number', 'asc'); // 如果 display_order 相同，按員工編號排序
 
       return members || [];
     } catch (error) {

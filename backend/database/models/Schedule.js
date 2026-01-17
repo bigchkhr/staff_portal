@@ -10,6 +10,7 @@ class Schedule {
         .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
         .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
         .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+        .leftJoin('stores', 'schedules.store_id', 'stores.id')
         .select(
           'schedules.*',
           'users.display_name as user_name',
@@ -23,7 +24,10 @@ class Schedule {
           'updater.name_zh as updated_by_name_zh',
           'leave_types.code as leave_type_code',
           'leave_types.name as leave_type_name',
-          'leave_types.name_zh as leave_type_name_zh'
+          'leave_types.name_zh as leave_type_name_zh',
+          'stores.id as store_id',
+          'stores.store_code as store_code',
+          'stores.store_short_name_ as store_short_name'
         );
 
       // 根據群組ID篩選
@@ -90,6 +94,7 @@ class Schedule {
         .leftJoin('users as creator', 'schedules.created_by_id', 'creator.id')
         .leftJoin('users as updater', 'schedules.updated_by_id', 'updater.id')
         .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+        .leftJoin('stores', 'schedules.store_id', 'stores.id')
         .select(
           'schedules.*',
           'users.display_name as user_name',
@@ -103,7 +108,10 @@ class Schedule {
           'updater.name_zh as updated_by_name_zh',
           'leave_types.code as leave_type_code',
           'leave_types.name as leave_type_name',
-          'leave_types.name_zh as leave_type_name_zh'
+          'leave_types.name_zh as leave_type_name_zh',
+          'stores.id as store_id',
+          'stores.store_code as store_code',
+          'stores.store_short_name_ as store_short_name'
         )
         .where('schedules.id', id)
         .first();
@@ -154,6 +162,7 @@ class Schedule {
           end_time: scheduleData.end_time,
           leave_type_id: scheduleData.leave_type_id !== undefined ? scheduleData.leave_type_id : null,
           leave_session: scheduleData.leave_session !== undefined ? scheduleData.leave_session : null,
+          store_id: scheduleData.store_id !== undefined ? scheduleData.store_id : null,
           updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,
           updated_at: knex.fn.now()
         });
@@ -192,6 +201,7 @@ class Schedule {
             end_time: scheduleData.end_time,
             leave_type_id: scheduleData.leave_type_id !== undefined ? scheduleData.leave_type_id : null,
             leave_session: scheduleData.leave_session !== undefined ? scheduleData.leave_session : null,
+            store_id: scheduleData.store_id !== undefined ? scheduleData.store_id : null,
             updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,
             updated_at: knex.fn.now()
           });

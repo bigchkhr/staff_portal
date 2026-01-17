@@ -50,17 +50,21 @@ const AdminPaperFlow = () => {
   const [yearManuallySet, setYearManuallySet] = useState(false); // 標記年份是否被手動設置
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [includeWeekends, setIncludeWeekends] = useState(true); // 預設包含週末
+  const [includeWeekends, setIncludeWeekends] = useState(false); // 初始值，將根據選中用戶的 stream 在 useEffect 中設置
 
   useEffect(() => {
     fetchLeaveTypes();
     fetchUsers();
   }, []);
 
-  // 當選擇的用戶改變時，更新表單數據
+  // 當選擇的用戶改變時，更新表單數據並根據用戶的 stream 設置默認值
   useEffect(() => {
     if (selectedUser) {
       setFormData(prev => ({ ...prev, user_id: selectedUser.id }));
+      // 根據選中用戶的 stream 設置默認值：Store 開啟週末計算、關閉排除法定假期；Head Office 關閉週末計算、開啟排除法定假期
+      const isStore = selectedUser.position_stream === 'Store';
+      setIncludeWeekends(isStore); // Store: true, Head Office: false
+      setFormData(prev => ({ ...prev, exclude_public_holidays: !isStore })); // Store: false, Head Office: true
     }
   }, [selectedUser]);
 
@@ -362,13 +366,13 @@ const AdminPaperFlow = () => {
         end_session: 'PM', // 預設為下午
         days: '',
         reason: '',
-        exclude_public_holidays: false
+        exclude_public_holidays: false // 重置為預設值（當沒有選中用戶時）
       });
       setBalance(null);
       setFiles([]);
       setYearManuallySet(false); // 重置年份手動設置標記
       setSelectedUser(null);
-      setIncludeWeekends(true); // 重置為預設值
+      setIncludeWeekends(false); // 重置為預設值（當沒有選中用戶時）
     } catch (error) {
       // 檢查是否為日期範圍重疊錯誤
       if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {

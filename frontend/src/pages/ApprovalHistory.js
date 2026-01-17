@@ -273,6 +273,7 @@ const ApprovalHistory = () => {
   const [search, setSearch] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [activeStatusFilter, setActiveStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [limit] = useState(15); // 每頁顯示數量
   const [total, setTotal] = useState(0);
@@ -283,7 +284,7 @@ const ApprovalHistory = () => {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1; // getMonth() 返回 0-11，所以需要 +1
   
-  // 進階搜尋狀態
+  // 進階搜尋狀態（用於 UI 顯示，用戶輸入時更新）
   const [advancedSearchExpanded, setAdvancedSearchExpanded] = useState(false);
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterFlowType, setFilterFlowType] = useState('');
@@ -293,6 +294,16 @@ const ApprovalHistory = () => {
   const [filterDepartmentGroup, setFilterDepartmentGroup] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  
+  // 實際用於搜尋的參數（只在按下搜尋按鈕時更新）
+  const [activeFilterLeaveType, setActiveFilterLeaveType] = useState('');
+  const [activeFilterFlowType, setActiveFilterFlowType] = useState('');
+  const [activeFilterApplicationType, setActiveFilterApplicationType] = useState('');
+  const [activeFilterYear, setActiveFilterYear] = useState(currentYear.toString());
+  const [activeFilterMonth, setActiveFilterMonth] = useState(currentMonth.toString());
+  const [activeFilterDepartmentGroup, setActiveFilterDepartmentGroup] = useState('');
+  const [activeDateFrom, setActiveDateFrom] = useState('');
+  const [activeDateTo, setActiveDateTo] = useState('');
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [departmentGroups, setDepartmentGroups] = useState([]);
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
@@ -325,26 +336,36 @@ const ApprovalHistory = () => {
     }
   };
 
-  const fetchApprovalHistory = useCallback(async () => {
+  const fetchApprovalHistory = useCallback(async (overrideParams = {}) => {
     try {
       setLoading(true);
       const params = {
-        page,
+        page: overrideParams.page !== undefined ? overrideParams.page : page,
         limit
       };
       
       // 狀態篩選
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
+      const currentStatusFilter = overrideParams.statusFilter !== undefined ? overrideParams.statusFilter : activeStatusFilter;
+      if (currentStatusFilter !== 'all') {
+        params.status = currentStatusFilter;
       }
       
-      // 進階搜尋參數
-      if (filterLeaveType) params.leave_type_id = filterLeaveType;
-      if (filterFlowType) params.flow_type = filterFlowType;
-      if (filterApplicationType) params.application_type = filterApplicationType;
-      if (filterDepartmentGroup) params.department_group_id = filterDepartmentGroup;
-      if (filterYear) {
-        const yearStr = String(filterYear).trim();
+      // 進階搜尋參數（使用 overrideParams 中的參數，如果沒有則使用實際搜尋參數）
+      const currentFilterLeaveType = overrideParams.filterLeaveType !== undefined ? overrideParams.filterLeaveType : activeFilterLeaveType;
+      const currentFilterFlowType = overrideParams.filterFlowType !== undefined ? overrideParams.filterFlowType : activeFilterFlowType;
+      const currentFilterApplicationType = overrideParams.filterApplicationType !== undefined ? overrideParams.filterApplicationType : activeFilterApplicationType;
+      const currentFilterDepartmentGroup = overrideParams.filterDepartmentGroup !== undefined ? overrideParams.filterDepartmentGroup : activeFilterDepartmentGroup;
+      const currentFilterYear = overrideParams.filterYear !== undefined ? overrideParams.filterYear : activeFilterYear;
+      const currentFilterMonth = overrideParams.filterMonth !== undefined ? overrideParams.filterMonth : activeFilterMonth;
+      const currentDateFrom = overrideParams.dateFrom !== undefined ? overrideParams.dateFrom : activeDateFrom;
+      const currentDateTo = overrideParams.dateTo !== undefined ? overrideParams.dateTo : activeDateTo;
+      
+      if (currentFilterLeaveType) params.leave_type_id = currentFilterLeaveType;
+      if (currentFilterFlowType) params.flow_type = currentFilterFlowType;
+      if (currentFilterApplicationType) params.application_type = currentFilterApplicationType;
+      if (currentFilterDepartmentGroup) params.department_group_id = currentFilterDepartmentGroup;
+      if (currentFilterYear) {
+        const yearStr = String(currentFilterYear).trim();
         if (yearStr) {
           const yearNum = parseInt(yearStr);
           if (!isNaN(yearNum) && yearNum > 0) {
@@ -352,8 +373,8 @@ const ApprovalHistory = () => {
           }
         }
       }
-      if (filterMonth) {
-        const monthStr = String(filterMonth).trim();
+      if (currentFilterMonth) {
+        const monthStr = String(currentFilterMonth).trim();
         if (monthStr) {
           const monthNum = parseInt(monthStr);
           if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
@@ -361,8 +382,8 @@ const ApprovalHistory = () => {
           }
         }
       }
-      if (dateFrom) params.start_date_from = dateFrom;
-      if (dateTo) params.end_date_to = dateTo;
+      if (currentDateFrom) params.start_date_from = currentDateFrom;
+      if (currentDateTo) params.end_date_to = currentDateTo;
       
       const response = await axios.get('/api/approvals/history', { params });
       setApplications(response.data.applications || []);
@@ -377,12 +398,20 @@ const ApprovalHistory = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterDepartmentGroup, filterYear, filterMonth, dateFrom, dateTo]);
+  }, [page, limit, activeStatusFilter, activeFilterLeaveType, activeFilterFlowType, activeFilterApplicationType, activeFilterDepartmentGroup, activeFilterYear, activeFilterMonth, activeDateFrom, activeDateTo]);
 
   useEffect(() => {
     fetchLeaveTypes();
     fetchDepartmentGroups();
-    fetchApprovalHistory();
+    // 初始化時，將預設值同時設置到實際搜尋參數，並觸發一次搜尋
+    setActiveFilterYear(currentYear.toString());
+    setActiveFilterMonth(currentMonth.toString());
+    // 初始化時使用預設值觸發搜尋
+    fetchApprovalHistory({
+      filterYear: currentYear.toString(),
+      filterMonth: currentMonth.toString(),
+      page: 1
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -447,6 +476,34 @@ const ApprovalHistory = () => {
   }, [t]);
 
   const getApprovalStage = useCallback((application) => {
+    // 檢查是否為 e-flow 且已完成所有審核並已獲批准
+    const isEFlow = application.flow_type === 'e-flow' || 
+                    (application.flow_type !== 'paper-flow' && !application.is_paper_flow);
+    
+    if (isEFlow && application.status === 'approved') {
+      // 檢查所有有設置的審核階段是否都已完成
+      let allStagesCompleted = true;
+      
+      // 檢查每個審核階段：如果有設置 ID，則必須有對應的時間戳
+      if (application.checker_id && !application.checker_at) {
+        allStagesCompleted = false;
+      }
+      if (application.approver_1_id && !application.approver_1_at) {
+        allStagesCompleted = false;
+      }
+      if (application.approver_2_id && !application.approver_2_at) {
+        allStagesCompleted = false;
+      }
+      if (application.approver_3_id && !application.approver_3_at) {
+        allStagesCompleted = false;
+      }
+      
+      // 如果所有階段都已完成，顯示「已完成」
+      if (allStagesCompleted) {
+        return t('approvalHistory.stageCompleted');
+      }
+    }
+    
     // 優先使用後端返回的 user_approval_stage
     if (application.user_approval_stage) {
       const stageMap = {
@@ -568,8 +625,31 @@ const ApprovalHistory = () => {
 
   const handleSearch = useCallback(() => {
     setSearchKeyword(search);
-    fetchApprovalHistory();
-  }, [search, fetchApprovalHistory]);
+    // 將進階搜尋的內部狀態複製到實際搜尋參數
+    setActiveStatusFilter(statusFilter);
+    setActiveFilterLeaveType(filterLeaveType);
+    setActiveFilterFlowType(filterFlowType);
+    setActiveFilterApplicationType(filterApplicationType);
+    setActiveFilterYear(filterYear);
+    setActiveFilterMonth(filterMonth);
+    setActiveFilterDepartmentGroup(filterDepartmentGroup);
+    setActiveDateFrom(dateFrom);
+    setActiveDateTo(dateTo);
+    // 重置到第一頁並使用最新參數觸發搜尋
+    setPage(1);
+    fetchApprovalHistory({
+      statusFilter,
+      filterLeaveType,
+      filterFlowType,
+      filterApplicationType,
+      filterYear,
+      filterMonth,
+      filterDepartmentGroup,
+      dateFrom,
+      dateTo,
+      page: 1
+    });
+  }, [search, statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterYear, filterMonth, filterDepartmentGroup, dateFrom, dateTo, fetchApprovalHistory]);
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {

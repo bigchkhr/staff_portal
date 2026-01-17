@@ -84,6 +84,8 @@ const Attendance = ({ noLayout = false }) => {
   const [editRemarks, setEditRemarks] = useState('');
   const [editClockRecords, setEditClockRecords] = useState([]); // 存儲所有打卡記錄，用於選擇有效性
   const [editClockTimes, setEditClockTimes] = useState([]); // 存儲可編輯的打卡時間列表 [{id, time, is_valid}, ...]
+  const [editStoreId, setEditStoreId] = useState(null);
+  const [stores, setStores] = useState([]);
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -91,7 +93,17 @@ const Attendance = ({ noLayout = false }) => {
 
   useEffect(() => {
     fetchDepartmentGroups();
+    fetchStores();
   }, []);
+
+  const fetchStores = async () => {
+    try {
+      const response = await axios.get('/api/stores');
+      setStores(response.data.stores || []);
+    } catch (error) {
+      console.error('Fetch stores error:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -131,11 +143,7 @@ const Attendance = ({ noLayout = false }) => {
     try {
       const response = await axios.get(`/api/groups/department/${selectedGroupId}/members`);
       const members = response.data.members || [];
-      members.sort((a, b) => {
-        const aNum = a.employee_number || '';
-        const bNum = b.employee_number || '';
-        return aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // 後端已經按 positions.display_order 排序，不需要再次排序
       setGroupMembers(members);
     } catch (error) {
       console.error('Fetch group members error:', error);
@@ -235,6 +243,8 @@ const Attendance = ({ noLayout = false }) => {
     setEditTimeOffStart(item.attendance?.time_off_start ? dayjs(item.attendance.time_off_start, 'HH:mm:ss') : null);
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
     setEditRemarks(item.attendance?.remarks || '');
+    // 設置店舖ID（從 schedule 中獲取）
+    setEditStoreId(item.schedule?.store_id || null);
     
     // 先使用 item 中的 clock_records
     let clockRecords = item?.clock_records || [];
@@ -288,6 +298,8 @@ const Attendance = ({ noLayout = false }) => {
 
   // 處理新增打卡時間
   const handleAddClockTime = () => {
+    if (!editingAttendance) return;
+    
     const newRecord = {
       id: null, // 新記錄沒有id
       tempId: `temp-${Date.now()}-${Math.random()}`, // 臨時唯一標識符
@@ -302,7 +314,9 @@ const Attendance = ({ noLayout = false }) => {
       created_by_id: null,
       updated_by_id: null
     };
-    setEditClockRecords([...editClockRecords, newRecord]);
+    // 確保 editClockRecords 是數組
+    const currentRecords = editClockRecords || [];
+    setEditClockRecords([...currentRecords, newRecord]);
   };
 
   // 處理刪除打卡時間
@@ -455,6 +469,18 @@ const Attendance = ({ noLayout = false }) => {
             employee_number: editingAttendance.employee_number,
             attendance_date: editingAttendance.attendance_date,
             remarks: remarksToSave
+          });
+        }
+      }
+
+      // 更新排班的 store_id（如果有修改且存在 schedule）
+      if (editingAttendance.schedule?.id) {
+        const originalStoreId = editingAttendance.schedule?.store_id || null;
+        const storeIdToSave = editStoreId || null;
+        
+        if (storeIdToSave !== originalStoreId) {
+          await axios.put(`/api/schedules/${editingAttendance.schedule.id}`, {
+            store_id: storeIdToSave
           });
         }
       }
@@ -1228,6 +1254,7 @@ const Attendance = ({ noLayout = false }) => {
             setEditTimeOffStart(null);
             setEditTimeOffEnd(null);
             setEditRemarks('');
+            setEditStoreId(null);
             setEditClockRecords([]);
             setEditClockTimes([]);
           }}
@@ -1268,28 +1295,52 @@ const Attendance = ({ noLayout = false }) => {
                     )}
                   </Box>
                   <Divider />
+                  {/* 店舖選擇 */}
+                  {editingAttendance.schedule && (
+                    <Grid container spacing={2} sx={{ mt: 1 }}>
+                      <Grid item xs={12}>
+                        <FormControl fullWidth>
+                          <InputLabel>{t('schedule.store')}</InputLabel>
+                          <Select
+                            value={editStoreId || ''}
+                            onChange={(e) => setEditStoreId(e.target.value || null)}
+                            label={t('schedule.store')}
+                          >
+                            <MenuItem value="">
+                              <em>{t('common.none')}</em>
+                            </MenuItem>
+                            {stores.map(store => (
+                              <MenuItem key={store.id} value={store.id}>
+                                {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    </Grid>
+                  )}
                 </>
               )}
               {/* 顯示所有未勾選的打卡記錄，允許選擇有效性 */}
-              {editClockRecords && editClockRecords.length > 0 ? (
-                <>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                      {t('attendance.clockRecords') || '打卡記錄'} - {t('attendance.selectValidRecords') || '選擇有效記錄'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={handleAddClockTime}
-                        startIcon={<ScheduleIcon />}
-                        sx={{
-                          textTransform: 'none',
-                          fontSize: '0.75rem'
-                        }}
-                      >
-                        {t('attendance.addClockTime') || '新增時間'}
-                      </Button>
+              <Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    {t('attendance.clockRecords') || '打卡記錄'} - {t('attendance.selectValidRecords') || '選擇有效記錄'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleAddClockTime}
+                      startIcon={<ScheduleIcon />}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: '0.75rem'
+                      }}
+                    >
+                      {t('attendance.addClockTime') || '新增時間'}
+                    </Button>
+                    {editClockRecords && editClockRecords.length > 0 && (
                       <Button
                         variant="outlined"
                         size="small"
@@ -1301,8 +1352,10 @@ const Attendance = ({ noLayout = false }) => {
                       >
                         {t('attendance.autoSelectEarliest') || '自動選取最早4個'}
                       </Button>
-                    </Box>
+                    )}
                   </Box>
+                </Box>
+                {editClockRecords && editClockRecords.length > 0 ? (
                   <Box sx={{ maxHeight: 400, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
                     <List dense>
                       {editClockRecords
@@ -1434,24 +1487,34 @@ const Attendance = ({ noLayout = false }) => {
                         })}
                     </List>
                   </Box>
-                </>
-              ) : (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('attendance.noClockRecords') || '暫無打卡記錄'}
-                  </Typography>
-                  {editingAttendance && editingAttendance.clock_records && editingAttendance.clock_records.length > 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
-                      {t('attendance.allRecordsValid', { count: editingAttendance.clock_records.length })}
+                ) : (
+                  <Box sx={{ 
+                    border: '1px solid', 
+                    borderColor: 'divider', 
+                    borderRadius: 1, 
+                    p: 2,
+                    textAlign: 'center',
+                    bgcolor: 'grey.50'
+                  }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {t('attendance.noClockRecords') || '暫無打卡記錄'}
                     </Typography>
-                  )}
-                  {editingAttendance && (!editingAttendance.clock_records || editingAttendance.clock_records.length === 0) && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontSize: '0.75rem' }}>
-                      {t('attendance.noRecordsImportCSV')}
+                    {editingAttendance && editingAttendance.clock_records && editingAttendance.clock_records.length > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontSize: '0.75rem' }}>
+                        {t('attendance.allRecordsValid', { count: editingAttendance.clock_records.length })}
+                      </Typography>
+                    )}
+                    {editingAttendance && (!editingAttendance.clock_records || editingAttendance.clock_records.length === 0) && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontSize: '0.75rem' }}>
+                        {t('attendance.noRecordsImportCSV')}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic' }}>
+                      {t('attendance.clickAddToCreate')}
                     </Typography>
-                  )}
-                </Box>
-              )}
+                  </Box>
+                )}
+              </Box>
               
               <Grid container spacing={2} sx={{ mt: 2 }}>
                 <Grid item xs={12}>

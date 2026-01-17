@@ -10,7 +10,8 @@ class User {
         'departments.name as department_name',
         'departments.name_zh as department_name_zh',
         'positions.name as position_name',
-        'positions.name_zh as position_name_zh'
+        'positions.name_zh as position_name_zh',
+        'positions.stream as position_stream'
       )
       .where('users.email', email)
       .first();
@@ -25,7 +26,8 @@ class User {
         'departments.name as department_name',
         'departments.name_zh as department_name_zh',
         'positions.name as position_name',
-        'positions.name_zh as position_name_zh'
+        'positions.name_zh as position_name_zh',
+        'positions.stream as position_stream'
       )
       .where('users.id', id)
       .first();
@@ -54,7 +56,8 @@ class User {
         'departments.name as department_name',
         'departments.name_zh as department_name_zh',
         'positions.name as position_name',
-        'positions.name_zh as position_name_zh'
+        'positions.name_zh as position_name_zh',
+        'positions.stream as position_stream'
       );
 
     // 建立計數查詢（用於獲取總數）- 直接從 users 表計數以避免 join 導致的重複
@@ -91,7 +94,7 @@ class User {
       query = query.limit(options.limit).offset(offset);
     }
 
-    const users = await query.orderBy('users.created_at', 'desc');
+    const users = await query.orderBy('users.id', 'desc');
 
     return {
       users,
@@ -111,7 +114,8 @@ class User {
         'departments.name as department_name',
         'departments.name_zh as department_name_zh',
         'positions.name as position_name',
-        'positions.name_zh as position_name_zh'
+        'positions.name_zh as position_name_zh',
+        'positions.stream as position_stream'
       )
       .whereRaw('LOWER(users.employee_number) = LOWER(?)', [employeeNumber])
       .first();

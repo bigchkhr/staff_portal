@@ -108,11 +108,7 @@ const GroupLeaveCalendar = () => {
       try {
         const response = await axios.get(`/api/groups/department/${groupId}/members`);
         const members = response.data.members || [];
-        members.sort((a, b) => {
-          const aNum = a.employee_number || '';
-          const bNum = b.employee_number || '';
-          return aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-        });
+        // 後端已經按 positions.display_order 排序，不需要再次排序
         membersMap[groupId] = members;
       } catch (error) {
         console.error(`Fetch group members error for group ${groupId}:`, error);

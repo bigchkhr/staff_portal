@@ -94,6 +94,8 @@ const Schedule = ({ noLayout = false }) => {
   const [editEndTime, setEditEndTime] = useState('');
   const [editLeaveTypeId, setEditLeaveTypeId] = useState(null);
   const [editLeaveSession, setEditLeaveSession] = useState(null);
+  const [editStoreId, setEditStoreId] = useState(null);
+  const [stores, setStores] = useState([]);
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -101,6 +103,7 @@ const Schedule = ({ noLayout = false }) => {
   useEffect(() => {
     fetchDepartmentGroups();
     fetchLeaveTypes();
+    fetchStores();
   }, []);
 
   useEffect(() => {
@@ -137,11 +140,7 @@ const Schedule = ({ noLayout = false }) => {
     try {
       const response = await axios.get(`/api/groups/department/${selectedGroupId}/members`);
       const members = response.data.members || [];
-      members.sort((a, b) => {
-        const aNum = a.employee_number || '';
-        const bNum = b.employee_number || '';
-        return aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // 後端已經按 positions.display_order 排序，不需要再次排序
       setGroupMembers(members);
     } catch (error) {
       console.error('Fetch group members error:', error);
@@ -150,6 +149,15 @@ const Schedule = ({ noLayout = false }) => {
         title: t('schedule.error'),
         text: error.response?.data?.message || t('schedule.fetchGroupsFailed')
       });
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const response = await axios.get('/api/stores');
+      setStores(response.data.stores || []);
+    } catch (error) {
+      console.error('Fetch stores error:', error);
     }
   };
 
@@ -434,6 +442,8 @@ const Schedule = ({ noLayout = false }) => {
       // 設置假期類型
       setEditLeaveTypeId(existingSchedule.leave_type_id || null);
       setEditLeaveSession(existingSchedule.leave_session || null);
+      // 設置店舖
+      setEditStoreId(existingSchedule.store_id || null);
       
     } else {
       setEditingSchedule({
@@ -445,6 +455,7 @@ const Schedule = ({ noLayout = false }) => {
       setEditEndTime('');
       setEditLeaveTypeId(null);
       setEditLeaveSession(null);
+      setEditStoreId(null);
     }
     setEditDialogOpen(true);
   };
@@ -659,7 +670,7 @@ const Schedule = ({ noLayout = false }) => {
             Swal.fire({
               icon: 'error',
               title: t('schedule.error'),
-              text: t('schedule.invalidStartTime') || '開始時間格式不正確（小時範圍：0-32，分鐘範圍：0-59）'
+              text: t('schedule.invalidStartTime')
             });
             return;
           }
@@ -667,7 +678,7 @@ const Schedule = ({ noLayout = false }) => {
           Swal.fire({
             icon: 'error',
             title: t('schedule.error'),
-            text: t('schedule.invalidStartTimeFormat') || '開始時間格式不正確，請使用 HH:mm 格式（例如：23:30）或4位數字（例如：2330）'
+            text: t('schedule.invalidStartTimeFormat')
           });
           return;
         }
@@ -689,7 +700,7 @@ const Schedule = ({ noLayout = false }) => {
             Swal.fire({
               icon: 'error',
               title: t('schedule.error'),
-              text: t('schedule.invalidEndTime') || '結束時間格式不正確（小時範圍：0-32，分鐘範圍：0-59）'
+              text: t('schedule.invalidEndTime')
             });
             return;
           }
@@ -697,7 +708,7 @@ const Schedule = ({ noLayout = false }) => {
           Swal.fire({
             icon: 'error',
             title: t('schedule.error'),
-            text: t('schedule.invalidEndTimeFormat') || '結束時間格式不正確，請使用 HH:mm 格式（例如：26:00）或4位數字（例如：2600）'
+            text: t('schedule.invalidEndTimeFormat')
           });
           return;
         }
@@ -710,7 +721,8 @@ const Schedule = ({ noLayout = false }) => {
         start_time: startTimeValue,
         end_time: endTimeValue,
         leave_type_id: editLeaveTypeId || null,
-        leave_session: editLeaveSession || null
+        leave_session: editLeaveSession || null,
+        store_id: editStoreId || null
       };
 
       if (editingSchedule.id) {
@@ -727,6 +739,7 @@ const Schedule = ({ noLayout = false }) => {
       setEditEndTime('');
       setEditLeaveTypeId(null);
       setEditLeaveSession(null);
+      setEditStoreId(null);
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -1039,7 +1052,22 @@ const Schedule = ({ noLayout = false }) => {
                                       }}
                                     />
                                   )}
-                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
+                                  {/* 顯示店舖 */}
+                                  {schedule.store_code && (
+                                    <Chip 
+                                      label={schedule.store_code}
+                                      size="small" 
+                                      color="secondary"
+                                      sx={{ 
+                                        fontSize: '0.65rem', 
+                                        height: '20px', 
+                                        mb: 0.5,
+                                        fontWeight: 600,
+                                        boxShadow: 1,
+                                      }}
+                                    />
+                                  )}
+                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && (
                                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontStyle: 'italic' }}>
                                       ---
                                     </Typography>
@@ -1224,7 +1252,7 @@ const Schedule = ({ noLayout = false }) => {
             Swal.fire({
               icon: 'error',
               title: t('schedule.error'),
-              text: t('schedule.invalidStartTime') || '開始時間格式不正確（小時範圍：0-32，分鐘範圍：0-59）'
+              text: t('schedule.invalidStartTime')
             });
             return;
           }
@@ -1232,7 +1260,7 @@ const Schedule = ({ noLayout = false }) => {
           Swal.fire({
             icon: 'error',
             title: t('schedule.error'),
-            text: t('schedule.invalidStartTimeFormat') || '開始時間格式不正確，請使用 HH:mm 格式（例如：23:30）或4位數字（例如：2330）'
+            text: t('schedule.invalidStartTimeFormat')
           });
           return;
         }
@@ -1252,7 +1280,7 @@ const Schedule = ({ noLayout = false }) => {
             Swal.fire({
               icon: 'error',
               title: t('schedule.error'),
-              text: t('schedule.invalidEndTime') || '結束時間格式不正確（小時範圍：0-32，分鐘範圍：0-59）'
+              text: t('schedule.invalidEndTime')
             });
             return;
           }
@@ -1260,7 +1288,7 @@ const Schedule = ({ noLayout = false }) => {
           Swal.fire({
             icon: 'error',
             title: t('schedule.error'),
-            text: t('schedule.invalidEndTimeFormat') || '結束時間格式不正確，請使用 HH:mm 格式（例如：26:00）或4位數字（例如：2600）'
+            text: t('schedule.invalidEndTimeFormat')
           });
           return;
         }
@@ -1823,6 +1851,21 @@ const Schedule = ({ noLayout = false }) => {
                                           }}
                                         />
                                       )}
+                                      {/* 顯示店舖 */}
+                                      {schedule.store_code && (
+                                        <Chip 
+                                          label={schedule.store_code}
+                                          size="small" 
+                                          color="secondary"
+                                          sx={{ 
+                                            fontSize: '0.7rem', 
+                                            height: '22px', 
+                                            mb: 0.5,
+                                            fontWeight: 600,
+                                            boxShadow: 1,
+                                          }}
+                                        />
+                                      )}
                                       {schedule.id && (
                                         <IconButton
                                           size="small"
@@ -1891,8 +1934,23 @@ const Schedule = ({ noLayout = false }) => {
                                           }}
                                         />
                                       )}
+                                      {/* 顯示店舖 */}
+                                      {schedule.store_code && (
+                                        <Chip 
+                                          label={schedule.store_code}
+                                          size="small" 
+                                          color="secondary"
+                                          sx={{ 
+                                            fontSize: '0.7rem', 
+                                            height: '22px', 
+                                            mb: 0.5,
+                                            fontWeight: 600,
+                                            boxShadow: 1,
+                                          }}
+                                        />
+                                      )}
                                       {/* 如果沒有任何資訊，顯示 --- */}
-                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && (
+                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && (
                                         <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                                           ---
                                         </Typography>
@@ -1943,6 +2001,7 @@ const Schedule = ({ noLayout = false }) => {
             setEditEndTime('');
             setEditLeaveTypeId(null);
             setEditLeaveSession(null);
+            setEditStoreId(null);
           }}
           maxWidth="sm"
           fullWidth
@@ -1973,7 +2032,7 @@ const Schedule = ({ noLayout = false }) => {
                     onChange={handleStartTimeChange}
                     placeholder="HH:mm 或 2330 (0-32:00-59)"
                     fullWidth
-                    helperText={t('schedule.startTimeHelper') || '可輸入HH:mm格式或4位數字（如2330），小時範圍0-32'}
+                    helperText={t('schedule.startTimeHelper')}
                   />
                 </Grid>
                 <Grid item xs={6}>
@@ -1983,7 +2042,7 @@ const Schedule = ({ noLayout = false }) => {
                     onChange={handleEndTimeChange}
                     placeholder="HH:mm 或 2600 (0-32:00-59)"
                     fullWidth
-                    helperText={t('schedule.endTimeHelper') || '可輸入HH:mm格式或4位數字（如2600），小時範圍0-32，例如：26:00表示次日凌晨2:00'}
+                    helperText={t('schedule.endTimeHelper')}
                   />
                 </Grid>
               </Grid>
@@ -2031,6 +2090,25 @@ const Schedule = ({ noLayout = false }) => {
                     </FormControl>
                   </Grid>
                 )}
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.store')}</InputLabel>
+                    <Select
+                      value={editStoreId || ''}
+                      onChange={(e) => setEditStoreId(e.target.value || null)}
+                      label={t('schedule.store')}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {stores.map(store => (
+                        <MenuItem key={store.id} value={store.id}>
+                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
             </Box>
           </DialogContent>
@@ -2043,6 +2121,7 @@ const Schedule = ({ noLayout = false }) => {
                 setEditEndTime('');
                 setEditLeaveTypeId(null);
                 setEditLeaveSession(null);
+                setEditStoreId(null);
               }}
               sx={{
                 borderRadius: 2,
@@ -2200,7 +2279,7 @@ const Schedule = ({ noLayout = false }) => {
               </Box>
 
               <Typography variant="subtitle1" gutterBottom sx={{ mt: 4, fontWeight: 600, color: 'primary.main', mb: 2 }}>
-                {t('schedule.timeAndLeave') || '時間與假期'}
+                {t('schedule.timeAndLeave')}
               </Typography>
               <Grid container spacing={2} sx={{ mt: 1 }}>
                 <Grid item xs={6}>
@@ -2210,7 +2289,7 @@ const Schedule = ({ noLayout = false }) => {
                     onChange={handleBatchStartTimeChange}
                     placeholder="HH:mm 或 2330 (0-32:00-59)"
                     fullWidth
-                    helperText={t('schedule.startTimeHelper') || '可輸入HH:mm格式或4位數字（如2330），小時範圍0-32'}
+                    helperText={t('schedule.startTimeHelper')}
                   />
                 </Grid>
                 <Grid item xs={6}>
@@ -2220,7 +2299,7 @@ const Schedule = ({ noLayout = false }) => {
                     onChange={handleBatchEndTimeChange}
                     placeholder="HH:mm 或 2600 (0-32:00-59)"
                     fullWidth
-                    helperText={t('schedule.endTimeHelper') || '可輸入HH:mm格式或4位數字（如2600），小時範圍0-32，例如：26:00表示次日凌晨2:00'}
+                    helperText={t('schedule.endTimeHelper')}
                   />
                 </Grid>
                 <Grid item xs={12}>

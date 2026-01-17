@@ -43,18 +43,30 @@ const LeaveApplication = () => {
     end_session: 'PM', // 預設為下午
     days: '',
     reason: '',
-    exclude_public_holidays: false // 是否排除法定假期
+    exclude_public_holidays: false // 是否排除法定假期，將根據 stream 在 useEffect 中設置
   });
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState(null);
   const [files, setFiles] = useState([]);
-  const [includeWeekends, setIncludeWeekends] = useState(true); // 預設包含週末
+  // 根據用戶的 stream 設置默認值：Store 開啟週末計算、關閉排除法定假期；Head Office 關閉週末計算、開啟排除法定假期
+  const [includeWeekends, setIncludeWeekends] = useState(false); // 初始值，將根據 stream 在 useEffect 中設置
   const [yearManuallySet, setYearManuallySet] = useState(false); // 標記年份是否被手動設置
 
   useEffect(() => {
     fetchLeaveTypes();
   }, []);
+
+  // 根據用戶的 stream 設置默認值
+  useEffect(() => {
+    if (user?.position_stream) {
+      const isStore = user.position_stream === 'Store';
+      // Store: 開啟週末計算、關閉排除法定假期
+      // Head Office: 關閉週末計算、開啟排除法定假期
+      setIncludeWeekends(isStore);
+      setFormData(prev => ({ ...prev, exclude_public_holidays: !isStore }));
+    }
+  }, [user]);
 
   useEffect(() => {
     if (formData.leave_type_id) {
@@ -393,6 +405,8 @@ const LeaveApplication = () => {
         confirmButtonColor: '#3085d6'
       });
       
+      // 根據用戶的 stream 重置默認值
+      const isStore = user?.position_stream === 'Store';
       setFormData({
         leave_type_id: '',
         year: new Date().getFullYear(), // 重置為當前年份
@@ -402,11 +416,11 @@ const LeaveApplication = () => {
         end_session: 'PM', // 預設為下午
         days: '',
         reason: '',
-        exclude_public_holidays: false
+        exclude_public_holidays: !isStore // Store: false, Head Office: true
       });
       setFiles([]);
       setBalance(null);
-      setIncludeWeekends(true); // 重置為預設值
+      setIncludeWeekends(isStore); // Store: true, Head Office: false
       setYearManuallySet(false); // 重置年份手動設置標記
     } catch (error) {
       // 檢查是否為日期範圍重疊錯誤

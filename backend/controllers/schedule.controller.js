@@ -294,6 +294,7 @@ class ScheduleController {
         schedule_date: scheduleDateStr,
         start_time: null,
         end_time: null,
+        store_id: null,
         user_name: member.display_name || member.name,
         user_name_zh: member.name_zh,
         employee_number: member.employee_number,
@@ -317,6 +318,7 @@ class ScheduleController {
       schedule_date: scheduleDateStr,
       start_time: null,
       end_time: null,
+      store_id: null,
       leave_type_id: null,
       leave_session: null,
       user_name: member.display_name || member.name,
@@ -383,7 +385,7 @@ class ScheduleController {
   // 建立排班記錄（單筆）
   async createSchedule(req, res) {
     try {
-      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, leave_session } = req.body;
+      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, leave_session, store_id } = req.body;
       const userId = req.user.id;
 
       // 驗證必填欄位
@@ -427,6 +429,7 @@ class ScheduleController {
         end_time: end_time || null,
         leave_type_id: leave_type_id || null,
         leave_session: leave_session || null,
+        store_id: store_id || null,
         created_by_id: userId,
         updated_by_id: userId
       };
@@ -484,6 +487,7 @@ class ScheduleController {
         end_time: s.end_time || null,
         leave_type_id: s.leave_type_id !== undefined && s.leave_type_id !== null && s.leave_type_id !== '' ? Number(s.leave_type_id) : null,
         leave_session: s.leave_session !== undefined && s.leave_session !== null && s.leave_session !== '' ? s.leave_session : null,
+        store_id: s.store_id !== undefined && s.store_id !== null && s.store_id !== '' ? Number(s.store_id) : null,
         created_by_id: userId,
         updated_by_id: userId
       }));
@@ -503,7 +507,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { start_time, end_time, leave_type_id, leave_session } = req.body;
+      const { start_time, end_time, leave_type_id, leave_session, store_id } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -542,6 +546,7 @@ class ScheduleController {
       if (end_time !== undefined) updateData.end_time = end_time || null;
       if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
       if (leave_session !== undefined) updateData.leave_session = leave_session || null;
+      if (store_id !== undefined) updateData.store_id = store_id || null;
 
       const updatedSchedule = await Schedule.update(id, updateData);
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });

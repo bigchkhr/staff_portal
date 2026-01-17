@@ -333,6 +333,14 @@ const MyAttendance = () => {
                                   sx={{ mt: 0.5 }}
                                 />
                               )}
+                              {item.schedule.store_code && (
+                                <Chip
+                                  label={item.schedule.store_code}
+                                  size="small"
+                                  color="secondary"
+                                  sx={{ mt: 0.5 }}
+                                />
+                              )}
                             </Box>
                           ) : (
                             <Typography variant="body2" color="text.secondary">

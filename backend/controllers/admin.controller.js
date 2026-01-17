@@ -441,13 +441,18 @@ class AdminController {
 
   async createPosition(req, res) {
     try {
-      const { name, name_zh, description } = req.body;
+      const { name, name_zh, description, display_order } = req.body;
 
       if (!name || !name_zh) {
         return res.status(400).json({ message: '請填寫所有必填欄位' });
       }
 
-      const position = await Position.create({ name, name_zh, description });
+      const positionData = { name, name_zh, description };
+      if (display_order !== undefined) {
+        positionData.display_order = parseInt(display_order) || 0;
+      }
+
+      const position = await Position.create(positionData);
 
       res.status(201).json({
         message: '職位已建立',
@@ -462,7 +467,12 @@ class AdminController {
   async updatePosition(req, res) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const updateData = { ...req.body };
+
+      // 處理 display_order 轉換為整數
+      if (updateData.display_order !== undefined) {
+        updateData.display_order = parseInt(updateData.display_order) || 0;
+      }
 
       const position = await Position.update(id, updateData);
 
