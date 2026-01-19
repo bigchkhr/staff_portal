@@ -442,20 +442,33 @@ const Schedule = ({ noLayout = false }) => {
       // 設置假期類型
       setEditLeaveTypeId(existingSchedule.leave_type_id || null);
       setEditLeaveSession(existingSchedule.leave_session || null);
-      // 設置店舖
-      setEditStoreId(existingSchedule.store_id || null);
+      // 設置店舖 - 如果有現有值則使用，否則使用該員工所屬的群組
+      if (existingSchedule.store_id) {
+        setEditStoreId(existingSchedule.store_id);
+      } else {
+        // 獲取該員工所屬的群組作為默認值
+        const member = groupMembers.find(m => m.id === userId);
+        const defaultGroupId = member ? selectedGroupId : null;
+        setEditStoreId(defaultGroupId ? parseInt(defaultGroupId) : null);
+      }
       
     } else {
+      // 獲取該員工所屬的群組作為默認值
+      const member = groupMembers.find(m => m.id === userId);
+      const defaultGroupId = member ? selectedGroupId : null;
+      
       setEditingSchedule({
         user_id: userId,
         schedule_date: dateStr,
-        id: null
+        id: null,
+        department_group_id: defaultGroupId
       });
       setEditStartTime('');
       setEditEndTime('');
       setEditLeaveTypeId(null);
       setEditLeaveSession(null);
-      setEditStoreId(null);
+      // 設置店舖默認值為該員工所屬的群組（如果該員工屬於當前選中的群組）
+      setEditStoreId(defaultGroupId ? parseInt(defaultGroupId) : null);
     }
     setEditDialogOpen(true);
   };
@@ -2047,6 +2060,27 @@ const Schedule = ({ noLayout = false }) => {
                 </Grid>
               </Grid>
               <Grid container spacing={2} sx={{ mt: 1 }}>
+                {/* 店舖選取 - 移到假期類別之前 */}
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.store')}</InputLabel>
+                    <Select
+                      value={editStoreId || ''}
+                      onChange={(e) => setEditStoreId(e.target.value || null)}
+                      label={t('schedule.store')}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {departmentGroups.map(group => (
+                        <MenuItem key={group.id} value={group.id}>
+                          {i18n.language === 'en' ? group.name : (group.name_zh || group.name)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {/* 假期類別 */}
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>{t('schedule.leaveType')}</InputLabel>
@@ -2090,25 +2124,6 @@ const Schedule = ({ noLayout = false }) => {
                     </FormControl>
                   </Grid>
                 )}
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>{t('schedule.store')}</InputLabel>
-                    <Select
-                      value={editStoreId || ''}
-                      onChange={(e) => setEditStoreId(e.target.value || null)}
-                      label={t('schedule.store')}
-                    >
-                      <MenuItem value="">
-                        <em>{t('common.none')}</em>
-                      </MenuItem>
-                      {stores.map(store => (
-                        <MenuItem key={store.id} value={store.id}>
-                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
               </Grid>
             </Box>
           </DialogContent>

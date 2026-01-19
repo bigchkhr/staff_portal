@@ -28,7 +28,8 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
-  InputAdornment
+  InputAdornment,
+  Pagination
 } from '@mui/material';
 import { 
   CloudUpload as CloudUploadIcon, 
@@ -77,6 +78,8 @@ const HRDocumentUpload = () => {
   const [selectedFilterUser, setSelectedFilterUser] = useState(null);
   const [selectedUploadUser, setSelectedUploadUser] = useState(null);
   const [searchInput, setSearchInput] = useState(''); // 分離搜尋輸入狀態，避免重新渲染
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 15;
 
   useEffect(() => {
     fetchUsers();
@@ -390,9 +393,10 @@ const HRDocumentUpload = () => {
     });
     setSearchInput('');
     setSelectedFilterUser(null);
-    setHasSearched(false);
-    setDocuments([]);
-  }, []);
+      setHasSearched(false);
+      setDocuments([]);
+      setPage(1); // 重置分頁
+    }, []);
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -621,19 +625,22 @@ const HRDocumentUpload = () => {
         </Paper>
       ) : isMobile ? (
         // 移動設備：卡片式佈局
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {loading && filteredDocuments.length === 0 ? (
-            <Paper sx={{ p: 4, textAlign: 'center' }}>
-              <CircularProgress />
-            </Paper>
-          ) : filteredDocuments.length === 0 ? (
-            <Paper sx={{ p: 4, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                {t('hrDocumentUpload.noDocuments')}
-              </Typography>
-            </Paper>
-          ) : (
-            filteredDocuments.map((doc) => (
+        <>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {loading && filteredDocuments.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <CircularProgress />
+              </Paper>
+            ) : filteredDocuments.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  {t('hrDocumentUpload.noDocuments')}
+                </Typography>
+              </Paper>
+            ) : (
+              filteredDocuments
+                .slice((page - 1) * itemsPerPage, page * itemsPerPage)
+                .map((doc) => (
               <Paper 
                 key={doc.id}
                 elevation={2}
@@ -750,53 +757,68 @@ const HRDocumentUpload = () => {
                   </Box>
                 </Box>
               </Paper>
-            ))
+                ))
+            )}
+          </Box>
+          {filteredDocuments.length > itemsPerPage && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Pagination
+                count={Math.ceil(filteredDocuments.length / itemsPerPage)}
+                page={page}
+                onChange={(event, value) => setPage(value)}
+                color="primary"
+                size="small"
+              />
+            </Box>
           )}
-        </Box>
+        </>
       ) : (
         // 桌面設備：表格佈局
-        <TableContainer 
-          component={Paper}
-          elevation={2}
-          sx={{ 
-            borderRadius: 2,
-            overflow: 'auto'
-          }}
-        >
-          <Table>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: 'primary.main' }}>
-                <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.fileName')}</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.recipientEmployee')}</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.category')}</TableCell>
-                <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.fileSize')}</TableCell>
-                {!isTablet && (
-                  <>
-                    <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.uploader')}</TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.uploadTime')}</TableCell>
-                  </>
-                )}
-                <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.visibility')}</TableCell>
-                <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.actions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading && filteredDocuments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isTablet ? 6 : 8} align="center" sx={{ py: 4 }}>
-                    <CircularProgress />
-                  </TableCell>
+        <>
+          <TableContainer 
+            component={Paper}
+            elevation={2}
+            sx={{ 
+              borderRadius: 2,
+              overflow: 'auto'
+            }}
+          >
+            <Table>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: 'primary.main' }}>
+                  <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.fileName')}</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.recipientEmployee')}</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.category')}</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.fileSize')}</TableCell>
+                  {!isTablet && (
+                    <>
+                      <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.uploader')}</TableCell>
+                      <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.uploadTime')}</TableCell>
+                    </>
+                  )}
+                  <TableCell sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.visibility')}</TableCell>
+                  <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>{t('hrDocumentUpload.actions')}</TableCell>
                 </TableRow>
-              ) : filteredDocuments.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isTablet ? 6 : 8} align="center" sx={{ py: 4 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      {t('hrDocumentUpload.noDocuments')}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : filteredDocuments.length > 0 ? (
-                filteredDocuments.map((doc) => (
+              </TableHead>
+              <TableBody>
+                {loading && filteredDocuments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isTablet ? 6 : 8} align="center" sx={{ py: 4 }}>
+                      <CircularProgress />
+                    </TableCell>
+                  </TableRow>
+                ) : filteredDocuments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={isTablet ? 6 : 8} align="center" sx={{ py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('hrDocumentUpload.noDocuments')}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredDocuments.length > 0 ? (
+                  filteredDocuments
+                    .slice((page - 1) * itemsPerPage, page * itemsPerPage)
+                    .map((doc) => (
                   <TableRow 
                     key={doc.id}
                     sx={{ 
@@ -908,11 +930,23 @@ const HRDocumentUpload = () => {
                       </Box>
                     </TableCell>
                   </TableRow>
-                ))
-              ) : null}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    ))
+                ) : null}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          {filteredDocuments.length > itemsPerPage && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Pagination
+                count={Math.ceil(filteredDocuments.length / itemsPerPage)}
+                page={page}
+                onChange={(event, value) => setPage(value)}
+                color="primary"
+                size="medium"
+              />
+            </Box>
+          )}
+        </>
       )}
 
       {/* 上傳對話框 */}

@@ -24,7 +24,8 @@ import {
   DialogActions,
   Button,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Pagination
 } from '@mui/material';
 import { Download as DownloadIcon, Visibility as VisibilityIcon, Close as CloseIcon, GetApp as GetAppIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -48,10 +49,13 @@ const EmployeeDocuments = () => {
   const [viewingFile, setViewingFile] = useState(null);
   const [fileBlobUrl, setFileBlobUrl] = useState(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 15;
 
   useEffect(() => {
     fetchDocuments();
     fetchCategories();
+    setPage(1); // 當過濾條件改變時重置分頁
   }, [filters]);
 
   const fetchDocuments = async () => {
@@ -297,7 +301,9 @@ const EmployeeDocuments = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredDocuments.map((doc) => (
+              filteredDocuments
+                .slice((page - 1) * itemsPerPage, page * itemsPerPage)
+                .map((doc) => (
                 <TableRow key={doc.id}>
                   <TableCell>{doc.display_name}</TableCell>
                   <TableCell>
@@ -328,6 +334,17 @@ const EmployeeDocuments = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      {filteredDocuments.length > itemsPerPage && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Pagination
+            count={Math.ceil(filteredDocuments.length / itemsPerPage)}
+            page={page}
+            onChange={(event, value) => setPage(value)}
+            color="primary"
+            size={isMobile ? 'small' : 'medium'}
+          />
+        </Box>
+      )}
 
       {/* 文件查看 Dialog */}
       <Dialog
