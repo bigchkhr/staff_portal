@@ -437,11 +437,14 @@ class AttendanceController {
         const memberIds = members.map(m => m.id);
         if (memberIds.length > 0) {
           // 查詢所有已批准的假期申請（不指定user_id，因為findAll不支持多個user_id）
-          const allLeaveApplications = await LeaveApplication.findAll({
+          const leaveResult = await LeaveApplication.findAll({
             status: 'approved',
             start_date_from: start_date,
             end_date_to: end_date
           });
+          
+          // LeaveApplication.findAll 返回 { applications: [...], total, ... }
+          const allLeaveApplications = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
 
           console.log(`Found ${allLeaveApplications.length} approved leave applications in date range`);
 
@@ -640,6 +643,8 @@ class AttendanceController {
             // 如果有多個假期，取第一個（通常一個日期只有一個假期）
             const leave = approvedLeave[0];
             finalSchedule = {
+              id: schedule?.id || null,
+              store_id: schedule?.store_id || null,
               start_time: schedule?.start_time || null,
               end_time: schedule?.end_time || null,
               leave_type_name_zh: leave.leave_type_name_zh || schedule?.leave_type_name_zh || null,
@@ -650,6 +655,8 @@ class AttendanceController {
           } else if (schedule) {
             // 如果沒有已批准的假期，但有排班信息，使用排班信息
             finalSchedule = {
+              id: schedule.id || null,
+              store_id: schedule.store_id || null,
               start_time: schedule.start_time,
               end_time: schedule.end_time,
               leave_type_name_zh: schedule.leave_type_name_zh,

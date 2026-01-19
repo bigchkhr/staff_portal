@@ -13,7 +13,8 @@ import {
 import {
   CalendarToday as CalendarTodayIcon,
   AccessTime as AccessTimeIcon,
-  EventNote as EventNoteIcon
+  EventNote as EventNoteIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -54,6 +55,12 @@ const ShiftManagement = () => {
       icon: <EventNoteIcon sx={{ fontSize: 48 }} />,
       path: '/group-leave-calendar',
       translationKey: 'groupLeaveCalendar'
+    },
+    {
+      key: 'monthlyAttendanceSummary',
+      icon: <AssessmentIcon sx={{ fontSize: 48 }} />,
+      path: '/monthly-attendance-summary',
+      translationKey: 'monthlyAttendanceSummary'
     }
   ];
 

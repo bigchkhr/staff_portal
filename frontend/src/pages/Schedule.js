@@ -88,6 +88,7 @@ const Schedule = ({ noLayout = false }) => {
   const [batchEndTime, setBatchEndTime] = useState('');
   const [batchLeaveTypeId, setBatchLeaveTypeId] = useState(null);
   const [batchLeaveSession, setBatchLeaveSession] = useState(null);
+  const [batchStoreId, setBatchStoreId] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [editStartTime, setEditStartTime] = useState('');
@@ -96,6 +97,7 @@ const Schedule = ({ noLayout = false }) => {
   const [editLeaveSession, setEditLeaveSession] = useState(null);
   const [editStoreId, setEditStoreId] = useState(null);
   const [stores, setStores] = useState([]);
+  const [selectedDefaultStoreId, setSelectedDefaultStoreId] = useState(null); // 控制面板選擇的店舖（不存到資料庫）
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -442,15 +444,8 @@ const Schedule = ({ noLayout = false }) => {
       // 設置假期類型
       setEditLeaveTypeId(existingSchedule.leave_type_id || null);
       setEditLeaveSession(existingSchedule.leave_session || null);
-      // 設置店舖 - 如果有現有值則使用，否則使用該員工所屬的群組
-      if (existingSchedule.store_id) {
-        setEditStoreId(existingSchedule.store_id);
-      } else {
-        // 獲取該員工所屬的群組作為默認值
-        const member = groupMembers.find(m => m.id === userId);
-        const defaultGroupId = member ? selectedGroupId : null;
-        setEditStoreId(defaultGroupId ? parseInt(defaultGroupId) : null);
-      }
+      // 設置店舖 - 如果有現有值則使用，否則為 null
+      setEditStoreId(existingSchedule.store_id || null);
       
     } else {
       // 獲取該員工所屬的群組作為默認值
@@ -467,8 +462,8 @@ const Schedule = ({ noLayout = false }) => {
       setEditEndTime('');
       setEditLeaveTypeId(null);
       setEditLeaveSession(null);
-      // 設置店舖默認值為該員工所屬的群組（如果該員工屬於當前選中的群組）
-      setEditStoreId(defaultGroupId ? parseInt(defaultGroupId) : null);
+      // 設置店舖默認值為 null
+      setEditStoreId(null);
     }
     setEditDialogOpen(true);
   };
@@ -546,6 +541,10 @@ const Schedule = ({ noLayout = false }) => {
         const hours = parseInt(parts[0], 10);
         if (!isNaN(hours) && hours >= 0 && hours <= 32) {
           setEditStartTime(value);
+          // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
+          if (selectedDefaultStoreId && !editStoreId) {
+            setEditStoreId(selectedDefaultStoreId);
+          }
           return; // 還未輸入完整，不自動計算
         }
       } else if (parts.length === 2) {
@@ -574,6 +573,10 @@ const Schedule = ({ noLayout = false }) => {
             shouldAutoCalculate = true;
           } else {
             setEditStartTime(value);
+            // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
+            if (selectedDefaultStoreId && !editStoreId) {
+              setEditStoreId(selectedDefaultStoreId);
+            }
             return; // 還未輸入完整，不自動計算
           }
         }
@@ -591,6 +594,10 @@ const Schedule = ({ noLayout = false }) => {
         if (calculatedEndTime) {
           setEditEndTime(calculatedEndTime);
         }
+      }
+      // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
+      if (selectedDefaultStoreId && !editStoreId) {
+        setEditStoreId(selectedDefaultStoreId);
       }
     }
   };
@@ -1108,6 +1115,8 @@ const Schedule = ({ noLayout = false }) => {
     };
 
   const handleBatchEdit = () => {
+    // 設置批量編輯的店舖預設值為控制面板選擇的店舖
+    setBatchStoreId(selectedDefaultStoreId);
     setBatchEditDialogOpen(true);
   };
 
@@ -1142,6 +1151,10 @@ const Schedule = ({ noLayout = false }) => {
         const hours = parseInt(parts[0], 10);
         if (!isNaN(hours) && hours >= 0 && hours <= 32) {
           setBatchStartTime(value);
+          // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
+          if (selectedDefaultStoreId && !batchStoreId) {
+            setBatchStoreId(selectedDefaultStoreId);
+          }
           return; // 還未輸入完整，不自動計算
         }
       } else if (parts.length === 2) {
@@ -1166,6 +1179,10 @@ const Schedule = ({ noLayout = false }) => {
             shouldAutoCalculate = true;
           } else {
             setBatchStartTime(value);
+            // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
+            if (selectedDefaultStoreId && !batchStoreId) {
+              setBatchStoreId(selectedDefaultStoreId);
+            }
             return; // 還未輸入完整，不自動計算
           }
         }
@@ -1180,6 +1197,10 @@ const Schedule = ({ noLayout = false }) => {
         if (calculatedEndTime) {
           setBatchEndTime(calculatedEndTime);
         }
+      }
+      // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
+      if (selectedDefaultStoreId && !batchStoreId) {
+        setBatchStoreId(selectedDefaultStoreId);
       }
     }
   };
@@ -1332,7 +1353,8 @@ const Schedule = ({ noLayout = false }) => {
               start_time: startTimeValue,
               end_time: endTimeValue,
               leave_type_id: batchLeaveTypeId !== null && batchLeaveTypeId !== undefined && batchLeaveTypeId !== '' ? Number(batchLeaveTypeId) : null,
-              leave_session: batchLeaveSession !== null && batchLeaveSession !== undefined && batchLeaveSession !== '' ? batchLeaveSession : null
+              leave_session: batchLeaveSession !== null && batchLeaveSession !== undefined && batchLeaveSession !== '' ? batchLeaveSession : null,
+              store_id: batchStoreId !== null && batchStoreId !== undefined && batchStoreId !== '' ? Number(batchStoreId) : null
             });
           });
         } catch (error) {
@@ -1349,6 +1371,7 @@ const Schedule = ({ noLayout = false }) => {
       setBatchEndTime('');
       setBatchLeaveTypeId(null);
       setBatchLeaveSession(null);
+      setBatchStoreId(null);
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -1620,6 +1643,31 @@ const Schedule = ({ noLayout = false }) => {
                   }}
                 />
               </Grid>
+              {editMode && (
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.defaultStore') || t('schedule.store')}</InputLabel>
+                    <Select
+                      value={selectedDefaultStoreId || ''}
+                      onChange={(e) => setSelectedDefaultStoreId(e.target.value || null)}
+                      label={t('schedule.defaultStore') || t('schedule.store')}
+                      sx={{
+                        bgcolor: 'background.paper',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {stores.map(store => (
+                        <MenuItem key={store.id} value={store.id}>
+                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
               <Grid item xs={12} md={3}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                   {canEdit && (
@@ -2060,26 +2108,6 @@ const Schedule = ({ noLayout = false }) => {
                 </Grid>
               </Grid>
               <Grid container spacing={2} sx={{ mt: 1 }}>
-                {/* 店舖選取 - 移到假期類別之前 */}
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>{t('schedule.store')}</InputLabel>
-                    <Select
-                      value={editStoreId || ''}
-                      onChange={(e) => setEditStoreId(e.target.value || null)}
-                      label={t('schedule.store')}
-                    >
-                      <MenuItem value="">
-                        <em>{t('common.none')}</em>
-                      </MenuItem>
-                      {departmentGroups.map(group => (
-                        <MenuItem key={group.id} value={group.id}>
-                          {i18n.language === 'en' ? group.name : (group.name_zh || group.name)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
                 {/* 假期類別 */}
                 <Grid item xs={12}>
                   <FormControl fullWidth>
@@ -2087,10 +2115,16 @@ const Schedule = ({ noLayout = false }) => {
                     <Select
                       value={editLeaveTypeId || ''}
                       onChange={(e) => {
-                        setEditLeaveTypeId(e.target.value || null);
+                        const newLeaveTypeId = e.target.value || null;
+                        setEditLeaveTypeId(newLeaveTypeId);
                         // 如果清空假期類型，也清空時段
-                        if (!e.target.value) {
+                        if (!newLeaveTypeId) {
                           setEditLeaveSession(null);
+                        } else {
+                          // 如果選擇了假期類型，且控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
+                          if (selectedDefaultStoreId && !editStoreId) {
+                            setEditStoreId(selectedDefaultStoreId);
+                          }
                         }
                       }}
                       label={t('schedule.leaveType')}
@@ -2124,6 +2158,26 @@ const Schedule = ({ noLayout = false }) => {
                     </FormControl>
                   </Grid>
                 )}
+                {/* 店舖選取 - 移到最底部 */}
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.store')}</InputLabel>
+                    <Select
+                      value={editStoreId || ''}
+                      onChange={(e) => setEditStoreId(e.target.value || null)}
+                      label={t('schedule.store')}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {stores.map(store => (
+                        <MenuItem key={store.id} value={store.id}>
+                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
             </Box>
           </DialogContent>
@@ -2180,6 +2234,7 @@ const Schedule = ({ noLayout = false }) => {
             setBatchEndTime('');
             setBatchLeaveTypeId(null);
             setBatchLeaveSession(null);
+            setBatchStoreId(null);
           }}
           maxWidth="md"
           fullWidth
@@ -2329,6 +2384,10 @@ const Schedule = ({ noLayout = false }) => {
                           setBatchLeaveSession(null);
                         } else {
                           setBatchLeaveTypeId(Number(value));
+                          // 如果選擇了假期類型，且控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
+                          if (selectedDefaultStoreId && !batchStoreId) {
+                            setBatchStoreId(selectedDefaultStoreId);
+                          }
                         }
                       }}
                       label={t('schedule.leaveType')}
@@ -2362,6 +2421,26 @@ const Schedule = ({ noLayout = false }) => {
                     </FormControl>
                   </Grid>
                 )}
+                {/* 店舖選取 */}
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>{t('schedule.store')}</InputLabel>
+                    <Select
+                      value={batchStoreId || ''}
+                      onChange={(e) => setBatchStoreId(e.target.value || null)}
+                      label={t('schedule.store')}
+                    >
+                      <MenuItem value="">
+                        <em>{t('common.none')}</em>
+                      </MenuItem>
+                      {stores.map(store => (
+                        <MenuItem key={store.id} value={store.id}>
+                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
 
             </Box>
@@ -2376,6 +2455,7 @@ const Schedule = ({ noLayout = false }) => {
                 setBatchEndTime('');
                 setBatchLeaveTypeId(null);
                 setBatchLeaveSession(null);
+                setBatchStoreId(null);
               }}
               sx={{
                 borderRadius: 2,

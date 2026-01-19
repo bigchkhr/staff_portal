@@ -47,12 +47,13 @@ import ShiftManagement from './pages/ShiftManagement';
 import MyRoster from './pages/MyRoster';
 import MyAttendance from './pages/MyAttendance';
 import MyContacts from './pages/MyContacts';
+import MonthlyAttendanceSummary from './pages/MonthlyAttendanceSummary';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-axios.defaults.baseURL = 'http://172.31.132.13:1689';
-// axios.defaults.baseURL = 'http://192.168.3.4:1689';
+// axios.defaults.baseURL = 'http://172.31.132.13:1689';
+axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
   palette: {
@@ -112,6 +113,7 @@ function App() {
             <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />
             <Route path="/my-attendance" element={<PrivateRoute><MyAttendance /></PrivateRoute>} />
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />
+            <Route path="/monthly-attendance-summary" element={<PrivateRoute><MonthlyAttendanceSummary /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

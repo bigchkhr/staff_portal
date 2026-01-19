@@ -421,6 +421,21 @@ class ScheduleController {
         }
       }
 
+      // 如果提供了store_id，驗證該店舖是否存在
+      let validStoreId = null;
+      if (store_id !== undefined && store_id !== null && store_id !== '') {
+        const knex = require('../config/database');
+        const storeIdNum = Number(store_id);
+        if (isNaN(storeIdNum)) {
+          return res.status(400).json({ message: `無效的店舖ID格式: ${store_id}` });
+        }
+        const store = await knex('stores').where('id', storeIdNum).first();
+        if (!store) {
+          return res.status(400).json({ message: `無效的店舖ID: ${storeIdNum}` });
+        }
+        validStoreId = store.id; // 使用查詢返回的 store.id 確保類型正確
+      }
+
       const scheduleData = {
         user_id,
         department_group_id,
@@ -429,7 +444,7 @@ class ScheduleController {
         end_time: end_time || null,
         leave_type_id: leave_type_id || null,
         leave_session: leave_session || null,
-        store_id: store_id || null,
+        store_id: validStoreId,
         created_by_id: userId,
         updated_by_id: userId
       };
@@ -474,6 +489,20 @@ class ScheduleController {
         if (!isInGroup) {
           return res.status(400).json({ 
             message: `用戶 ID ${schedule.user_id} 不屬於指定的群組` 
+          });
+        }
+      }
+
+      // 驗證所有 store_id（如果提供）
+      const knex = require('../config/database');
+      const storeIds = [...new Set(schedules.map(s => s.store_id).filter(id => id !== undefined && id !== null && id !== ''))];
+      if (storeIds.length > 0) {
+        const validStores = await knex('stores').whereIn('id', storeIds).select('id');
+        const validStoreIds = validStores.map(s => s.id);
+        const invalidStoreIds = storeIds.filter(id => !validStoreIds.includes(Number(id)));
+        if (invalidStoreIds.length > 0) {
+          return res.status(400).json({ 
+            message: `無效的店舖ID: ${invalidStoreIds.join(', ')}` 
           });
         }
       }
@@ -539,6 +568,23 @@ class ScheduleController {
         }
       }
 
+      // 如果提供了store_id，驗證該店舖是否存在
+      let validStoreId = null;
+      if (store_id !== undefined) {
+        if (store_id !== null && store_id !== '') {
+          const knex = require('../config/database');
+          const storeIdNum = Number(store_id);
+          if (isNaN(storeIdNum)) {
+            return res.status(400).json({ message: `無效的店舖ID格式: ${store_id}` });
+          }
+          const store = await knex('stores').where('id', storeIdNum).first();
+          if (!store) {
+            return res.status(400).json({ message: `無效的店舖ID: ${storeIdNum}` });
+          }
+          validStoreId = store.id; // 使用查詢返回的 store.id 確保類型正確
+        }
+      }
+
       const updateData = {
         updated_by_id: userId
       };
@@ -546,7 +592,7 @@ class ScheduleController {
       if (end_time !== undefined) updateData.end_time = end_time || null;
       if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
       if (leave_session !== undefined) updateData.leave_session = leave_session || null;
-      if (store_id !== undefined) updateData.store_id = store_id || null;
+      if (store_id !== undefined) updateData.store_id = validStoreId;
 
       const updatedSchedule = await Schedule.update(id, updateData);
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });

@@ -12,15 +12,8 @@ import {
   IconButton,
   CircularProgress,
   Alert,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   useTheme,
-  useMediaQuery,
-  Divider
+  useMediaQuery
 } from '@mui/material';
 import { 
   ChevronLeft as ChevronLeftIcon,
@@ -29,7 +22,6 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon
 } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { useTranslation } from 'react-i18next';
@@ -39,9 +31,11 @@ import { useAuth } from '../contexts/AuthContext';
 import Layout from '../components/Layout';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import isoWeek from 'dayjs/plugin/isoWeek';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(isoWeek);
 
 // 設置默認時區為香港（UTC+8）
 dayjs.tz.setDefault('Asia/Hong_Kong');
@@ -51,12 +45,8 @@ const MyAttendance = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  // 默認顯示最近7天（今天往前推6天，加上今天共7天）
-  const [startDate, setStartDate] = useState(() => {
-    const today = dayjs().tz('Asia/Hong_Kong');
-    return today.subtract(6, 'day').startOf('day');
-  });
-  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('day'));
+  // 使用週視圖（從本週一開始）
+  const [currentWeek, setCurrentWeek] = useState(dayjs().startOf('isoWeek'));
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -64,15 +54,17 @@ const MyAttendance = () => {
     if (user?.id) {
       fetchMyAttendance();
     }
-  }, [user?.id, startDate, endDate]);
+  }, [user?.id, currentWeek]);
 
   const fetchMyAttendance = async () => {
     if (!user?.id) return;
     
     setLoading(true);
     try {
-      const startDateStr = dayjs(startDate).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      const endDateStr = dayjs(endDate).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      const weekStart = currentWeek.clone().startOf('isoWeek');
+      const weekEnd = currentWeek.clone().endOf('isoWeek');
+      const startDateStr = weekStart.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      const endDateStr = weekEnd.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
       
       // 直接獲取當前用戶的打卡記錄
       const response = await axios.get('/api/attendances/my-clock-records', {
@@ -189,25 +181,68 @@ const MyAttendance = () => {
     return t('myAttendance.absent');
   };
 
+  const getWeekDates = () => {
+    const dates = [];
+    const weekStart = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
+    for (let i = 0; i < 7; i++) {
+      dates.push(weekStart.clone().add(i, 'day'));
+    }
+    return dates;
+  };
+
+  const getAttendanceForDate = (date) => {
+    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    return attendanceData.find(item => {
+      if (!item || !item.attendance_date) return false;
+      
+      let itemDateStr = item.attendance_date;
+      
+      // 處理 Date 對象
+      if (itemDateStr instanceof Date) {
+        itemDateStr = dayjs(itemDateStr).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      } 
+      // 處理字符串
+      else if (typeof itemDateStr === 'string') {
+        // 移除時間部分（如果有）
+        if (itemDateStr.includes('T')) {
+          itemDateStr = itemDateStr.split('T')[0];
+        }
+        // 移除空格後的時間部分（如果有）
+        if (itemDateStr.includes(' ')) {
+          itemDateStr = itemDateStr.split(' ')[0];
+        }
+        // 確保只取前10個字符（YYYY-MM-DD）
+        if (itemDateStr.length > 10) {
+          itemDateStr = itemDateStr.substring(0, 10);
+        }
+        // 使用 dayjs 標準化日期格式
+        const parsed = dayjs(itemDateStr);
+        if (parsed.isValid()) {
+          itemDateStr = parsed.format('YYYY-MM-DD');
+        }
+      }
+      
+      // 嚴格比較日期字符串
+      return itemDateStr === dateStr;
+    });
+  };
+
+  const formatDateDisplay = (date) => {
+    if (!date) return '';
+    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
+    return isChinese ? date.format('DD/MM') : date.format('MM/DD');
+  };
+
   const handlePreviousWeek = () => {
-    const daysDiff = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
-    const newEnd = dayjs(startDate).subtract(1, 'day');
-    setEndDate(newEnd.endOf('day'));
-    setStartDate(newEnd.subtract(daysDiff - 1, 'day').startOf('day'));
+    setCurrentWeek(prev => prev.subtract(1, 'week').startOf('isoWeek'));
   };
 
   const handleNextWeek = () => {
-    const daysDiff = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
-    const newStart = dayjs(endDate).add(1, 'day');
-    setStartDate(newStart.startOf('day'));
-    setEndDate(newStart.add(daysDiff - 1, 'day').endOf('day'));
+    setCurrentWeek(prev => prev.add(1, 'week').startOf('isoWeek'));
   };
 
   const handleToday = () => {
-    const today = dayjs().tz('Asia/Hong_Kong');
-    // 顯示最近7天
-    setStartDate(today.subtract(6, 'day').startOf('day'));
-    setEndDate(today.endOf('day'));
+    setCurrentWeek(dayjs().startOf('isoWeek'));
   };
 
   return (
@@ -237,169 +272,176 @@ const MyAttendance = () => {
               </Box>
             </Box>
 
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label={t('myAttendance.startDate')}
-                  value={startDate}
-                  onChange={(newValue) => {
-                    if (newValue) {
-                      setStartDate(newValue.startOf('day'));
-                      // 如果結束日期早於開始日期，自動調整結束日期為開始日期後6天（共7天）
-                      const newEnd = dayjs(newValue).add(6, 'day');
-                      if (dayjs(endDate).isBefore(newEnd)) {
-                        setEndDate(newEnd.endOf('day'));
-                      }
-                    }
-                  }}
-                  format="DD/MM/YYYY"
-                  slotProps={{ 
-                    textField: { 
-                      fullWidth: true
-                    } 
-                  }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label={t('myAttendance.endDate')}
-                  value={endDate}
-                  onChange={(newValue) => {
-                    if (newValue) {
-                      setEndDate(newValue.endOf('day'));
-                      // 如果開始日期晚於結束日期，自動調整開始日期為結束日期前6天（共7天）
-                      const newStart = dayjs(newValue).subtract(6, 'day');
-                      if (dayjs(startDate).isAfter(newStart)) {
-                        setStartDate(newStart.startOf('day'));
-                      }
-                    }
-                  }}
-                  format="DD/MM/YYYY"
-                  slotProps={{ 
-                    textField: { 
-                      fullWidth: true
-                    } 
-                  }}
-                />
-              </Grid>
-            </Grid>
+            <Box sx={{ mb: 2, textAlign: 'center' }}>
+              <Typography variant="h6" color="text.secondary">
+                {currentWeek.startOf('isoWeek').format('YYYY-MM-DD')} ~ {currentWeek.endOf('isoWeek').format('YYYY-MM-DD')}
+              </Typography>
+            </Box>
 
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                 <CircularProgress />
               </Box>
-            ) : attendanceData.length === 0 ? (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                {t('myAttendance.noData')}
-              </Alert>
             ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 600 }}>{t('myAttendance.date')}</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>{t('myAttendance.schedule')}</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>{t('myAttendance.clockRecords')}</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>{t('myAttendance.status')}</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>{t('myAttendance.remarks')}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {attendanceData.map((item) => (
-                      <TableRow key={`${item.user_id}_${item.attendance_date}`} hover>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={600}>
-                            {formatDate(item.attendance_date)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {dayjs(item.attendance_date).format('ddd')}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {item.schedule ? (
-                            <Box>
-                              {item.schedule.start_time && item.schedule.end_time && (
-                                <Typography variant="body2">
-                                  {formatTime(item.schedule.start_time)} - {formatTime(item.schedule.end_time)}
+              <Grid container spacing={2}>
+                {getWeekDates().map((date) => {
+                  const item = getAttendanceForDate(date);
+                  const isToday = date.isSame(dayjs(), 'day');
+                  const dateStr = date.format('YYYY-MM-DD');
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} lg={12/7} key={dateStr}>
+                      <Card
+                        elevation={isToday ? 4 : 2}
+                        sx={{
+                          height: '100%',
+                          border: isToday ? 2 : 0,
+                          borderColor: 'primary.main',
+                          bgcolor: isToday ? 'action.selected' : 'background.paper',
+                          transition: 'all 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 6,
+                          },
+                        }}
+                      >
+                        <CardContent>
+                          <Box sx={{ mb: 2, textAlign: 'center' }}>
+                            <Typography
+                              variant="h6"
+                              sx={{
+                                fontWeight: isToday ? 700 : 600,
+                                color: isToday ? 'primary.main' : 'text.primary',
+                              }}
+                            >
+                              {formatDateDisplay(date)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {date.format('ddd')}
+                            </Typography>
+                          </Box>
+
+                          {item ? (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                              {/* 排班信息 */}
+                              {item.schedule ? (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {t('myAttendance.schedule')}
+                                  </Typography>
+                                  {item.schedule.start_time && item.schedule.end_time && (
+                                    <Chip
+                                      label={`${formatTime(item.schedule.start_time)} - ${formatTime(item.schedule.end_time)}`}
+                                      color="primary"
+                                      size="small"
+                                      sx={{ fontWeight: 600, mt: 0.5 }}
+                                    />
+                                  )}
+                                  {(item.schedule.leave_type_name_zh || item.schedule.leave_type_name) && (
+                                    <Chip
+                                      label={i18n.language === 'en'
+                                        ? (item.schedule.leave_type_code || item.schedule.leave_type_name)
+                                        : (item.schedule.leave_type_name_zh || item.schedule.leave_type_name)}
+                                      color="info"
+                                      size="small"
+                                      sx={{ fontWeight: 600, mt: 0.5, display: 'block' }}
+                                    />
+                                  )}
+                                  {item.schedule.store_code && (
+                                    <Chip
+                                      label={item.schedule.store_code}
+                                      color="secondary"
+                                      size="small"
+                                      sx={{ fontWeight: 600, mt: 0.5 }}
+                                    />
+                                  )}
+                                </Box>
+                              ) : (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {t('myAttendance.schedule')}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 0.5 }}>
+                                    {t('myAttendance.noSchedule')}
+                                  </Typography>
+                                </Box>
+                              )}
+
+                              {/* 打卡記錄 */}
+                              <Box>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {t('myAttendance.clockRecords')}
                                 </Typography>
-                              )}
-                              {(item.schedule.leave_type_name_zh || item.schedule.leave_type_name) && (
-                                <Chip
-                                  label={i18n.language === 'en'
-                                    ? (item.schedule.leave_type_code || item.schedule.leave_type_name)
-                                    : (item.schedule.leave_type_name_zh || item.schedule.leave_type_name)}
-                                  size="small"
-                                  color="info"
-                                  sx={{ mt: 0.5 }}
-                                />
-                              )}
-                              {item.schedule.store_code && (
-                                <Chip
-                                  label={item.schedule.store_code}
-                                  size="small"
-                                  color="secondary"
-                                  sx={{ mt: 0.5 }}
-                                />
-                              )}
-                            </Box>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {t('myAttendance.noSchedule')}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {item.clock_records && item.clock_records.length > 0 ? (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                              {item.clock_records.map((record, idx) => {
-                                // 確保顯示所有記錄，包括未審核的（is_valid 為 false、null 或 undefined）
-                                const isValid = record.is_valid === true;
-                                const isUnreviewed = record.is_valid === false || record.is_valid === null || record.is_valid === undefined;
-                                
-                                return (
-                                  <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                    {isValid ? (
-                                      <CheckCircleIcon fontSize="small" color="success" />
-                                    ) : isUnreviewed ? (
-                                      <CancelIcon fontSize="small" color="warning" />
-                                    ) : (
-                                      <CancelIcon fontSize="small" color="error" />
-                                    )}
-                                    <Typography variant="body2">
-                                      {formatTime(record.clock_time)} ({record.in_out})
-                                      {isUnreviewed && (
-                                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                                          (待審核)
-                                        </Typography>
-                                      )}
-                                    </Typography>
+                                {item.clock_records && item.clock_records.length > 0 ? (
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+                                    {item.clock_records.map((record, idx) => {
+                                      const isValid = record.is_valid === true;
+                                      const isUnreviewed = record.is_valid === false || record.is_valid === null || record.is_valid === undefined;
+                                      
+                                      return (
+                                        <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                          {isValid ? (
+                                            <CheckCircleIcon fontSize="small" color="success" />
+                                          ) : isUnreviewed ? (
+                                            <CancelIcon fontSize="small" color="warning" />
+                                          ) : (
+                                            <CancelIcon fontSize="small" color="error" />
+                                          )}
+                                          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                                            {formatTime(record.clock_time)} ({record.in_out})
+                                            {isUnreviewed && (
+                                              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                                ({t('myAttendance.pendingReview')})
+                                              </Typography>
+                                            )}
+                                          </Typography>
+                                        </Box>
+                                      );
+                                    })}
                                   </Box>
-                                );
-                              })}
+                                ) : (
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 0.5 }}>
+                                    {t('myAttendance.noClockRecords')}
+                                  </Typography>
+                                )}
+                              </Box>
+
+                              {/* 狀態 */}
+                              <Box>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {t('myAttendance.status')}
+                                </Typography>
+                                <Chip
+                                  label={getStatusText(item)}
+                                  color={getStatusColor(item)}
+                                  size="small"
+                                  sx={{ fontWeight: 600, mt: 0.5 }}
+                                />
+                              </Box>
+
+                              {/* 備註 */}
+                              {item.attendance?.remarks && (
+                                <Box>
+                                  <Typography variant="caption" color="text.secondary" display="block">
+                                    {t('myAttendance.remarks')}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                                    {item.attendance.remarks}
+                                  </Typography>
+                                </Box>
+                              )}
                             </Box>
                           ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              {t('myAttendance.noClockRecords')}
+                            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                              {t('myAttendance.noData')}
                             </Typography>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={getStatusText(item)}
-                            color={getStatusColor(item)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" color="text.secondary">
-                            {item.attendance?.remarks || '--'}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
             )}
           </Paper>
         </Container>

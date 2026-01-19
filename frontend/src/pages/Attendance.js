@@ -46,7 +46,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Schedule as ScheduleIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  ContentCopy as ContentCopyIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -243,8 +244,15 @@ const Attendance = ({ noLayout = false }) => {
     setEditTimeOffStart(item.attendance?.time_off_start ? dayjs(item.attendance.time_off_start, 'HH:mm:ss') : null);
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
     setEditRemarks(item.attendance?.remarks || '');
-    // 設置店舖ID（從 schedule 中獲取）
-    setEditStoreId(item.schedule?.store_id || null);
+    // 設置店舖ID（從 schedule 中獲取），但需要從 stores 數據中查找對應的店舖
+    const scheduleStoreId = item.schedule?.store_id;
+    if (scheduleStoreId !== undefined && scheduleStoreId !== null) {
+      // 從 stores 數組中查找對應的店舖
+      const foundStore = stores.find(store => Number(store.id) === Number(scheduleStoreId));
+      setEditStoreId(foundStore ? Number(foundStore.id) : null);
+    } else {
+      setEditStoreId(null);
+    }
     
     // 先使用 item 中的 clock_records
     let clockRecords = item?.clock_records || [];
@@ -492,6 +500,7 @@ const Attendance = ({ noLayout = false }) => {
       setEditTimeOffStart(null);
       setEditTimeOffEnd(null);
       setEditRemarks('');
+      setEditStoreId(null);
       setEditClockRecords([]);
       
       await fetchAttendanceComparison();
@@ -507,6 +516,51 @@ const Attendance = ({ noLayout = false }) => {
         icon: 'error',
         title: t('attendance.error'),
         text: error.response?.data?.message || error.message || t('attendance.updateFailed')
+      });
+    }
+  };
+
+  // 一鍵複製到月結表
+  const handleCopyToMonthlySummary = async () => {
+    if (!editingAttendance) return;
+
+    try {
+      const attendanceDate = editingAttendance.attendance_date;
+      // 使用 UTC+8 時區處理日期
+      const dateObj = dayjs(attendanceDate).tz('Asia/Hong_Kong');
+      const year = dateObj.year();
+      const month = dateObj.month() + 1; // dayjs月份從0開始
+      const userId = editingAttendance.user_id;
+
+      const result = await Swal.fire({
+        title: t('attendance.copyToMonthlySummary') || '複製到月結表',
+        text: t('attendance.copyToMonthlySummaryConfirm') || `確定要將 ${attendanceDate} 的考勤數據複製到 ${year}年${month}月的月結表嗎？`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: t('common.confirm') || '確定',
+        cancelButtonText: t('common.cancel') || '取消'
+      });
+
+      if (result.isConfirmed) {
+        await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
+          user_id: userId,
+          year: year,
+          month: month,
+          attendance_date: attendanceDate
+        });
+
+        Swal.fire({
+          icon: 'success',
+          title: t('attendance.success') || '成功',
+          text: t('attendance.copyToMonthlySummarySuccess') || '已成功複製到月結表'
+        });
+      }
+    } catch (error) {
+      console.error('Copy to monthly summary error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error') || '錯誤',
+        text: error.response?.data?.message || t('attendance.copyToMonthlySummaryFailed') || '複製到月結表失敗'
       });
     }
   };
@@ -1302,8 +1356,11 @@ const Attendance = ({ noLayout = false }) => {
                         <FormControl fullWidth>
                           <InputLabel>{t('schedule.store')}</InputLabel>
                           <Select
-                            value={editStoreId || ''}
-                            onChange={(e) => setEditStoreId(e.target.value || null)}
+                            value={editStoreId !== null && editStoreId !== undefined ? editStoreId : ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditStoreId(value === '' || value === null || value === undefined ? null : Number(value));
+                            }}
                             label={t('schedule.store')}
                           >
                             <MenuItem value="">
@@ -1557,6 +1614,7 @@ const Attendance = ({ noLayout = false }) => {
                 setEditTimeOffStart(null);
                 setEditTimeOffEnd(null);
                 setEditRemarks('');
+                setEditStoreId(null);
                 setEditClockRecords([]);
                 setEditClockTimes([]);
               }}
@@ -1568,6 +1626,20 @@ const Attendance = ({ noLayout = false }) => {
               }}
             >
               {t('common.cancel')}
+            </Button>
+            <Button 
+              onClick={handleCopyToMonthlySummary}
+              variant="outlined"
+              color="secondary"
+              startIcon={<ContentCopyIcon />}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+              }}
+            >
+              {t('attendance.copyToMonthlySummary') || '複製到月結表'}
             </Button>
             <Button 
               onClick={handleSaveAttendance} 
