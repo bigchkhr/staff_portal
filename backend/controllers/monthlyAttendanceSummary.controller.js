@@ -58,9 +58,13 @@ class MonthlyAttendanceSummaryController {
     return lastDayUTC8.getUTCDate();
   }
   // 計算一天的考勤數據
-  calculateDailyAttendance(attendanceData, scheduleData) {
+  async calculateDailyAttendance(attendanceData, scheduleData) {
+    // 確保日期使用 UTC+8 時區格式化
+    const attendanceDate = attendanceData.attendance_date;
+    const dateStr = this.formatDateToUTC8(attendanceDate);
+    
     const result = {
-      date: attendanceData.attendance_date,
+      date: dateStr || attendanceDate, // 使用格式化後的日期（UTC+8）
       late_minutes: null,
       break_duration: null, // 分鐘數
       total_work_hours: null, // 小時數
@@ -68,17 +72,116 @@ class MonthlyAttendanceSummaryController {
       early_leave: false,
       is_late: false,
       is_absent: false,
+      store_short_name: null, // 分店名稱（根據第一個有效打卡記錄的 branch_code 查找）
+      // 保存完整的排班資料（包括放假資料）
+      schedule: scheduleData && (scheduleData.start_time || scheduleData.end_time || scheduleData.leave_type_name_zh) ? {
+        id: scheduleData.id || null,
+        store_id: scheduleData.store_id || null,
+        start_time: scheduleData.start_time || null,
+        end_time: scheduleData.end_time || null,
+        leave_type_name_zh: scheduleData.leave_type_name_zh || null,
+        leave_session: scheduleData.leave_session || null,
+        is_approved_leave: scheduleData.is_approved_leave || false
+      } : null,
+      // 保存所有有效的打卡記錄
+      valid_clock_records: [],
+      // 保存完整的考勤數據（包含所有打卡記錄）
       attendance_data: attendanceData
     };
 
     // 獲取有效的打卡記錄（按時間排序）
-    const validRecords = (attendanceData.clock_records || [])
-      .filter(r => r.is_valid === true)
+    // 確保正確識別有效的記錄（支援 boolean true、字符串 "true"、數字 1 等格式）
+    const allClockRecords = attendanceData.clock_records || [];
+    const validRecords = allClockRecords
+      .filter(r => {
+        // 檢查 is_valid 是否為 true（支援多種格式）
+        const isValid = r.is_valid === true || 
+                       r.is_valid === 'true' || 
+                       r.is_valid === 1 || 
+                       r.is_valid === '1';
+        return isValid;
+      })
       .sort((a, b) => {
         const timeA = a.clock_time || '';
         const timeB = b.clock_time || '';
         return timeA.localeCompare(timeB);
       });
+
+    // 調試日誌
+    if (allClockRecords.length > 0) {
+      console.log(`[calculateDailyAttendance] Date ${dateStr}:`, {
+        totalRecords: allClockRecords.length,
+        validRecordsCount: validRecords.length,
+        validRecords: validRecords.map(r => ({
+          id: r.id,
+          clock_time: r.clock_time,
+          in_out: r.in_out,
+          is_valid: r.is_valid,
+          is_valid_type: typeof r.is_valid
+        }))
+      });
+    }
+
+    // 保存所有有效的打卡記錄
+    result.valid_clock_records = validRecords.map(record => ({
+      id: record.id || null,
+      employee_number: record.employee_number || null,
+      name: record.name || null,
+      branch_code: record.branch_code || null,
+      attendance_date: record.attendance_date || null,
+      clock_time: record.clock_time || null,
+      in_out: record.in_out || null,
+      is_valid: true, // 確保保存為 true
+      remarks: record.remarks || null
+    }));
+
+    // 根據第一個有效打卡記錄的 branch_code（實際上是 store_code）查找對應的 store_short_name_
+    // 注意：clock_records.branch_code 的值就是 stores.store_code
+    if (validRecords.length > 0) {
+      // 從第一個有效記錄中獲取 store_code（存儲在 branch_code 欄位中）
+      const storeCode = validRecords[0].branch_code ? String(validRecords[0].branch_code).trim() : null;
+      
+      if (storeCode) {
+        try {
+          console.log(`[calculateDailyAttendance] Looking up store for store_code: "${storeCode}" on date ${dateStr}`);
+          
+          // 先嘗試查找未關閉的店舖
+          let store = await knex('stores')
+            .where('store_code', storeCode)
+            .where('is_closed', false)
+            .select('store_short_name_ as store_short_name')
+            .first();
+          
+          // 如果沒找到，再查找所有店舖（包括已關閉的）
+          if (!store) {
+            store = await knex('stores')
+              .where('store_code', storeCode)
+              .select('store_short_name_ as store_short_name')
+              .first();
+          }
+          
+          if (store && store.store_short_name) {
+            result.store_short_name = store.store_short_name;
+            console.log(`[calculateDailyAttendance] Found store_short_name: "${store.store_short_name}" for store_code: "${storeCode}"`);
+          } else {
+            console.log(`[calculateDailyAttendance] No store found for store_code: "${storeCode}"`);
+            // 列出所有可用的 store_code 以便調試
+            const allStores = await knex('stores').select('store_code', 'store_short_name_ as store_short_name').limit(10);
+            console.log(`[calculateDailyAttendance] Available store_codes (first 10):`, allStores.map(s => `${s.store_code} -> ${s.store_short_name}`));
+          }
+        } catch (error) {
+          console.error(`[calculateDailyAttendance] Error fetching store by store_code ${storeCode}:`, error);
+          // 如果查找失敗，不影響其他功能，繼續執行
+        }
+      } else {
+        console.log(`[calculateDailyAttendance] No store_code (branch_code) in first valid record on date ${dateStr}. First record:`, {
+          id: validRecords[0].id,
+          clock_time: validRecords[0].clock_time,
+          in_out: validRecords[0].in_out,
+          branch_code: validRecords[0].branch_code
+        });
+      }
+    }
 
     if (validRecords.length === 0) {
       // 沒有有效打卡記錄，判斷是否缺勤
@@ -191,6 +294,159 @@ class MonthlyAttendanceSummaryController {
       if (month) filters.month = parseInt(month, 10);
 
       const summaries = await MonthlyAttendanceSummary.findAll(filters);
+      
+      // 為每個 summary 填充缺失的排班資料
+      for (const summary of summaries) {
+        if (summary.daily_data && Array.isArray(summary.daily_data)) {
+          // 獲取該月的日期範圍
+          const startDate = `${summary.year}-${String(summary.month).padStart(2, '0')}-01`;
+          const lastDay = this.getLastDayOfMonthUTC8(summary.year, summary.month);
+          const endDate = `${summary.year}-${String(summary.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+          
+          // 獲取該用戶該月的所有排班資料
+          const userSchedules = await Schedule.findAll({
+            user_id: summary.user_id,
+            start_date: startDate,
+            end_date: endDate
+          });
+          
+          // 獲取已批准的假期申請
+          const LeaveApplication = require('../database/models/LeaveApplication');
+          let approvedLeaves = [];
+          try {
+            const leaveResult = await LeaveApplication.findAll({
+              user_id: summary.user_id,
+              status: 'approved',
+              start_date_from: startDate,
+              end_date_to: endDate
+            });
+            approvedLeaves = Array.isArray(leaveResult?.applications) 
+              ? leaveResult.applications.filter(leave => !leave.is_reversed && !leave.is_reversal_transaction)
+              : [];
+          } catch (error) {
+            console.error('Get approved leaves error:', error);
+          }
+          
+          // 將排班和假期資料轉換為按日期索引的格式
+          const scheduleByDate = new Map();
+          userSchedules.forEach(schedule => {
+            const scheduleDateStr = this.formatDateToUTC8(schedule.schedule_date);
+            if (scheduleDateStr) {
+              scheduleByDate.set(scheduleDateStr, schedule);
+            }
+          });
+          
+          const leaveByDate = new Map();
+          approvedLeaves.forEach(leave => {
+            const leaveStartStr = this.formatDateToUTC8(leave.start_date);
+            const leaveEndStr = this.formatDateToUTC8(leave.end_date);
+            if (leaveStartStr && leaveEndStr) {
+              const start = new Date(leaveStartStr);
+              const end = new Date(leaveEndStr);
+              let current = new Date(start);
+              while (current <= end) {
+                const dateStr = this.formatDateToUTC8(current);
+                if (dateStr) {
+                  if (!leaveByDate.has(dateStr)) {
+                    leaveByDate.set(dateStr, leave);
+                  }
+                }
+                current.setDate(current.getDate() + 1);
+              }
+            }
+          });
+          
+          // 為每個日期填充缺失的排班資料和分店資料
+          for (const day of summary.daily_data) {
+            if (!day.schedule && day.date) {
+              const scheduleRecord = scheduleByDate.get(day.date);
+              const leaveRecord = leaveByDate.get(day.date);
+              
+              if (leaveRecord) {
+                // 如果有已批准的假期，使用假期信息
+                day.schedule = {
+                  id: scheduleRecord?.id || null,
+                  store_id: scheduleRecord?.store_id || null,
+                  start_time: scheduleRecord?.start_time || null,
+                  end_time: scheduleRecord?.end_time || null,
+                  leave_type_name_zh: leaveRecord.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+                  leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leaveRecord, day.date) : scheduleRecord?.leave_session || null,
+                  is_approved_leave: true
+                };
+              } else if (scheduleRecord) {
+                // 如果沒有已批准的假期，但有排班記錄，使用排班記錄
+                day.schedule = {
+                  id: scheduleRecord.id || null,
+                  store_id: scheduleRecord.store_id || null,
+                  start_time: scheduleRecord.start_time || null,
+                  end_time: scheduleRecord.end_time || null,
+                  leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+                  leave_session: scheduleRecord.leave_session || null,
+                  is_approved_leave: false
+                };
+              }
+            }
+            
+            // 填充缺失的分店資料：從第一個有效打卡記錄的 branch_code 查找 store_short_name
+            if (!day.store_short_name && day.date) {
+              // 優先從 valid_clock_records 獲取
+              let firstValidRecord = null;
+              if (day.valid_clock_records && Array.isArray(day.valid_clock_records) && day.valid_clock_records.length > 0) {
+                firstValidRecord = day.valid_clock_records[0];
+              } else if (day.attendance_data?.clock_records && Array.isArray(day.attendance_data.clock_records)) {
+                // 如果沒有 valid_clock_records，從所有打卡記錄中過濾有效的
+                const validRecords = day.attendance_data.clock_records.filter(r => {
+                  const isValid = r.is_valid === true || 
+                                r.is_valid === 'true' || 
+                                r.is_valid === 1 || 
+                                r.is_valid === '1' ||
+                                r.is_valid === 'True' ||
+                                (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true');
+                  return isValid && r.clock_time;
+                }).sort((a, b) => {
+                  const timeA = a.clock_time || '';
+                  const timeB = b.clock_time || '';
+                  return timeA.localeCompare(timeB);
+                });
+                if (validRecords.length > 0) {
+                  firstValidRecord = validRecords[0];
+                }
+              }
+              
+              if (firstValidRecord && firstValidRecord.branch_code) {
+                const storeCode = String(firstValidRecord.branch_code).trim();
+                if (storeCode) {
+                  try {
+                    const knex = require('../config/database');
+                    // 先嘗試查找未關閉的店舖
+                    let store = await knex('stores')
+                      .where('store_code', storeCode)
+                      .where('is_closed', false)
+                      .select('store_short_name_ as store_short_name')
+                      .first();
+                    
+                    // 如果沒找到，再查找所有店舖（包括已關閉的）
+                    if (!store) {
+                      store = await knex('stores')
+                        .where('store_code', storeCode)
+                        .select('store_short_name_ as store_short_name')
+                        .first();
+                    }
+                    
+                    if (store && store.store_short_name) {
+                      day.store_short_name = store.store_short_name;
+                      console.log(`[getMonthlySummaries] Found store_short_name: "${store.store_short_name}" for store_code: "${storeCode}" on date ${day.date}`);
+                    }
+                  } catch (error) {
+                    console.error(`[getMonthlySummaries] Error fetching store by store_code ${storeCode} for date ${day.date}:`, error);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
       res.json({ summaries });
     } catch (error) {
       console.error('Get monthly summaries error:', error);
@@ -206,6 +462,66 @@ class MonthlyAttendanceSummaryController {
       
       if (!summary) {
         return res.status(404).json({ message: '月結記錄不存在' });
+      }
+
+      // 填充缺失的分店資料
+      if (summary.daily_data && Array.isArray(summary.daily_data)) {
+        for (const day of summary.daily_data) {
+          if (!day.store_short_name && day.date) {
+            // 優先從 valid_clock_records 獲取
+            let firstValidRecord = null;
+            if (day.valid_clock_records && Array.isArray(day.valid_clock_records) && day.valid_clock_records.length > 0) {
+              firstValidRecord = day.valid_clock_records[0];
+            } else if (day.attendance_data?.clock_records && Array.isArray(day.attendance_data.clock_records)) {
+              // 如果沒有 valid_clock_records，從所有打卡記錄中過濾有效的
+              const validRecords = day.attendance_data.clock_records.filter(r => {
+                const isValid = r.is_valid === true || 
+                              r.is_valid === 'true' || 
+                              r.is_valid === 1 || 
+                              r.is_valid === '1' ||
+                              r.is_valid === 'True' ||
+                              (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true');
+                return isValid && r.clock_time;
+              }).sort((a, b) => {
+                const timeA = a.clock_time || '';
+                const timeB = b.clock_time || '';
+                return timeA.localeCompare(timeB);
+              });
+              if (validRecords.length > 0) {
+                firstValidRecord = validRecords[0];
+              }
+            }
+            
+            if (firstValidRecord && firstValidRecord.branch_code) {
+              const storeCode = String(firstValidRecord.branch_code).trim();
+              if (storeCode) {
+                try {
+                  // 先嘗試查找未關閉的店舖
+                  let store = await knex('stores')
+                    .where('store_code', storeCode)
+                    .where('is_closed', false)
+                    .select('store_short_name_ as store_short_name')
+                    .first();
+                  
+                  // 如果沒找到，再查找所有店舖（包括已關閉的）
+                  if (!store) {
+                    store = await knex('stores')
+                      .where('store_code', storeCode)
+                      .select('store_short_name_ as store_short_name')
+                      .first();
+                  }
+                  
+                  if (store && store.store_short_name) {
+                    day.store_short_name = store.store_short_name;
+                    console.log(`[getMonthlySummary] Found store_short_name: "${store.store_short_name}" for store_code: "${storeCode}" on date ${day.date}`);
+                  }
+                } catch (error) {
+                  console.error(`[getMonthlySummary] Error fetching store by store_code ${storeCode} for date ${day.date}:`, error);
+                }
+              }
+            }
+          }
+        }
       }
 
       res.json({ summary });
@@ -226,10 +542,14 @@ class MonthlyAttendanceSummaryController {
       }
 
       // 獲取該用戶該月的考勤數據（使用 UTC+8 時區）
+      // 確保使用 UTC+8 時區處理日期
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       // 計算該月的最後一天（UTC+8 時區）
       const lastDay = this.getLastDayOfMonthUTC8(year, month);
       const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      
+      console.log(`[copyFromAttendance] Processing month ${year}-${month} for user ${user_id}`);
+      console.log(`[copyFromAttendance] Date range: ${startDate} to ${endDate} (UTC+8)`);
 
       // 獲取該用戶的部門群組
       const DepartmentGroup = require('../database/models/DepartmentGroup');
@@ -293,6 +613,15 @@ class MonthlyAttendanceSummaryController {
       const dailyData = summary ? (summary.daily_data || []) : [];
 
       // 處理每一天的數據（使用 UTC+8 時區）
+      // 先獲取該月的所有日期範圍，確保即使沒有打卡記錄也能保存排班資料
+      const allDatesInMonth = [];
+      for (let day = 1; day <= lastDay; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        allDatesInMonth.push(dateStr);
+      }
+      
+      // 創建一個以日期為鍵的映射，用於快速查找
+      const dateDataMap = new Map();
       userAttendanceData.forEach(item => {
         const itemDate = item.attendance_date;
         // 使用 UTC+8 時區格式化日期
@@ -301,18 +630,133 @@ class MonthlyAttendanceSummaryController {
           console.warn('Invalid date format:', itemDate);
           return; // 跳過無效日期
         }
+        dateDataMap.set(itemDateStr, item);
+      });
+      
+      // 獲取該用戶該月的所有排班資料（即使沒有打卡記錄）
+      const userSchedules = await Schedule.findAll({
+        user_id: user_id,
+        start_date: startDate,
+        end_date: endDate
+      });
+      
+      // 獲取已批准的假期申請
+      const LeaveApplication = require('../database/models/LeaveApplication');
+      let approvedLeaves = [];
+      try {
+        const leaveResult = await LeaveApplication.findAll({
+          user_id: user_id,
+          status: 'approved',
+          start_date_from: startDate,
+          end_date_to: endDate
+        });
+        approvedLeaves = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
+        // 過濾掉已銷假的假期
+        approvedLeaves = approvedLeaves.filter(leave => !leave.is_reversed && !leave.is_reversal_transaction);
+      } catch (error) {
+        console.error('Get approved leaves error:', error);
+      }
+      
+      // 將排班和假期資料轉換為按日期索引的格式
+      const scheduleByDate = new Map();
+      userSchedules.forEach(schedule => {
+        const scheduleDateStr = this.formatDateToUTC8(schedule.schedule_date);
+        if (scheduleDateStr) {
+          scheduleByDate.set(scheduleDateStr, schedule);
+        }
+      });
+      
+      // 將假期資料轉換為按日期索引的格式
+      const leaveByDate = new Map();
+      approvedLeaves.forEach(leave => {
+        const leaveStartStr = this.formatDateToUTC8(leave.start_date);
+        const leaveEndStr = this.formatDateToUTC8(leave.end_date);
+        if (leaveStartStr && leaveEndStr) {
+          const start = new Date(leaveStartStr);
+          const end = new Date(leaveEndStr);
+          let current = new Date(start);
+          while (current <= end) {
+            const dateStr = this.formatDateToUTC8(current);
+            if (dateStr) {
+              if (!leaveByDate.has(dateStr)) {
+                leaveByDate.set(dateStr, leave);
+              }
+            }
+            current.setDate(current.getDate() + 1);
+          }
+        }
+      });
+      
+      // 處理該月的每一天
+      for (const dateStr of allDatesInMonth) {
+        const item = dateDataMap.get(dateStr);
+        const scheduleRecord = scheduleByDate.get(dateStr);
+        const leaveRecord = leaveByDate.get(dateStr);
+        
+        // 構建排班資料（優先使用已批准的假期，否則使用排班記錄）
+        let scheduleData = null;
+        if (leaveRecord) {
+          // 如果有已批准的假期，使用假期信息
+          scheduleData = {
+            id: scheduleRecord?.id || null,
+            store_id: scheduleRecord?.store_id || null,
+            start_time: scheduleRecord?.start_time || null,
+            end_time: scheduleRecord?.end_time || null,
+            leave_type_name_zh: leaveRecord.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+            leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leaveRecord, dateStr) : scheduleRecord?.leave_session || null,
+            is_approved_leave: true
+          };
+        } else if (scheduleRecord) {
+          // 如果沒有已批准的假期，但有排班記錄，使用排班記錄
+          scheduleData = {
+            id: scheduleRecord.id || null,
+            store_id: scheduleRecord.store_id || null,
+            start_time: scheduleRecord.start_time || null,
+            end_time: scheduleRecord.end_time || null,
+            leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+            leave_session: scheduleRecord.leave_session || null,
+            is_approved_leave: false
+          };
+        } else if (item?.schedule) {
+          // 如果從 attendance comparison 中有排班資料，使用它
+          scheduleData = item.schedule;
+        }
+        
+        const attendanceData = item || {
+          attendance_date: dateStr,
+          clock_records: []
+        };
+        
+        if (item) {
+          console.log(`Processing date ${dateStr} for user ${user_id}:`, {
+            hasSchedule: !!item.schedule,
+            hasScheduleRecord: !!scheduleRecord,
+            hasLeaveRecord: !!leaveRecord,
+            scheduleStartTime: scheduleData?.start_time,
+            scheduleEndTime: scheduleData?.end_time,
+            leaveType: scheduleData?.leave_type_name_zh,
+            clockRecordsCount: item.clock_records?.length || 0
+          });
+        } else if (scheduleData) {
+          // 即使沒有打卡記錄，如果有排班資料也要保存
+          console.log(`Processing date ${dateStr} for user ${user_id} (no attendance data, but has schedule):`, {
+            scheduleStartTime: scheduleData.start_time,
+            scheduleEndTime: scheduleData.end_time,
+            leaveType: scheduleData.leave_type_name_zh
+          });
+        }
 
         // 計算該天的考勤數據
-        const calculatedData = this.calculateDailyAttendance(item, item.schedule || {});
+        const calculatedData = await this.calculateDailyAttendance(attendanceData, scheduleData || {});
 
         // 更新或添加該天的數據
-        const existingIndex = dailyData.findIndex(d => d.date === itemDateStr);
+        const existingIndex = dailyData.findIndex(d => d.date === dateStr);
         if (existingIndex >= 0) {
           dailyData[existingIndex] = calculatedData;
         } else {
           dailyData.push(calculatedData);
         }
-      });
+      }
 
       // 按日期排序（使用字符串比較，因為格式是 YYYY-MM-DD）
       dailyData.sort((a, b) => {
@@ -355,9 +799,66 @@ class MonthlyAttendanceSummaryController {
         return res.status(400).json({ message: '請提供用戶ID和日期' });
       }
 
-      const calculatedData = this.calculateDailyAttendance(
+      // 如果沒有傳入 schedule_data，嘗試從數據庫獲取
+      let finalScheduleData = schedule_data || {};
+      if (!schedule_data || (!schedule_data.start_time && !schedule_data.end_time && !schedule_data.leave_type_name_zh)) {
+        try {
+          // 獲取該日期的排班資料
+          const dateStr = this.formatDateToUTC8(date);
+          const userSchedules = await Schedule.findAll({
+            user_id: user_id,
+            start_date: dateStr,
+            end_date: dateStr
+          });
+
+          if (userSchedules && userSchedules.length > 0) {
+            const scheduleRecord = userSchedules[0];
+            // 獲取已批准的假期申請
+            const LeaveApplication = require('../database/models/LeaveApplication');
+            const leaveResult = await LeaveApplication.findAll({
+              user_id: user_id,
+              status: 'approved',
+              start_date_from: dateStr,
+              end_date_to: dateStr
+            });
+            const approvedLeaves = Array.isArray(leaveResult?.applications) 
+              ? leaveResult.applications.filter(leave => !leave.is_reversed && !leave.is_reversal_transaction)
+              : [];
+
+            if (approvedLeaves.length > 0) {
+              // 如果有已批准的假期，使用假期信息
+              const leave = approvedLeaves[0];
+              finalScheduleData = {
+                id: scheduleRecord?.id || null,
+                store_id: scheduleRecord?.store_id || null,
+                start_time: scheduleRecord?.start_time || null,
+                end_time: scheduleRecord?.end_time || null,
+                leave_type_name_zh: leave.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+                leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leave, dateStr) : scheduleRecord?.leave_session || null,
+                is_approved_leave: true
+              };
+            } else if (scheduleRecord) {
+              // 如果沒有已批准的假期，但有排班記錄，使用排班記錄
+              finalScheduleData = {
+                id: scheduleRecord.id || null,
+                store_id: scheduleRecord.store_id || null,
+                start_time: scheduleRecord.start_time || null,
+                end_time: scheduleRecord.end_time || null,
+                leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+                leave_session: scheduleRecord.leave_session || null,
+                is_approved_leave: false
+              };
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching schedule data:', error);
+          // 如果獲取失敗，繼續使用傳入的 schedule_data 或空對象
+        }
+      }
+
+      const calculatedData = await this.calculateDailyAttendance(
         attendance_data || {},
-        schedule_data || {}
+        finalScheduleData
       );
 
       res.json({ daily_data: calculatedData });

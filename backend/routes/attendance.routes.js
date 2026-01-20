@@ -9,6 +9,9 @@ router.use(authenticate);
 // 獲取用戶有權限查看的考勤群組列表
 router.get('/accessible-groups', attendanceController.getAccessibleAttendanceGroups.bind(attendanceController));
 
+// 獲取指定用戶的打卡記錄（用於月結表等頁面，需要權限檢查）
+router.get('/user-clock-records', attendanceController.getUserClockRecords.bind(attendanceController));
+
 // 獲取當前用戶的打卡記錄（用於 My Attendance 頁面）
 router.get('/my-clock-records', attendanceController.getMyClockRecords.bind(attendanceController));
 

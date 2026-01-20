@@ -101,6 +101,7 @@ const Schedule = ({ noLayout = false }) => {
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [pendingError, setPendingError] = useState(null); // 待顯示的錯誤訊息
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -115,6 +116,22 @@ const Schedule = ({ noLayout = false }) => {
       checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate]);
+
+  // 監聽 modal 關閉，如果有待顯示的錯誤訊息，則顯示
+  useEffect(() => {
+    if (!csvImportDialogOpen && pendingError) {
+      // Modal 已關閉，顯示錯誤訊息
+      const error = pendingError;
+      setPendingError(null); // 清除待顯示的錯誤
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || error.message || t('schedule.csvImportFailed'),
+        allowOutsideClick: true,
+        allowEscapeKey: true
+      });
+    }
+  }, [csvImportDialogOpen, pendingError, t]);
 
   const fetchDepartmentGroups = async () => {
     try {
@@ -1408,6 +1425,39 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   // 處理 CSV 匯入
+  // 正確解析 CSV 行，處理包含逗號、引號等特殊字符的欄位
+  const parseCSVLine = (line) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // 轉義的引號
+          current += '"';
+          i++; // 跳過下一個引號
+        } else {
+          // 切換引號狀態
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // 在引號外的逗號，表示欄位分隔符
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // 添加最後一個欄位
+    values.push(current.trim());
+    
+    return values;
+  };
+
   const handleCsvImport = async () => {
     if (!csvFile) {
       Swal.fire({
@@ -1422,28 +1472,29 @@ const Schedule = ({ noLayout = false }) => {
     try {
       // 讀取 CSV 文件
       const text = await csvFile.text();
-      const lines = text.split('\n').filter(line => line.trim());
+      // 處理不同類型的換行符（\r\n, \n, \r）
+      const lines = text.split(/\r?\n|\r/).filter(line => line.trim());
       
       if (lines.length < 2) {
         throw new Error(t('schedule.csvEmptyOrInvalid'));
       }
 
       // 解析 CSV（假設第一行是標題）
-      const headers = lines[0].split(',').map(h => h.trim());
+      const headers = parseCSVLine(lines[0]);
       const data = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
+        const values = parseCSVLine(lines[i]);
         if (values.length < 9) continue; // 跳過不完整的行（新格式需要至少 9 欄）
 
         // 跳過第一列（欄A: 數位）
         const dataValues = values.slice(1);
         
         // 根據新的 POS CSV 格式（跳過第一列後）：
-        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名, 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
+        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名(不匯入), 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
         const row = {
           employee_number: dataValues[2] || '', // 欄D: 員工ID (跳過第一列後索引為2)
-          name: dataValues[3] || '', // 欄E: 員工姓名 (跳過第一列後索引為3)
+          name: null, // 欄E: 員工姓名 (不匯入，設為 null)
           branch_code: dataValues[0] || '', // 欄B: 分行代碼 (跳過第一列後索引為0)
           date: dataValues[6] || '', // 欄H: 日期 (跳過第一列後索引為6)
           clock_time: dataValues[7] || '', // 欄I: 時間 (跳過第一列後索引為7)
@@ -1477,11 +1528,10 @@ const Schedule = ({ noLayout = false }) => {
       }
     } catch (error) {
       console.error('CSV import error:', error);
-      Swal.fire({
-        icon: 'error',
-        title: t('schedule.error'),
-        text: error.response?.data?.message || error.message || t('schedule.csvImportFailed')
-      });
+      // 先關閉 modal，並保存錯誤訊息待 modal 完全關閉後顯示
+      setPendingError(error);
+      setCsvImportDialogOpen(false);
+      setCsvFile(null);
     } finally {
       setImporting(false);
     }
@@ -1711,25 +1761,6 @@ const Schedule = ({ noLayout = false }) => {
                           {t('schedule.batchEdit')}
                         </Button>
                       )}
-                      <Button
-                        variant="outlined"
-                        color="secondary"
-                        onClick={() => setCsvImportDialogOpen(true)}
-                        startIcon={<UploadIcon />}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          boxShadow: 1,
-                          '&:hover': {
-                            boxShadow: 3,
-                            transform: 'translateY(-2px)',
-                            transition: 'all 0.2s',
-                          },
-                        }}
-                      >
-                        {t('schedule.importCSV')}
-                      </Button>
                     </>
                   )}
                 </Box>
@@ -2488,109 +2519,6 @@ const Schedule = ({ noLayout = false }) => {
           </DialogActions>
         </Dialog>
 
-        {/* CSV 匯入對話框 */}
-        <Dialog 
-          open={csvImportDialogOpen} 
-          onClose={() => {
-            if (!importing) {
-              setCsvImportDialogOpen(false);
-              setCsvFile(null);
-            }
-          }}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: 6,
-            }
-          }}
-        >
-          <DialogTitle
-            sx={{
-              bgcolor: 'secondary.main',
-              color: 'secondary.contrastText',
-              fontWeight: 600,
-              py: 2.5,
-            }}
-          >
-            {t('schedule.importCSV')}
-          </DialogTitle>
-          <DialogContent sx={{ p: 3, mt: 2 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                {t('schedule.csvFormatDescription')}
-              </Typography>
-              <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1 }}>
-                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                  {t('schedule.csvFormatExample')}
-                </Typography>
-              </Box>
-              <input
-                accept=".csv"
-                style={{ display: 'none' }}
-                id="csv-file-upload"
-                type="file"
-                onChange={handleCsvFileSelect}
-                disabled={importing}
-              />
-              <label htmlFor="csv-file-upload">
-                <Button
-                  variant="outlined"
-                  component="span"
-                  startIcon={<UploadIcon />}
-                  disabled={importing}
-                  fullWidth
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    py: 1.5,
-                  }}
-                >
-                  {csvFile ? csvFile.name : t('schedule.selectCSVFile')}
-                </Button>
-              </label>
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ p: 3, pt: 2, gap: 1 }}>
-            <Button 
-              onClick={() => {
-                setCsvImportDialogOpen(false);
-                setCsvFile(null);
-              }}
-              disabled={importing}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                px: 3,
-              }}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button 
-              onClick={handleCsvImport} 
-              variant="contained" 
-              color="secondary"
-              disabled={!csvFile || importing}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                px: 3,
-                boxShadow: 3,
-                '&:hover': {
-                  boxShadow: 5,
-                  transform: 'translateY(-2px)',
-                  transition: 'all 0.2s',
-                },
-              }}
-            >
-              {importing ? t('schedule.importing') : t('schedule.import')}
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Container>
     </LocalizationProvider>
   );

@@ -1279,6 +1279,93 @@ class AttendanceController {
     }
   }
 
+  // 獲取指定用戶的打卡記錄（用於月結表等頁面，需要權限檢查）
+  async getUserClockRecords(req, res) {
+    try {
+      const { user_id, start_date, end_date } = req.query;
+      const currentUserId = req.user.id;
+      const isSystemAdmin = req.user.is_system_admin;
+
+      if (!user_id || !start_date || !end_date) {
+        return res.status(400).json({ message: '請提供用戶ID、開始日期和結束日期' });
+      }
+
+      // 權限檢查：只有系統管理員或該用戶本人可以查看
+      if (!isSystemAdmin && Number(currentUserId) !== Number(user_id)) {
+        // 檢查是否為批核成員（可以查看群組成員的記錄）
+        const DepartmentGroup = require('../database/models/DepartmentGroup');
+        const userGroups = await DepartmentGroup.findByUserId(user_id);
+        
+        if (userGroups.length === 0) {
+          return res.status(403).json({ message: '您沒有權限查看此用戶的打卡記錄' });
+        }
+
+        let hasPermission = false;
+        for (const group of userGroups) {
+          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
+          if (canView) {
+            hasPermission = true;
+            break;
+          }
+        }
+
+        if (!hasPermission) {
+          return res.status(403).json({ message: '您沒有權限查看此用戶的打卡記錄' });
+        }
+      }
+
+      // 獲取用戶信息
+      const targetUser = await User.findById(user_id);
+      if (!targetUser || !targetUser.employee_number) {
+        return res.status(400).json({ message: '用戶沒有員工編號' });
+      }
+
+      // 獲取打卡記錄
+      const clockRecords = await ClockRecord.findByEmployeeAndDateRange(
+        targetUser.employee_number,
+        start_date,
+        end_date
+      );
+
+      // 按日期組織數據
+      const dateMap = new Map();
+      clockRecords.forEach(record => {
+        let dateStr;
+        if (record.attendance_date instanceof Date) {
+          const year = record.attendance_date.getFullYear();
+          const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
+          const day = String(record.attendance_date.getDate()).padStart(2, '0');
+          dateStr = `${year}-${month}-${day}`;
+        } else {
+          dateStr = String(record.attendance_date).split('T')[0].split(' ')[0].substring(0, 10);
+        }
+
+        if (!dateMap.has(dateStr)) {
+          dateMap.set(dateStr, []);
+        }
+        dateMap.get(dateStr).push(record);
+      });
+
+      // 轉換為按日期索引的對象
+      const result = {};
+      dateMap.forEach((records, dateStr) => {
+        result[dateStr] = records;
+      });
+
+      res.json({ 
+        clock_records: result,
+        user: {
+          id: targetUser.id,
+          employee_number: targetUser.employee_number,
+          display_name: targetUser.display_name || targetUser.name_zh || targetUser.name
+        }
+      });
+    } catch (error) {
+      console.error('Get user clock records error:', error);
+      res.status(500).json({ message: '獲取打卡記錄失敗', error: error.message });
+    }
+  }
+
   // 獲取當前用戶的打卡記錄（用於 My Attendance 頁面）
   async getMyClockRecords(req, res) {
     try {

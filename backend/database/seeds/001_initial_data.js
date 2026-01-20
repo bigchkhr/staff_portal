@@ -673,7 +673,7 @@ exports.seed = async function (knex) {
   // 建立店舖資料 (Stores)
   await knex('stores').insert([
     {
-      store_code: 'ADM',
+      store_code: '83008',
       store_short_name_: 'ADM',
       address_en: null,
       address_chi: null,
@@ -685,7 +685,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TWS',
+      store_code: '83026',
       store_short_name_: 'TWS',
       address_en: null,
       address_chi: null,
@@ -697,7 +697,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'WTS',
+      store_code: '83023',
       store_short_name_: 'WTS',
       address_en: null,
       address_chi: null,
@@ -709,7 +709,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'LF1',
+      store_code: '83036',
       store_short_name_: 'LF1',
       address_en: null,
       address_chi: null,
@@ -721,7 +721,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TK3',
+      store_code: '83005',
       store_short_name_: 'TK3',
       address_en: null,
       address_chi: null,
@@ -733,7 +733,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TK4',
+      store_code: '83040',
       store_short_name_: 'TK4',
       address_en: null,
       address_chi: null,
@@ -745,7 +745,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'OC',
+      store_code: '83020',
       store_short_name_: 'OC',
       address_en: null,
       address_chi: null,
@@ -757,7 +757,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'SP1',
+      store_code: '83044',
       store_short_name_: 'SP1',
       address_en: null,
       address_chi: null,
@@ -769,7 +769,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'WPG',
+      store_code: '83004',
       store_short_name_: 'WPG',
       address_en: null,
       address_chi: null,
@@ -781,7 +781,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'MK2',
+      store_code: '83033',
       store_short_name_: 'MK2',
       address_en: null,
       address_chi: null,
@@ -793,7 +793,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TT2',
+      store_code: '83032',
       store_short_name_: 'TT2',
       address_en: null,
       address_chi: null,
@@ -805,7 +805,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'CDW',
+      store_code: '83003',
       store_short_name_: 'CDW',
       address_en: null,
       address_chi: null,
@@ -817,7 +817,7 @@ exports.seed = async function (knex) {
       is_closed: true
     },
     {
-      store_code: 'TW2',
+      store_code: '83019',
       store_short_name_: 'TW2',
       address_en: null,
       address_chi: null,
@@ -829,7 +829,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TY4',
+      store_code: '83006',
       store_short_name_: 'TY4',
       address_en: null,
       address_chi: null,
@@ -841,7 +841,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TW3',
+      store_code: '83034',
       store_short_name_: 'TW3',
       address_en: null,
       address_chi: null,
@@ -853,7 +853,7 @@ exports.seed = async function (knex) {
       is_closed: true
     },
     {
-      store_code: 'FAN',
+      store_code: '83037',
       store_short_name_: 'FAN',
       address_en: null,
       address_chi: null,
@@ -865,7 +865,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TPU',
+      store_code: '83035',
       store_short_name_: 'TPU',
       address_en: null,
       address_chi: null,
@@ -877,7 +877,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TP2',
+      store_code: '83045',
       store_short_name_: 'TP2',
       address_en: null,
       address_chi: null,
@@ -889,7 +889,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'MO2',
+      store_code: '83039',
       store_short_name_: 'MO2',
       address_en: null,
       address_chi: null,
@@ -901,7 +901,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'ST1',
+      store_code: '83047',
       store_short_name_: 'ST1',
       address_en: null,
       address_chi: null,
@@ -913,7 +913,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'TM1',
+      store_code: '83046',
       store_short_name_: 'TM1',
       address_en: null,
       address_chi: null,
@@ -925,7 +925,7 @@ exports.seed = async function (knex) {
       is_closed: false
     },
     {
-      store_code: 'YL3',
+      store_code: '83025',
       store_short_name_: 'YL3',
       address_en: null,
       address_chi: null,
@@ -937,7 +937,7 @@ exports.seed = async function (knex) {
       is_closed: true
     },
     {
-      store_code: 'YL4',
+      store_code: '83038',
       store_short_name_: 'YL4',
       address_en: null,
       address_chi: null,

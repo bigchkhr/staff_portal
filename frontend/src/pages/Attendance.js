@@ -90,12 +90,29 @@ const Attendance = ({ noLayout = false }) => {
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [canEdit, setCanEdit] = useState(false); // 檢查用戶是否為 checker、approver1、approver2、approver3
+  const [canEdit, setCanEdit] = useState(false); // 檢查用戶是否為 approver1、approver2、approver3（不包含 checker）
+  const [pendingError, setPendingError] = useState(null); // 待顯示的錯誤訊息
 
   useEffect(() => {
     fetchDepartmentGroups();
     fetchStores();
   }, []);
+
+  // 監聽 modal 關閉，如果有待顯示的錯誤訊息，則顯示
+  useEffect(() => {
+    if (!csvImportDialogOpen && pendingError) {
+      // Modal 已關閉，顯示錯誤訊息
+      const error = pendingError;
+      setPendingError(null); // 清除待顯示的錯誤
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: error.response?.data?.message || error.message || t('attendance.csvImportFailed'),
+        allowOutsideClick: true,
+        allowEscapeKey: true
+      });
+    }
+  }, [csvImportDialogOpen, pendingError, t]);
 
   const fetchStores = async () => {
     try {
@@ -157,7 +174,7 @@ const Attendance = ({ noLayout = false }) => {
   };
 
   const checkEditPermission = () => {
-    // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
+    // 檢查用戶是否為批核成員（僅 approver_1, approver_2, approver_3，不包含 checker）
     try {
       const group = departmentGroups.find(g => g.id === selectedGroupId);
       if (!group) {
@@ -171,16 +188,15 @@ const Attendance = ({ noLayout = false }) => {
         return;
       }
 
-      // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
+      // 檢查用戶是否為批核成員（僅 approver_1, approver_2, approver_3，不包含 checker）
       const userDelegationGroups = user.delegation_groups || [];
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 
-      const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
       const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
       const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
 
-      setCanEdit(isChecker || isApprover1 || isApprover2 || isApprover3);
+      setCanEdit(isApprover1 || isApprover2 || isApprover3);
     } catch (error) {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
@@ -283,6 +299,7 @@ const Attendance = ({ noLayout = false }) => {
 
   // 自動勾選最早的4個時間
   const handleAutoSelectEarliest = () => {
+    if (!canEdit) return;
     if (!editClockRecords || editClockRecords.length === 0) return;
     
     // 按時間排序，取最早的4個
@@ -306,7 +323,7 @@ const Attendance = ({ noLayout = false }) => {
 
   // 處理新增打卡時間
   const handleAddClockTime = () => {
-    if (!editingAttendance) return;
+    if (!editingAttendance || !canEdit) return;
     
     const newRecord = {
       id: null, // 新記錄沒有id
@@ -329,6 +346,7 @@ const Attendance = ({ noLayout = false }) => {
 
   // 處理刪除打卡時間
   const handleRemoveClockTime = (recordId, tempId) => {
+    if (!canEdit) return;
     if (recordId !== null && recordId !== undefined) {
       // 有 id 的記錄，標記為無效而不是刪除
       const updated = editClockRecords.map(record => 
@@ -520,39 +538,138 @@ const Attendance = ({ noLayout = false }) => {
     }
   };
 
-  // 一鍵複製到月結表
+  // 一鍵複製到月結表（為群組內所有成員生成）
   const handleCopyToMonthlySummary = async () => {
-    if (!editingAttendance) return;
+    if (!selectedGroupId || !groupMembers || groupMembers.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.error') || '錯誤',
+        text: t('attendance.noGroupMembers') || '請先選擇群組'
+      });
+      return;
+    }
 
     try {
-      const attendanceDate = editingAttendance.attendance_date;
-      // 使用 UTC+8 時區處理日期
-      const dateObj = dayjs(attendanceDate).tz('Asia/Hong_Kong');
-      const year = dateObj.year();
-      const month = dateObj.month() + 1; // dayjs月份從0開始
-      const userId = editingAttendance.user_id;
+      // 使用當前日期範圍的第一天來確定年份和月份
+      const firstDate = dayjs(startDate).tz('Asia/Hong_Kong');
+      const year = firstDate.year();
+      const month = firstDate.month() + 1; // dayjs月份從0開始
+      // 使用該月的第一天作為attendance_date
+      const attendanceDate = firstDate.startOf('month').format('YYYY-MM-DD');
 
       const result = await Swal.fire({
         title: t('attendance.copyToMonthlySummary') || '複製到月結表',
-        text: t('attendance.copyToMonthlySummaryConfirm') || `確定要將 ${attendanceDate} 的考勤數據複製到 ${year}年${month}月的月結表嗎？`,
+        text: t('attendance.copyToMonthlySummaryConfirmAll', { year, month }) || `確定要為群組內所有成員生成 ${year}年${month}月的月結表嗎？已有記錄的員工將被略過。`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: t('common.confirm') || '確定',
         cancelButtonText: t('common.cancel') || '取消'
       });
 
-      if (result.isConfirmed) {
-        await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
-          user_id: userId,
-          year: year,
-          month: month,
-          attendance_date: attendanceDate
-        });
+      if (!result.isConfirmed) return;
 
+      // 顯示進度提示
+      Swal.fire({
+        title: t('attendance.processing') || '處理中',
+        text: t('attendance.copyingToMonthlySummary') || '正在為群組成員生成月結表...',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      let successCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const errors = [];
+
+      // 為每個群組成員生成月結表
+      for (const member of groupMembers) {
+        try {
+          // 確保成員有有效的 ID
+          const userId = member.id || member.user_id;
+          if (!userId) {
+            console.warn(`Member ${member.employee_number} has no valid ID, skipping...`);
+            errorCount++;
+            errors.push({
+              employee_number: member.employee_number || 'N/A',
+              name: member.display_name || member.name || 'N/A',
+              error: '缺少用戶ID'
+            });
+            continue;
+          }
+
+          // 檢查該員工是否已有月結表記錄
+          const checkResponse = await axios.get('/api/monthly-attendance-summaries', {
+            params: {
+              user_id: userId,
+              year: year,
+              month: month
+            }
+          });
+
+          // 如果已有記錄且daily_data長度不是0，則略過
+          if (checkResponse.data.summaries && checkResponse.data.summaries.length > 0) {
+            const summary = checkResponse.data.summaries[0];
+            if (summary.daily_data && summary.daily_data.length > 0) {
+              skippedCount++;
+              continue;
+            }
+          }
+
+          // 為該員工生成月結表
+          await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
+            user_id: userId,
+            year: year,
+            month: month,
+            attendance_date: attendanceDate
+          });
+
+          successCount++;
+        } catch (error) {
+          const userId = member.id || member.user_id;
+          console.error(`Copy to monthly summary error for user ${userId}:`, error);
+          errorCount++;
+          errors.push({
+            employee_number: member.employee_number || 'N/A',
+            name: member.display_name || member.name || 'N/A',
+            error: error.response?.data?.message || error.message || t('common.unknownError') || '未知錯誤'
+          });
+        }
+      }
+
+      // 顯示結果
+      let resultMessage = '';
+      if (successCount > 0) {
+        resultMessage += `${t('attendance.successCount') || '成功'}：${successCount} ${t('attendance.employees') || '位員工'}\n`;
+      }
+      if (skippedCount > 0) {
+        resultMessage += `${t('attendance.skippedCount') || '已略過'}：${skippedCount} ${t('attendance.employees') || '位員工'}${t('attendance.withExistingRecords') || '（已有記錄）'}\n`;
+      }
+      if (errorCount > 0) {
+        resultMessage += `${t('attendance.errorCount') || '失敗'}：${errorCount} ${t('attendance.employees') || '位員工'}\n`;
+      }
+
+      if (errorCount > 0) {
+        // 如果有錯誤，顯示詳細錯誤信息
+        let errorDetails = errors.map(e => `${e.employee_number} - ${e.name}: ${e.error}`).join('\n');
+        Swal.fire({
+          icon: 'warning',
+          title: t('attendance.copyToMonthlySummaryCompleted') || '處理完成',
+          html: `<div style="text-align: left;">${resultMessage.replace(/\n/g, '<br>')}</div>
+                 <details style="margin-top: 10px; text-align: left;">
+                   <summary style="cursor: pointer; color: #d32f2f;">${t('attendance.errorDetails') || '錯誤詳情'}</summary>
+                   <pre style="white-space: pre-wrap; font-size: 0.85em; margin-top: 5px;">${errorDetails}</pre>
+                 </details>`,
+          width: '600px'
+        });
+      } else {
         Swal.fire({
           icon: 'success',
-          title: t('attendance.success') || '成功',
-          text: t('attendance.copyToMonthlySummarySuccess') || '已成功複製到月結表'
+          title: t('attendance.copyToMonthlySummaryCompleted') || '處理完成',
+          text: resultMessage.trim() || (t('attendance.copyToMonthlySummarySuccess') || '已成功複製到月結表')
         });
       }
     } catch (error) {
@@ -719,6 +836,39 @@ const Attendance = ({ noLayout = false }) => {
     }
   };
 
+  // 正確解析 CSV 行，處理包含逗號、引號等特殊字符的欄位
+  const parseCSVLine = (line) => {
+    const values = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // 轉義的引號
+          current += '"';
+          i++; // 跳過下一個引號
+        } else {
+          // 切換引號狀態
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // 在引號外的逗號，表示欄位分隔符
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    // 添加最後一個欄位
+    values.push(current.trim());
+    
+    return values;
+  };
+
   // 處理 CSV 匯入
   const handleCsvImport = async () => {
     if (!csvFile) {
@@ -734,28 +884,29 @@ const Attendance = ({ noLayout = false }) => {
     try {
       // 讀取 CSV 文件
       const text = await csvFile.text();
-      const lines = text.split('\n').filter(line => line.trim());
+      // 處理不同類型的換行符（\r\n, \n, \r）
+      const lines = text.split(/\r?\n|\r/).filter(line => line.trim());
       
       if (lines.length < 2) {
         throw new Error(t('attendance.csvEmptyOrInvalid'));
       }
 
       // 解析 CSV（假設第一行是標題）
-      const headers = lines[0].split(',').map(h => h.trim());
+      const headers = parseCSVLine(lines[0]);
       const data = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
+        const values = parseCSVLine(lines[i]);
         if (values.length < 9) continue; // 跳過不完整的行（新格式需要至少 9 欄）
 
         // 跳過第一列（欄A: 數位）
         const dataValues = values.slice(1);
         
         // 根據新的 POS CSV 格式（跳過第一列後）：
-        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名, 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
+        // 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名(不匯入), 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
         const row = {
           employee_number: dataValues[2] || '', // 欄D: 員工ID (跳過第一列後索引為2)
-          name: dataValues[3] || '', // 欄E: 員工姓名 (跳過第一列後索引為3)
+          name: null, // 欄E: 員工姓名 (不匯入，設為 null)
           branch_code: dataValues[0] || '', // 欄B: 分行代碼 (跳過第一列後索引為0)
           date: dataValues[6] || '', // 欄H: 日期 (跳過第一列後索引為6)
           clock_time: dataValues[7] || '', // 欄I: 時間 (跳過第一列後索引為7)
@@ -792,11 +943,10 @@ const Attendance = ({ noLayout = false }) => {
       }
     } catch (error) {
       console.error('CSV import error:', error);
-      Swal.fire({
-        icon: 'error',
-        title: t('attendance.error'),
-        text: error.response?.data?.message || error.message || t('attendance.csvImportFailed')
-      });
+      // 先關閉 modal，並保存錯誤訊息待 modal 完全關閉後顯示
+      setPendingError(error);
+      setCsvImportDialogOpen(false);
+      setCsvFile(null);
     } finally {
       setImporting(false);
     }
@@ -1006,6 +1156,27 @@ const Attendance = ({ noLayout = false }) => {
                       }}
                     >
                       {t('attendance.importCSV')}
+                    </Button>
+                  )}
+                  {canEdit && selectedGroupId && (
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      onClick={handleCopyToMonthlySummary}
+                      startIcon={<ContentCopyIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: 1,
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {t('attendance.copyToMonthlySummary') || '複製到月結表'}
                     </Button>
                   )}
                 </Box>
@@ -1385,19 +1556,21 @@ const Attendance = ({ noLayout = false }) => {
                     {t('attendance.clockRecords') || '打卡記錄'} - {t('attendance.selectValidRecords') || '選擇有效記錄'}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={handleAddClockTime}
-                      startIcon={<ScheduleIcon />}
-                      sx={{
-                        textTransform: 'none',
-                        fontSize: '0.75rem'
-                      }}
-                    >
-                      {t('attendance.addClockTime') || '新增時間'}
-                    </Button>
-                    {editClockRecords && editClockRecords.length > 0 && (
+                    {canEdit && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleAddClockTime}
+                        startIcon={<ScheduleIcon />}
+                        sx={{
+                          textTransform: 'none',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        {t('attendance.addClockTime') || '新增時間'}
+                      </Button>
+                    )}
+                    {canEdit && editClockRecords && editClockRecords.length > 0 && (
                       <Button
                         variant="outlined"
                         size="small"
@@ -1444,7 +1617,9 @@ const Attendance = ({ noLayout = false }) => {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
                                 <Checkbox
                                   checked={isValid}
+                                  disabled={!canEdit}
                                   onChange={(e) => {
+                                    if (!canEdit) return;
                                     const updated = editClockRecords.map(r => {
                                       // 使用 id 或 tempId 來匹配記錄
                                       if (record.id) {
@@ -1466,7 +1641,9 @@ const Attendance = ({ noLayout = false }) => {
                                 <TextField
                                   label={t('attendance.clockTime') || '打卡時間'}
                                   value={editableTime}
+                                  disabled={!canEdit}
                                   onChange={(e) => {
+                                    if (!canEdit) return;
                                     const timeValue = e.target.value;
                                     // 允許輸入過程中的中間狀態
                                     let isValidInput = false;
@@ -1522,22 +1699,24 @@ const Attendance = ({ noLayout = false }) => {
                                     maxLength: 5
                                   }}
                                 />
-                                <IconButton
-                                  color="error"
-                                  size="small"
-                                  onClick={() => {
-                                    if (record.id) {
-                                      // 有 id 的記錄，標記為無效
-                                      handleRemoveClockTime(record.id);
-                                    } else if (record.tempId) {
-                                      // 沒有 id 的新記錄，使用 tempId 刪除
-                                      handleRemoveClockTime(null, record.tempId);
-                                    }
-                                  }}
-                                  sx={{ flexShrink: 0 }}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
+                                {canEdit && (
+                                  <IconButton
+                                    color="error"
+                                    size="small"
+                                    onClick={() => {
+                                      if (record.id) {
+                                        // 有 id 的記錄，標記為無效
+                                        handleRemoveClockTime(record.id);
+                                      } else if (record.tempId) {
+                                        // 沒有 id 的新記錄，使用 tempId 刪除
+                                        handleRemoveClockTime(null, record.tempId);
+                                      }
+                                    }}
+                                    sx={{ flexShrink: 0 }}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                )}
                               </Box>
                             </ListItem>
                           );
@@ -1626,20 +1805,6 @@ const Attendance = ({ noLayout = false }) => {
               }}
             >
               {t('common.cancel')}
-            </Button>
-            <Button 
-              onClick={handleCopyToMonthlySummary}
-              variant="outlined"
-              color="secondary"
-              startIcon={<ContentCopyIcon />}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                px: 3,
-              }}
-            >
-              {t('attendance.copyToMonthlySummary') || '複製到月結表'}
             </Button>
             <Button 
               onClick={handleSaveAttendance} 
