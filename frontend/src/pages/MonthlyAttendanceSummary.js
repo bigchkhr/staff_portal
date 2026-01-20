@@ -38,7 +38,10 @@ import {
   Download as DownloadIcon,
   Visibility as VisibilityIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  Event as EventIcon,
+  CheckCircle as CheckCircleIcon,
+  Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -140,8 +143,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     }
   };
 
+  // 將分鐘數向下取整到指定間隔（例如 30 / 15）
+  const floorMinutesToInterval = (minutes, interval) => {
+    if (minutes === null || minutes === undefined) return null;
+    const m = typeof minutes === 'string' ? Number(minutes) : minutes;
+    if (Number.isNaN(m)) return null;
+    if (!interval || interval <= 0) return Math.floor(m);
+    return Math.floor(m / interval) * interval;
+  };
+
   // 計算一天的考勤數據
-  const calculateDailyAttendance = (attendanceItem, storesMap) => {
+  const calculateDailyAttendance = (attendanceItem, storesMap, employmentMode) => {
     const dateStr = attendanceItem.attendance_date;
     const schedule = attendanceItem.schedule || null;
     const clockRecords = attendanceItem.clock_records || [];
@@ -169,6 +181,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       break_duration: null,
       total_work_hours: null,
       overtime_hours: null,
+      approved_overtime_minutes: null,
       early_leave: false,
       is_late: false,
       is_absent: false,
@@ -275,6 +288,11 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         const overtimeMinutes = actualEnd - scheduleEnd;
         if (overtimeMinutes >= 15) {
           result.overtime_hours = overtimeMinutes / 60;
+
+          // 應計工作時數：按 employment_mode 向下取整
+          const mode = (employmentMode || '').toString().trim().toUpperCase();
+          const interval = mode === 'PT' ? 15 : 30; // FT（或未知）預設 30 分鐘
+          result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, interval);
         }
       }
     }
@@ -403,6 +421,9 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       const end = dayjs(endDate).tz('Asia/Hong_Kong');
       let current = start;
 
+      const selectedUser = users.find(u => Number(u.id) === Number(selectedUserId));
+      const employmentMode = selectedUser?.position_employment_mode || null;
+
       while (current.isBefore(end) || current.isSame(end, 'day')) {
         const dateStr = current.format('YYYY-MM-DD');
         const attendanceItem = attendanceData.find(item => item.attendance_date === dateStr);
@@ -413,7 +434,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
             clock_records: [],
             schedule: null
           },
-          storesMap
+          storesMap,
+          employmentMode
         );
         
         dailyData.push(dayData);
@@ -560,8 +582,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         ? `${selectedUser.employee_number} - ${selectedUser.display_name || selectedUser.name_zh || selectedUser.name || ''}`
         : '';
 
-      // 創建 PDF
-      const doc = new jsPDF('landscape', 'mm', 'a4');
+      // 創建 PDF - 改為縱向（portrait）
+      const doc = new jsPDF('portrait', 'mm', 'a4');
       
       // 使用默認字體（helvetica）避免字體相關錯誤
       // 注意：jsPDF 默認字體不支持中文，所以我們使用英文標籤
@@ -572,9 +594,10 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       doc.setFontSize(18);
       doc.text('Monthly Attendance Summary', 14, 15);
       
-      // 員工信息 - 使用英文避免字體問題
+      // 員工信息 - 使用英文避免字體問題，包含 display_name
       doc.setFontSize(12);
-      doc.text(`Employee: ${selectedUser?.employee_number || ''}`, 14, 22);
+      const employeeDisplayName = selectedUser?.display_name || selectedUser?.name_zh || selectedUser?.name || '';
+      doc.text(`Employee: ${selectedUser?.employee_number || ''} - ${employeeDisplayName}`, 14, 22);
       doc.text(`Year: ${selectedYear}`, 14, 28);
       doc.text(`Month: ${selectedMonth}`, 14, 34);
 
@@ -604,9 +627,39 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         day.late_minutes !== null ? formatTime(day.late_minutes) : '--',
         day.break_duration !== null ? formatTime(day.break_duration) : '--',
         formatHoursAsTime(day.total_work_hours),
-        formatHoursAsTime(day.overtime_hours)
+        formatHoursAsTime(day.overtime_hours),
+        day.approved_overtime_minutes !== null ? formatTime(day.approved_overtime_minutes) : '--'
       ];
     });
+
+    // 計算總計
+    const totals = dailyData.reduce((acc, day) => {
+      acc.late_minutes += day.late_minutes || 0;
+      acc.break_duration += day.break_duration || 0;
+      acc.total_work_hours += day.total_work_hours || 0;
+      acc.overtime_hours += day.overtime_hours || 0;
+      acc.approved_overtime_minutes += day.approved_overtime_minutes || 0;
+      return acc;
+    }, {
+      late_minutes: 0,
+      break_duration: 0,
+      total_work_hours: 0,
+      overtime_hours: 0,
+      approved_overtime_minutes: 0
+    });
+
+    // 準備總計行
+    const totalRow = [
+      'Total',
+      '--',
+      '--',
+      '--',
+      totals.late_minutes > 0 ? formatTime(totals.late_minutes) : '--',
+      totals.break_duration > 0 ? formatTime(totals.break_duration) : '--',
+      formatHoursAsTime(totals.total_work_hours),
+      formatHoursAsTime(totals.overtime_hours),
+      totals.approved_overtime_minutes > 0 ? formatTime(totals.approved_overtime_minutes) : '--'
+    ];
 
     // 表格標題 - 使用英文避免字體問題（需與頁面 table 欄位一致）
     const tableHeaders = [
@@ -617,7 +670,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       'Late',
       'Break',
       'Work',
-      'Overtime'
+      'Overtime',
+      'Approved OT'
     ];
 
     // 確保有數據才生成表格
@@ -625,32 +679,42 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       doc.text('No data available', 14, 50);
     } else {
       // 添加表格 - 不設置自定義字體，使用默認字體
+      // 縱向模式下需要調整列寬，總寬度約為 180mm（A4 縱向寬度減去邊距）
       autoTable(doc, {
         head: [tableHeaders],
         body: tableData,
+        foot: [totalRow],
         startY: 40,
         styles: { 
-          fontSize: 8,
+          fontSize: 7,
           overflow: 'linebreak',
-          cellPadding: 2
+          cellPadding: 1.5
         },
         headStyles: { 
           fillColor: [25, 118, 210], 
           textColor: 255, 
           fontStyle: 'bold',
-          overflow: 'linebreak'
+          overflow: 'linebreak',
+          fontSize: 7
+        },
+        footStyles: {
+          fillColor: [200, 200, 200],
+          textColor: 0,
+          fontStyle: 'bold',
+          fontSize: 7
         },
         alternateRowStyles: { fillColor: [245, 245, 245] },
-        margin: { top: 40 },
+        margin: { top: 40, left: 14, right: 14 },
         columnStyles: {
-          0: { cellWidth: 22 }, // Date
-          1: { cellWidth: 28 }, // Roster
-          2: { cellWidth: 28 }, // Store
-          3: { cellWidth: 65 }, // Clock Times
-          4: { cellWidth: 20 }, // Late
-          5: { cellWidth: 20 }, // Break
-          6: { cellWidth: 22 }, // Work
-          7: { cellWidth: 22 }  // Overtime
+          0: { cellWidth: 18 }, // Date
+          1: { cellWidth: 22 }, // Roster
+          2: { cellWidth: 20 }, // Store
+          3: { cellWidth: 40 }, // Clock Times
+          4: { cellWidth: 15 }, // Late
+          5: { cellWidth: 15 }, // Break
+          6: { cellWidth: 18 }, // Work
+          7: { cellWidth: 18 },  // Overtime
+          8: { cellWidth: 20 }  // Approved OT
         }
       });
     }
@@ -796,6 +860,50 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                 </FormControl>
               </Grid>
             </Grid>
+            
+            {/* 統計信息 */}
+            {summary && dailyData.length > 0 && (
+              <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('attendance.approvedOvertimeHours') || '應計工作時數'}：
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#1565C0' }}>
+                      {(() => {
+                        const totalMinutes = dailyData.reduce((sum, day) => {
+                          return sum + (day.approved_overtime_minutes || 0);
+                        }, 0);
+                        return formatTime(totalMinutes);
+                      })()}
+                    </Typography>
+                  </Grid>
+                  {(() => {
+                    const totalLate = dailyData.reduce((sum, day) => {
+                      return sum + (day.late_minutes || 0);
+                    }, 0);
+                    // 只有總遲到 >= 10 分鐘時才顯示
+                    if (totalLate < 10) return null;
+                    return (
+                      <Grid item xs={12} sm={6} md={3}>
+                        <Typography variant="body2" color="text.secondary">
+                          {t('attendance.totalLateMinutes') || '總遲到分鐘數'}：
+                        </Typography>
+                        <Typography 
+                          variant="h6" 
+                          sx={{ 
+                            fontWeight: 600,
+                            color: 'error.main'
+                          }}
+                        >
+                          {totalLate} {t('attendance.minutes') || '分鐘'}
+                        </Typography>
+                      </Grid>
+                    );
+                  })()}
+                </Grid>
+              </Box>
+            )}
           </Card>
 
           {loading ? (
@@ -833,6 +941,9 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                       </TableCell>
                       <TableCell sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 600 }}>
                         {t('attendance.overtimeHours') || '超時工作時間'}
+                      </TableCell>
+                      <TableCell sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 600 }}>
+                        {t('attendance.approvedOvertimeHours') || '應計工作時數'}
                       </TableCell>
                       <TableCell sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 600 }}>
                         {t('attendance.details') || '詳情'}
@@ -972,17 +1083,43 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                               {schedule ? (
                                 <Box>
                                   {schedule.leave_type_name_zh ? (
-                                    <Chip
-                                      label={schedule.leave_type_name_zh + (schedule.leave_session ? ` (${schedule.leave_session})` : '')}
-                                      size="small"
-                                      color={schedule.is_approved_leave ? 'success' : 'warning'}
-                                      sx={{ mb: 0.5, display: 'block' }}
-                                    />
+                                    <Box sx={{ mb: 0.5 }}>
+                                      <Chip
+                                        icon={schedule.is_approved_leave ? <CheckCircleIcon /> : <EventIcon />}
+                                        label={
+                                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                              {schedule.leave_type_name_zh}
+                                            </Typography>
+                                            {schedule.leave_session && (
+                                              <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                                ({schedule.leave_session})
+                                              </Typography>
+                                            )}
+                                          </Box>
+                                        }
+                                        size="small"
+                                        color={schedule.is_approved_leave ? 'success' : 'warning'}
+                                        sx={{ 
+                                          display: 'inline-flex',
+                                          fontWeight: 600,
+                                          boxShadow: schedule.is_approved_leave 
+                                            ? '0 2px 4px rgba(76, 175, 80, 0.3)' 
+                                            : '0 2px 4px rgba(237, 108, 2, 0.3)',
+                                          '& .MuiChip-icon': {
+                                            fontSize: '1rem'
+                                          }
+                                        }}
+                                      />
+                                    </Box>
                                   ) : null}
                                   {(schedule.start_time || schedule.end_time) ? (
-                                    <Typography variant="caption" display="block" sx={{ fontSize: '0.75rem' }}>
-                                      {schedule.start_time ? formatTimeDisplay(schedule.start_time) : '--:--'} - {schedule.end_time ? formatTimeDisplay(schedule.end_time) : '--:--'}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: schedule.leave_type_name_zh ? 0.5 : 0 }}>
+                                      <ScheduleIcon sx={{ fontSize: '0.875rem', color: 'text.secondary' }} />
+                                      <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
+                                        {schedule.start_time ? formatTimeDisplay(schedule.start_time) : '--:--'} - {schedule.end_time ? formatTimeDisplay(schedule.end_time) : '--:--'}
+                                      </Typography>
+                                    </Box>
                                   ) : schedule.leave_type_name_zh ? null : (
                                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
                                       {t('attendance.noScheduleTime') || '無排班時間'}
@@ -1041,10 +1178,39 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                 )}
                               </Box>
                             </TableCell>
-                            <TableCell>{day.late_minutes !== null ? formatTime(day.late_minutes) : '--'}</TableCell>
+                            <TableCell>
+                              {day.late_minutes !== null ? (
+                                <Typography
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: 'error.main',
+                                    display: 'inline-block'
+                                  }}
+                                >
+                                  {formatTime(day.late_minutes)}
+                                </Typography>
+                              ) : (
+                                '--'
+                              )}
+                            </TableCell>
                             <TableCell>{day.break_duration !== null ? formatTime(day.break_duration) : '--'}</TableCell>
                             <TableCell>{formatHoursAsTime(day.total_work_hours)}</TableCell>
                             <TableCell>{formatHoursAsTime(day.overtime_hours)}</TableCell>
+                            <TableCell>
+                              {day.approved_overtime_minutes !== null ? (
+                                <Typography
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: '#1565C0', // 深藍色
+                                    display: 'inline-block'
+                                  }}
+                                >
+                                  {formatTime(day.approved_overtime_minutes)}
+                                </Typography>
+                              ) : (
+                                '--'
+                              )}
+                            </TableCell>
                             <TableCell>
                               <IconButton
                                 size="small"
@@ -1081,6 +1247,75 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                         </React.Fragment>
                       );
                     })}
+                    
+                    {/* 總計行 */}
+                    {dailyData.length > 0 && (() => {
+                      const totals = dailyData.reduce((acc, day) => {
+                        acc.late_minutes += day.late_minutes || 0;
+                        acc.break_duration += day.break_duration || 0;
+                        acc.total_work_hours += day.total_work_hours || 0;
+                        acc.overtime_hours += day.overtime_hours || 0;
+                        acc.approved_overtime_minutes += day.approved_overtime_minutes || 0;
+                        return acc;
+                      }, {
+                        late_minutes: 0,
+                        break_duration: 0,
+                        total_work_hours: 0,
+                        overtime_hours: 0,
+                        approved_overtime_minutes: 0
+                      });
+
+                      return (
+                        <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 600 }}>
+                          <TableCell sx={{ fontWeight: 700 }}>
+                            {t('common.total') || '總計'}
+                          </TableCell>
+                          <TableCell>--</TableCell>
+                          <TableCell>--</TableCell>
+                          <TableCell>--</TableCell>
+                          <TableCell>
+                            {totals.late_minutes > 0 ? (
+                              <Typography
+                                sx={{
+                                  fontWeight: 700,
+                                  color: 'error.main',
+                                  display: 'inline-block'
+                                }}
+                              >
+                                {formatTime(totals.late_minutes)}
+                              </Typography>
+                            ) : (
+                              '--'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {totals.break_duration > 0 ? formatTime(totals.break_duration) : '--'}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {formatHoursAsTime(totals.total_work_hours)}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {formatHoursAsTime(totals.overtime_hours)}
+                          </TableCell>
+                          <TableCell>
+                            {totals.approved_overtime_minutes > 0 ? (
+                              <Typography
+                                sx={{
+                                  fontWeight: 700,
+                                  color: '#1565C0',
+                                  display: 'inline-block'
+                                }}
+                              >
+                                {formatTime(totals.approved_overtime_minutes)}
+                              </Typography>
+                            ) : (
+                              '--'
+                            )}
+                          </TableCell>
+                          <TableCell>--</TableCell>
+                        </TableRow>
+                      );
+                    })()}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -1149,14 +1384,34 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                             )}
                             {schedule.leave_type_name_zh && (
                               <Grid item xs={12}>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                                   {t('attendance.leaveType') || '假期類型'}:
                                 </Typography>
                                 <Chip
-                                  label={schedule.leave_type_name_zh + 
-                                    (schedule.leave_session ? ` (${schedule.leave_session})` : '')}
+                                  icon={schedule.is_approved_leave ? <CheckCircleIcon /> : <EventIcon />}
+                                  label={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                        {schedule.leave_type_name_zh}
+                                      </Typography>
+                                      {schedule.leave_session && (
+                                        <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                                          ({schedule.leave_session})
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                  }
                                   color={schedule.is_approved_leave ? 'success' : 'warning'}
-                                  size="small"
+                                  size="medium"
+                                  sx={{ 
+                                    fontWeight: 600,
+                                    boxShadow: schedule.is_approved_leave 
+                                      ? '0 2px 6px rgba(76, 175, 80, 0.3)' 
+                                      : '0 2px 6px rgba(237, 108, 2, 0.3)',
+                                    '& .MuiChip-icon': {
+                                      fontSize: '1.1rem'
+                                    }
+                                  }}
                                 />
                               </Grid>
                             )}
@@ -1172,43 +1427,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                       })()}
                     </Box>
                   )}
-
-                  {/* 有效的打卡記錄 */}
-                  {(() => {
-                    const validRecords = selectedDayDetail.valid_clock_records || [];
-                    if (validRecords.length > 0) {
-                      return (
-                        <Box>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                            {t('attendance.validClockRecords') || '有效打卡記錄'} ({validRecords.length})
-                          </Typography>
-                          <TableContainer>
-                            <Table size="small">
-                              <TableHead>
-                                <TableRow>
-                                  <TableCell sx={{ fontWeight: 600 }}>#</TableCell>
-                                  <TableCell sx={{ fontWeight: 600 }}>{t('attendance.clockTime') || '打卡時間'}</TableCell>
-                                  <TableCell sx={{ fontWeight: 600 }}>{t('attendance.inOut') || '進出'}</TableCell>
-                                  <TableCell sx={{ fontWeight: 600 }}>{t('attendance.branchCode') || '分行代碼'}</TableCell>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {validRecords.map((record, idx) => (
-                                  <TableRow key={record.id || idx}>
-                                    <TableCell>{idx + 1}</TableCell>
-                                    <TableCell>{formatTimeDisplay(record.clock_time)}</TableCell>
-                                    <TableCell>{record.in_out || '--'}</TableCell>
-                                    <TableCell>{record.branch_code || '--'}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableContainer>
-                        </Box>
-                      );
-                    }
-                    return null;
-                  })()}
 
                   {/* 所有打卡記錄 */}
                   {selectedDayDetail.attendance_data?.clock_records && selectedDayDetail.attendance_data.clock_records.length > 0 && (

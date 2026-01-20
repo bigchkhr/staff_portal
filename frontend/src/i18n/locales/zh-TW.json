@@ -38,7 +38,8 @@
     "description": "說明",
     "required": "必填",
     "optional": "選填",
-    "unknownError": "未知錯誤"
+    "unknownError": "未知錯誤",
+    "total": "總計"
   },
   "login": {
     "title": "Staff Portal",
@@ -1305,6 +1306,8 @@
     "breakDuration": "Break時間(分鐘)",
     "totalWorkHours": "全日上班總時數",
     "overtimeHours": "超時工作時間",
+    "approvedOvertimeHours": "應計工作時數",
+    "totalLateMinutes": "總遲到分鐘數",
     "earlyLeave": "早退",
     "isLate": "遲到",
     "isAbsent": "缺勤",

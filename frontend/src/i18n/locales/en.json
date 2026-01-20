@@ -38,7 +38,8 @@
     "description": "Description",
     "required": "Required",
     "optional": "Optional",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "total": "Total"
   },
   "login": {
     "title": "Staff Portal",
@@ -1294,6 +1295,8 @@
     "breakDuration": "Break Duration (minutes)",
     "totalWorkHours": "Total Work Hours",
     "overtimeHours": "Overtime Hours",
+    "approvedOvertimeHours": "Accrued Work Hours",
+    "totalLateMinutes": "Total Late Minutes",
     "earlyLeave": "Early Leave",
     "isLate": "Late",
     "isAbsent": "Absent",

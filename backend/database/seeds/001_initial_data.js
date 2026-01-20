@@ -1035,10 +1035,40 @@ exports.seed = async function (knex) {
         name: 'E-Learning',
         narrative: '',
         logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
-        url: 'https://e-learning.bigchk.com',
+        url: 'https://elearning.bigchk.com',
         created_by_id: 31,
         updated_by_id: 31,
         display_order: 3,
+        is_active: true
+      },
+      {
+        name: 'Gold System',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'http://bgcgoldv5.bigc.co.th/',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 4,
+        is_active: true
+      },
+      {
+        name: 'Symphony',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://bgcsymphony2.bigc.co.th/MWRSWEB/login.jsp',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 5,
+        is_active: true
+      },
+      {
+        name: 'Price Sign Printing Tool',
+        narrative: '',
+        logo_url: 'https://tse4.mm.bing.net/th/id/OIP.32LGb1VtSYlZ01XzqXMWKAHaHa?w=144&h=180&c=7&r=0&o=7&pid=1.7&rm=3',
+        url: 'https://interppst.bigc.co.th/PSTWEB/#/home',
+        created_by_id: 31,
+        updated_by_id: 31,
+        display_order: 6,
         is_active: true
       },
       {
@@ -1048,7 +1078,7 @@ exports.seed = async function (knex) {
         url: 'https://www.aia.com.hk/content/dam/hk/pdf/claims-corner/employee_benefits/GPOPCF01%200215%20OP%20Claims%20Form.pdf',
         created_by_id: 31,
         updated_by_id: 31,
-        display_order: 4,
+        display_order: 7,
         is_active: true
       },
       {
@@ -1058,7 +1088,7 @@ exports.seed = async function (knex) {
         url: 'http://172.31.128.23/timeAttendancehR',
         created_by_id: 31,
         updated_by_id: 31,
-        display_order: 5,
+        display_order: 8,
         is_active: true
       }
     ]);
