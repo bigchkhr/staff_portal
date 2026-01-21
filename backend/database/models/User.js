@@ -185,6 +185,32 @@ class User {
     }
   }
 
+  // 檢查使用者是否為任何部門群組的批核成員（checker / approver_1 / approver_2 / approver_3）
+  static async isApprovalMember(userId) {
+    try {
+      const delegationGroups = await this.getDelegationGroups(userId);
+      const delegationGroupIds = (delegationGroups || [])
+        .map((g) => Number(g.id))
+        .filter((id) => !Number.isNaN(id));
+
+      if (delegationGroupIds.length === 0) {
+        return false;
+      }
+
+      const match = await knex('department_groups')
+        .whereIn('checker_id', delegationGroupIds)
+        .orWhereIn('approver_1_id', delegationGroupIds)
+        .orWhereIn('approver_2_id', delegationGroupIds)
+        .orWhereIn('approver_3_id', delegationGroupIds)
+        .first('id');
+
+      return !!match;
+    } catch (error) {
+      console.error('[isApprovalMember] Error:', error);
+      return false;
+    }
+  }
+
   // 檢查使用者是否可以批核某個假期申請
   // 檢查用戶是否可以查看申請（包括批核歷史）
   static async canViewApplication(userId, leaveApplicationId) {

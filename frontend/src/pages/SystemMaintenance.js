@@ -17,7 +17,8 @@ import {
   Business as BusinessIcon,
   Work as WorkIcon,
   Group as GroupIcon,
-  CalendarToday as CalendarTodayIcon
+  CalendarToday as CalendarTodayIcon,
+  Storefront as StorefrontIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -64,6 +65,12 @@ const SystemMaintenance = () => {
       icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
       path: '/admin/public-holidays',
       translationKey: 'publicHolidayManagement'
+    },
+    {
+      key: 'storeManagement',
+      icon: <StorefrontIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/stores',
+      translationKey: 'storeManagement'
     }
   ];
 

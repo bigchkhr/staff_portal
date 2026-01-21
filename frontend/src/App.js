@@ -28,6 +28,7 @@ import AdminGroups from './pages/AdminGroups';
 import AdminPaperFlow from './pages/AdminPaperFlow';
 import AdminExtraWorkingHoursPaperFlow from './pages/AdminExtraWorkingHoursPaperFlow';
 import AdminOutdoorWorkPaperFlow from './pages/AdminOutdoorWorkPaperFlow';
+import AdminStores from './pages/AdminStores';
 import ChangePassword from './pages/ChangePassword';
 import HRDocumentUpload from './pages/HRDocumentUpload';
 import EmployeeDocuments from './pages/EmployeeDocuments';
@@ -48,6 +49,7 @@ import MyRoster from './pages/MyRoster';
 import MyAttendance from './pages/MyAttendance';
 import MyContacts from './pages/MyContacts';
 import MonthlyAttendanceSummary from './pages/MonthlyAttendanceSummary';
+import StoreDirectory from './pages/StoreDirectory';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -98,6 +100,7 @@ function App() {
             <Route path="/admin/balances" element={<PrivateRoute><AdminBalances /></PrivateRoute>} />
             <Route path="/admin/departments" element={<PrivateRoute><AdminDepartments /></PrivateRoute>} />
             <Route path="/admin/positions" element={<PrivateRoute><AdminPositions /></PrivateRoute>} />
+            <Route path="/admin/stores" element={<PrivateRoute><AdminStores /></PrivateRoute>} />
             <Route path="/admin/groups" element={<PrivateRoute><AdminGroups /></PrivateRoute>} />
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
@@ -113,6 +116,7 @@ function App() {
             <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />
             <Route path="/my-attendance" element={<PrivateRoute><MyAttendance /></PrivateRoute>} />
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />
+            <Route path="/tools/stores" element={<PrivateRoute><StoreDirectory /></PrivateRoute>} />
             <Route path="/monthly-attendance-summary" element={<PrivateRoute><MonthlyAttendanceSummary /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

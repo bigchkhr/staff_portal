@@ -12,6 +12,7 @@
     "add": "新增",
     "search": "搜尋",
     "filter": "篩選",
+    "all": "全部",
     "reset": "重設",
     "confirm": "確認",
     "back": "返回",
@@ -90,9 +91,29 @@
     "positionManagement": "職位管理",
     "groupManagement": "群組管理",
     "publicHolidayManagement": "法定假日管理",
+    "storeManagement": "店舖管理",
     "changePassword": "更改密碼",
     "logout": "登出",
     "systemTitle": "網上職員平台"
+  },
+  "adminStores": {
+    "title": "店舖管理",
+    "addStore": "新增店舖",
+    "editStore": "編輯店舖",
+    "storeCode": "店舖編號",
+    "shortName": "店舖簡稱",
+    "district": "地區",
+    "tel": "電話",
+    "email": "電郵",
+    "openDate": "開業日期",
+    "closeDate": "結業日期",
+    "isClosed": "已關閉",
+    "addressEn": "地址（英文）",
+    "addressChi": "地址（中文）",
+    "actions": "操作",
+    "noStores": "沒有店舖資料",
+    "confirmDelete": "確定要刪除此店舖？",
+    "operationFailed": "操作失敗"
   },
   "dashboard": {
     "welcome": "歡迎，{{name}}",
@@ -716,7 +737,20 @@
     "pageDescription": "訪問表格庫和外部連結等實用工具",
     "formLibrary": "表格庫",
     "externalLinks": "外部連結",
-    "myContacts": "我的聯絡人"
+    "myContacts": "我的聯絡人",
+    "storeDirectory": "店舖資訊"
+  },
+  "storeDirectory": {
+    "title": "店舖資訊",
+    "storeCode": "店舖編號",
+    "shortName": "店舖簡稱",
+    "district": "地區",
+    "tel": "電話",
+    "email": "電郵",
+    "address": "地址",
+    "noStores": "沒有店舖資料",
+    "fetchFailed": "獲取店舖資料失敗",
+    "count": "共 {{count}} 間"
   },
   "shiftManagement": {
     "title": "更表",

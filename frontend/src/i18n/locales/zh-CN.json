@@ -12,6 +12,7 @@
     "add": "新增",
     "search": "搜索",
     "filter": "筛选",
+    "all": "全部",
     "reset": "重置",
     "confirm": "确认",
     "back": "返回",
@@ -90,9 +91,29 @@
     "positionManagement": "职位管理",
     "groupManagement": "群组管理",
     "publicHolidayManagement": "法定假日管理",
+    "storeManagement": "店铺管理",
     "changePassword": "更改密码",
     "logout": "登出",
     "systemTitle": "员工线上平台"
+  },
+  "adminStores": {
+    "title": "店铺管理",
+    "addStore": "新增店铺",
+    "editStore": "编辑店铺",
+    "storeCode": "店铺编号",
+    "shortName": "店铺简称",
+    "district": "地区",
+    "tel": "电话",
+    "email": "电邮",
+    "openDate": "开业日期",
+    "closeDate": "结业日期",
+    "isClosed": "已关闭",
+    "addressEn": "地址（英文）",
+    "addressChi": "地址（中文）",
+    "actions": "操作",
+    "noStores": "没有店铺资料",
+    "confirmDelete": "确定要删除此店铺？",
+    "operationFailed": "操作失败"
   },
   "dashboard": {
     "welcome": "欢迎，{{name}}",
@@ -711,7 +732,20 @@
     "pageDescription": "访问表格库和外部链接等实用工具",
     "formLibrary": "表格库",
     "externalLinks": "外部链接",
-    "myContacts": "我的联系人"
+    "myContacts": "我的联系人",
+    "storeDirectory": "店铺资讯"
+  },
+  "storeDirectory": {
+    "title": "店铺资讯",
+    "storeCode": "店铺编号",
+    "shortName": "店铺简称",
+    "district": "地区",
+    "tel": "电话",
+    "email": "电邮",
+    "address": "地址",
+    "noStores": "没有店铺资料",
+    "fetchFailed": "获取店铺资料失败",
+    "count": "共 {{count}} 间"
   },
   "shiftManagement": {
     "title": "更表",

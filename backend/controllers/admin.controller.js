@@ -496,6 +496,117 @@ class AdminController {
       res.status(500).json({ message: '獲取職位列表時發生錯誤' });
     }
   }
+
+  // ===== Stores 管理 =====
+  async getStores(req, res) {
+    try {
+      const stores = await knex('stores').orderBy('store_code');
+      res.json({ stores });
+    } catch (error) {
+      console.error('Get stores error:', error);
+      res.status(500).json({ message: '獲取店舖列表時發生錯誤', error: error.message });
+    }
+  }
+
+  async createStore(req, res) {
+    try {
+      const {
+        store_code,
+        store_short_name_,
+        address_en,
+        address_chi,
+        tel,
+        email,
+        open_date,
+        close_date,
+        district,
+        is_closed
+      } = req.body;
+
+      if (!store_code) {
+        return res.status(400).json({ message: '請填寫店舖編號（store_code）' });
+      }
+
+      const existing = await knex('stores').where('store_code', store_code).first('id');
+      if (existing) {
+        return res.status(400).json({ message: '店舖編號已被使用' });
+      }
+
+      const insertData = {
+        store_code: String(store_code).trim(),
+        store_short_name_: store_short_name_ ? String(store_short_name_).trim() : null,
+        address_en: address_en || null,
+        address_chi: address_chi || null,
+        tel: tel || null,
+        email: email || null,
+        open_date: open_date || null,
+        close_date: close_date || null,
+        district: district || null,
+        is_closed: is_closed !== undefined ? !!is_closed : false
+      };
+
+      const [store] = await knex('stores').insert(insertData).returning('*');
+
+      res.status(201).json({
+        message: '店舖已建立',
+        store
+      });
+    } catch (error) {
+      console.error('Create store error:', error);
+      res.status(500).json({ message: '建立店舖時發生錯誤', error: error.message });
+    }
+  }
+
+  async updateStore(req, res) {
+    try {
+      const { id } = req.params;
+      const updateData = { ...req.body };
+
+      if (updateData.store_code) {
+        updateData.store_code = String(updateData.store_code).trim();
+        const existing = await knex('stores')
+          .where('store_code', updateData.store_code)
+          .andWhereNot('id', id)
+          .first('id');
+        if (existing) {
+          return res.status(400).json({ message: '店舖編號已被使用' });
+        }
+      }
+
+      if (updateData.store_short_name_ !== undefined && updateData.store_short_name_ !== null) {
+        updateData.store_short_name_ = String(updateData.store_short_name_).trim();
+      }
+
+      if (updateData.is_closed !== undefined) {
+        updateData.is_closed = !!updateData.is_closed;
+      }
+
+      await knex('stores').where('id', id).update(updateData);
+      const store = await knex('stores').where('id', id).first();
+
+      res.json({
+        message: '店舖已更新',
+        store
+      });
+    } catch (error) {
+      console.error('Update store error:', error);
+      res.status(500).json({ message: '更新店舖時發生錯誤', error: error.message });
+    }
+  }
+
+  async deleteStore(req, res) {
+    try {
+      const { id } = req.params;
+      const deleted = await knex('stores').where('id', id).del();
+      if (!deleted) {
+        return res.status(404).json({ message: '店舖不存在' });
+      }
+      res.json({ message: '店舖已刪除' });
+    } catch (error) {
+      console.error('Delete store error:', error);
+      res.status(500).json({ message: '刪除店舖時發生錯誤', error: error.message });
+    }
+  }
 }
 
 module.exports = new AdminController();

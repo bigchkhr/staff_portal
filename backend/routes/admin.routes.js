@@ -27,4 +27,10 @@ router.post('/positions', adminController.createPosition);
 router.put('/positions/:id', adminController.updatePosition);
 router.get('/positions', adminController.getPositions);
 
+// Stores (店舖) 管理
+router.get('/stores', adminController.getStores);
+router.post('/stores', adminController.createStore);
+router.put('/stores/:id', adminController.updateStore);
+router.delete('/stores/:id', adminController.deleteStore);
+
 module.exports = router;

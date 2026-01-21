@@ -13,7 +13,8 @@ import {
 import {
   Description as DescriptionIcon,
   Link as LinkIcon,
-  Contacts as ContactsIcon
+  Contacts as ContactsIcon,
+  Storefront as StorefrontIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -42,6 +43,12 @@ const Tools = () => {
       icon: <LinkIcon sx={{ fontSize: 48 }} />,
       path: '/external-links',
       translationKey: 'externalLinks'
+    },
+    {
+      key: 'storeDirectory',
+      icon: <StorefrontIcon sx={{ fontSize: 48 }} />,
+      path: '/tools/stores',
+      translationKey: 'storeDirectory'
     }
   ];
 

@@ -1,10 +1,13 @@
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const User = require('../database/models/User');
 
 // HR 成員檢查緩存（避免每次請求都查詢數據庫）
 const hrMemberCache = new Map();
+// 批核成員（checker/approver1/2/3）檢查緩存（避免每次請求都查詢數據庫）
+const approvalMemberCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 緩存 5 分鐘
 
 // 定期清理過期緩存（每 10 分鐘清理一次）
@@ -13,6 +16,11 @@ setInterval(() => {
   for (const [key, value] of hrMemberCache.entries()) {
     if (now - value.timestamp >= CACHE_TTL) {
       hrMemberCache.delete(key);
+    }
+  }
+  for (const [key, value] of approvalMemberCache.entries()) {
+    if (now - value.timestamp >= CACHE_TTL) {
+      approvalMemberCache.delete(key);
     }
   }
 }, 10 * 60 * 1000);
@@ -42,9 +50,34 @@ const checkHRMembership = async (userId) => {
   }
 };
 
-// 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 成員不受限制）
+// 檢查用戶是否為批核成員（checker/approver1/2/3）（帶緩存）
+const checkApprovalMembership = async (userId) => {
+  const cacheKey = `approval_member_${userId}`;
+  const cached = approvalMemberCache.get(cacheKey);
+
+  // 如果緩存存在且未過期，直接返回
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.isApprovalMember;
+  }
+
+  // 查詢數據庫
+  try {
+    const isApprovalMember = await User.isApprovalMember(userId);
+    // 更新緩存
+    approvalMemberCache.set(cacheKey, {
+      isApprovalMember,
+      timestamp: Date.now()
+    });
+    return isApprovalMember;
+  } catch (error) {
+    console.warn('[checkApprovalMembership] Error:', error.message);
+    return false;
+  }
+};
+
+// 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 與批核角色（checker/approver1/2/3）不受限制）
 const apiLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 分鐘
+  windowMs: 15* 60 * 1000, // 15 分鐘
   max: 150, // 限制 150 個請求
   message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,
@@ -62,11 +95,11 @@ const apiLimiter = rateLimit({
           return `user_${decoded.userId}`;
         }
       }
-      // 如果沒有 token 或無法解析，回退到使用 IP 地址
-      return req.ip || req.connection.remoteAddress || 'unknown';
+      // 如果沒有 token 或無法解析，回退到使用 IP（用 ipKeyGenerator 正確處理 IPv6）
+      return ipKeyGenerator(req);
     } catch (error) {
-      // 如果解析失敗，回退到使用 IP 地址
-      return req.ip || req.connection.remoteAddress || 'unknown';
+      // 如果解析失敗，回退到使用 IP（用 ipKeyGenerator 正確處理 IPv6）
+      return ipKeyGenerator(req);
     }
   },
   handler: (req, res) => {
@@ -88,7 +121,7 @@ const apiLimiter = rateLimit({
       error: 'TOO_MANY_REQUESTS'
     });
   },
-  // 跳過 HR Group 成員的請求
+  // 跳過 HR Group 與批核角色（checker/approver1/2/3）的請求
   skip: async (req) => {
     try {
       // 嘗試從 Authorization header 獲取 token
@@ -103,12 +136,16 @@ const apiLimiter = rateLimit({
         return false; // token 無效，不跳過
       }
 
-      // 檢查是否為 HR Group 成員（使用緩存）
-      const isHRMember = await checkHRMembership(decoded.userId);
-      return isHRMember; // 如果是 HR 成員，跳過 rate limit
+      // 檢查是否為 HR Group 成員或批核成員（使用緩存）
+      const [isHRMember, isApprovalMember] = await Promise.all([
+        checkHRMembership(decoded.userId),
+        checkApprovalMembership(decoded.userId)
+      ]);
+
+      return isHRMember || isApprovalMember; // 如果是 HR 或批核角色，跳過 rate limit
     } catch (error) {
       // 如果檢查失敗，不跳過（應用 rate limit 以確保安全）
-      console.warn('[apiLimiter] Error checking HR membership:', error.message);
+      console.warn('[apiLimiter] Error checking membership:', error.message);
       return false;
     }
   }

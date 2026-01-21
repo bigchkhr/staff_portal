@@ -9,7 +9,19 @@ router.get('/', authenticate, async (req, res) => {
     const stores = await knex('stores')
       .where('is_closed', false)
       .orderBy('store_code')
-      .select('id', 'store_code', 'store_short_name_');
+      .select(
+        'id',
+        'store_code',
+        'store_short_name_',
+        'district',
+        'tel',
+        'email',
+        'address_en',
+        'address_chi',
+        'open_date',
+        'close_date',
+        'is_closed'
+      );
     
     res.json({ stores });
   } catch (error) {

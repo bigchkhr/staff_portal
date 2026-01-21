@@ -12,6 +12,7 @@
     "add": "Add",
     "search": "Search",
     "filter": "Filter",
+    "all": "All",
     "reset": "Reset",
     "confirm": "Confirm",
     "back": "Back",
@@ -90,9 +91,29 @@
     "positionManagement": "Position Management",
     "groupManagement": "Group Management",
     "publicHolidayManagement": "Statutory Holiday Management",
+    "storeManagement": "Store Management",
     "changePassword": "Change Password",
     "logout": "Logout",
     "systemTitle": "Staff Portal"
+  },
+  "adminStores": {
+    "title": "Store Management",
+    "addStore": "Add Store",
+    "editStore": "Edit Store",
+    "storeCode": "Store Code",
+    "shortName": "Short Name",
+    "district": "District",
+    "tel": "Tel",
+    "email": "Email",
+    "openDate": "Open Date",
+    "closeDate": "Close Date",
+    "isClosed": "Closed",
+    "addressEn": "Address (EN)",
+    "addressChi": "Address (ZH)",
+    "actions": "Actions",
+    "noStores": "No stores",
+    "confirmDelete": "Are you sure you want to delete this store?",
+    "operationFailed": "Operation failed"
   },
   "dashboard": {
     "welcome": "Welcome, {{name}}",
@@ -716,7 +737,20 @@
     "pageDescription": "Access useful tools including form library and external links",
     "formLibrary": "Form Library",
     "externalLinks": "External Links",
-    "myContacts": "My Contacts"
+    "myContacts": "My Contacts",
+    "storeDirectory": "Store Directory"
+  },
+  "storeDirectory": {
+    "title": "Store Directory",
+    "storeCode": "Store Code",
+    "shortName": "Short Name",
+    "district": "District",
+    "tel": "Tel",
+    "email": "Email",
+    "address": "Address",
+    "noStores": "No stores",
+    "fetchFailed": "Failed to fetch stores",
+    "count": "Total: {{count}}"
   },
   "shiftManagement": {
     "title": "Shift Management",
