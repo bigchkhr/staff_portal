@@ -89,7 +89,7 @@ exports.seed = async function (knex) {
   // 建立部門
   await knex('departments').insert([
     { name: 'Accounting', name_zh: '會計部', description: '' },
-    { name: 'B2B', name_zh: '企客業務部', description: '' },
+    { name: 'B2B', name_zh: '商務部', description: '' },
     { name: 'Business Development', name_zh: '業務拓展部', description: '' },
     { name: 'Category', name_zh: '品類部', description: '' },
     { name: 'General Administration', name_zh: '行政部', description: '' },
@@ -562,7 +562,7 @@ exports.seed = async function (knex) {
       name: 'Retail Store - FAN',
       name_zh: '零售店舖群組 - FAN',
       description: '',
-      user_ids: [87, 328, 467, 468, 480, 481],
+      user_ids: [87, 328, 467, 468, 480, 481, 483],
       checker_id: 30,
       approver_1_id: 12,
       approver_2_id: null,
@@ -939,6 +939,30 @@ exports.seed = async function (knex) {
     {
       store_code: '83038',
       store_short_name_: 'YL4',
+      address_en: null,
+      address_chi: null,
+      tel: null,
+      email: null,
+      open_date: null,
+      close_date: null,
+      district: null,
+      is_closed: false
+    },
+    {
+      store_code: '83041',
+      store_short_name_: 'HO',
+      address_en: null,
+      address_chi: null,
+      tel: null,
+      email: null,
+      open_date: null,
+      close_date: null,
+      district: null,
+      is_closed: false
+    },
+    {
+      store_code: '83301',
+      store_short_name_: 'HO',
       address_en: null,
       address_chi: null,
       tel: null,
