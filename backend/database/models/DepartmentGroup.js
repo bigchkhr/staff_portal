@@ -176,7 +176,8 @@ class DepartmentGroup {
           'departments.name_zh as department_name_zh',
           'positions.name as position_name',
           'positions.name_zh as position_name_zh',
-          'positions.display_order as position_display_order'
+          'positions.display_order as position_display_order',
+          'positions.employment_mode as position_employment_mode'
         )
         .orderBy('positions.display_order', 'asc')
         .orderBy('users.employee_number', 'asc'); // 如果 display_order 相同，按員工編號排序

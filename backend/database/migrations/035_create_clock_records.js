@@ -4,8 +4,8 @@ exports.up = function(knex) {
     // POS CSV 原始數據欄位（與CSV格式一致）
     // CSV 格式：欄A=數位(不參考), 欄B=分行代碼, 欄C=運行日期(不參考), 欄D=員工ID, 欄E=員工姓名, 欄F=TILL(不參考), 欄G=Clock in/Clock out, 欄H=日期, 欄I=時間
     table.string('employee_number', 50).notNullable(); // 欄D: 員工ID
-    table.string('name', 255).notNullable(); // 欄E: 員工姓名
-    table.string('branch_code', 50).notNullable(); // 欄B: 分行代碼
+    table.string('name', 255); // 欄E: 員工姓名
+    table.string('branch_code', 50); // 欄B: 分行代碼
     table.date('attendance_date').notNullable(); // 欄H: 日期
     table.time('clock_time').notNullable(); // 欄I: 時間
     table.string('in_out', 10).notNullable(); // 欄G: Clock in/Clock out (如 IN1, OUT1, IN2, OUT2)

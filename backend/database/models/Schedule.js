@@ -293,7 +293,14 @@ class Schedule {
     const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
 
-    return isChecker || isApprover1 || isApprover2 || isApprover3;
+    // 如果用戶是 checker，需要檢查 allow_checker_edit 設置
+    if (isChecker) {
+      // allow_checker_edit 默認為 true，如果為 false 則不允許 checker 編輯
+      return group.allow_checker_edit !== false;
+    }
+
+    // approver1, approver2, approver3 可以直接編輯
+    return isApprover1 || isApprover2 || isApprover3;
   }
 }
 

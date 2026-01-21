@@ -43,11 +43,9 @@ import {
   Edit as EditIcon, 
   Delete as DeleteIcon,
   AccessTime as AccessTimeIcon,
-  CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Schedule as ScheduleIcon,
-  Upload as UploadIcon,
-  ContentCopy as ContentCopyIcon
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
@@ -82,7 +80,6 @@ const Attendance = ({ noLayout = false }) => {
   const [editClockOutTime, setEditClockOutTime] = useState(null);
   const [editTimeOffStart, setEditTimeOffStart] = useState(null);
   const [editTimeOffEnd, setEditTimeOffEnd] = useState(null);
-  const [editRemarks, setEditRemarks] = useState('');
   const [editClockRecords, setEditClockRecords] = useState([]); // 存儲所有打卡記錄，用於選擇有效性
   const [editClockTimes, setEditClockTimes] = useState([]); // 存儲可編輯的打卡時間列表 [{id, time, is_valid}, ...]
   const [editStoreId, setEditStoreId] = useState(null);
@@ -92,6 +89,7 @@ const Attendance = ({ noLayout = false }) => {
   const [importing, setImporting] = useState(false);
   const [canEdit, setCanEdit] = useState(false); // 檢查用戶是否為 approver1、approver2、approver3（不包含 checker）
   const [pendingError, setPendingError] = useState(null); // 待顯示的錯誤訊息
+  const [isEditMode, setIsEditMode] = useState(false); // 編輯模式狀態
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -259,7 +257,6 @@ const Attendance = ({ noLayout = false }) => {
     setEditClockOutTime(item.attendance?.clock_out_time ? dayjs(item.attendance.clock_out_time, 'HH:mm:ss') : null);
     setEditTimeOffStart(item.attendance?.time_off_start ? dayjs(item.attendance.time_off_start, 'HH:mm:ss') : null);
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
-    setEditRemarks(item.attendance?.remarks || '');
     // 設置店舖ID（從 schedule 中獲取），但需要從 stores 數據中查找對應的店舖
     const scheduleStoreId = item.schedule?.store_id;
     if (scheduleStoreId !== undefined && scheduleStoreId !== null) {
@@ -286,7 +283,9 @@ const Attendance = ({ noLayout = false }) => {
     setEditClockRecords(clockRecords.map(record => ({
       ...record,
       is_valid: record.is_valid === true, // 保留當前的有效性狀態
-      editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '' // 可編輯的時間字符串
+      editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '', // 可編輯的時間字符串
+      editableBranchCode: record.branch_code || '', // 可編輯的分行代碼
+      editableRemarks: record.remarks || '' // 可編輯的備註
     })));
     
     console.log('Final editClockRecords:', clockRecords);
@@ -336,6 +335,8 @@ const Attendance = ({ noLayout = false }) => {
       in_out: 'IN1',
       is_valid: true,
       editableTime: '', // 可編輯的時間字符串
+      editableBranchCode: '', // 可編輯的分行代碼
+      editableRemarks: '', // 可編輯的備註
       created_by_id: null,
       updated_by_id: null
     };
@@ -383,7 +384,6 @@ const Attendance = ({ noLayout = false }) => {
         // 沒有打卡記錄，直接返回
         setEditDialogOpen(false);
         setEditingAttendance(null);
-        setEditRemarks('');
         setEditClockRecords([]);
         await fetchAttendanceComparison();
         return;
@@ -400,7 +400,7 @@ const Attendance = ({ noLayout = false }) => {
 
       // 分離需要處理的記錄
       const validityUpdates = []; // 更新有效性的記錄
-      const timeUpdates = []; // 更新時間的記錄
+      const timeUpdates = []; // 更新時間、branch_code 和 remarks 的記錄
       const creates = []; // 新增的記錄
 
       for (const record of editClockRecords) {
@@ -433,6 +433,40 @@ const Attendance = ({ noLayout = false }) => {
               });
             }
           }
+
+          // 處理 branch_code 和 remarks 更新（如果有修改）
+          const originalBranchCode = record.branch_code || '';
+          const originalRemarks = record.remarks || '';
+          const editableBranchCode = record.editableBranchCode !== undefined ? record.editableBranchCode : originalBranchCode;
+          const editableRemarks = record.editableRemarks !== undefined ? record.editableRemarks : originalRemarks;
+          
+          // 檢查是否有 branch_code 或 remarks 的變化
+          const branchCodeChanged = editableBranchCode !== originalBranchCode;
+          const remarksChanged = editableRemarks !== originalRemarks;
+          
+          if (branchCodeChanged || remarksChanged) {
+            // branch_code 或 remarks 有變化，需要更新
+            const existingUpdate = timeUpdates.find(u => u.id === record.id);
+            if (existingUpdate) {
+              // 如果已經有時間更新，添加 branch_code 和 remarks
+              if (branchCodeChanged) {
+                existingUpdate.branch_code = editableBranchCode || null;
+              }
+              if (remarksChanged) {
+                existingUpdate.remarks = editableRemarks || null;
+              }
+            } else {
+              // 如果時間更新列表中沒有這個記錄，創建一個新的更新項
+              const updateItem = { id: record.id };
+              if (branchCodeChanged) {
+                updateItem.branch_code = editableBranchCode || null;
+              }
+              if (remarksChanged) {
+                updateItem.remarks = editableRemarks || null;
+              }
+              timeUpdates.push(updateItem);
+            }
+          }
         } else {
           // 新記錄，需要新增（只新增有效的記錄）
           if (record.is_valid && record.editableTime && record.editableTime.trim() !== '') {
@@ -443,12 +477,16 @@ const Attendance = ({ noLayout = false }) => {
             }
 
             const timeStr = record.editableTime + ':00';
+            const editableBranchCode = record.editableBranchCode !== undefined ? record.editableBranchCode : '';
+            const editableRemarks = record.editableRemarks !== undefined ? record.editableRemarks : '';
             creates.push({
               employee_number: editingAttendance.employee_number,
               user_id: editingAttendance.user_id,
               department_group_id: selectedGroupId,
               attendance_date: editingAttendance.attendance_date,
-              clock_time: timeStr
+              clock_time: timeStr,
+              branch_code: editableBranchCode || null,
+              remarks: editableRemarks || null
             });
           }
         }
@@ -462,12 +500,13 @@ const Attendance = ({ noLayout = false }) => {
       }
 
       if (timeUpdates.length > 0) {
-        await axios.put('/api/attendances/update-clock-records-time', {
+        await axios.put('/api/attendances/update-clock-records-details', {
           clock_records: timeUpdates
         });
       }
 
       if (creates.length > 0) {
+        // 先創建所有記錄，然後批量更新 branch_code 和 remarks
         for (const createData of creates) {
           await axios.post('/api/attendances', {
             employee_number: createData.employee_number,
@@ -481,20 +520,52 @@ const Attendance = ({ noLayout = false }) => {
             remarks: null
           });
         }
-      }
-
-      // 更新備註（如果有修改）
-      if (editRemarks !== undefined && editRemarks !== null) {
-        const originalRemarks = editingAttendance?.attendance?.remarks || null;
-        const remarksToSave = editRemarks.trim() === '' ? null : editRemarks.trim();
         
-        // 只有當備註有變化時才更新
-        if (remarksToSave !== originalRemarks) {
-          await axios.put('/api/attendances/update-remarks', {
-            user_id: editingAttendance.user_id,
-            employee_number: editingAttendance.employee_number,
-            attendance_date: editingAttendance.attendance_date,
-            remarks: remarksToSave
+        // 如果有新記錄需要更新 branch_code 或 remarks，查詢並更新
+        const recordsToUpdate = [];
+        for (const createData of creates) {
+          if (createData.branch_code || createData.remarks) {
+            // 查詢剛創建的記錄（通過員工編號、日期和時間）
+            const clockTimeStr = createData.clock_time.includes(':') && createData.clock_time.split(':').length === 2 
+              ? createData.clock_time + ':00' 
+              : createData.clock_time;
+            const clockTimeForMatch = clockTimeStr.substring(0, 5); // HH:mm
+            
+            try {
+              const recordsResponse = await axios.get('/api/attendances/user-clock-records', {
+                params: {
+                  employee_number: createData.employee_number,
+                  attendance_date: createData.attendance_date
+                }
+              });
+              
+              // 找到匹配的記錄（通過時間匹配，選擇最接近的記錄）
+              const matchingRecord = recordsResponse.data.clock_records?.find(r => {
+                const recordTime = r.clock_time ? (typeof r.clock_time === 'string' ? r.clock_time.substring(0, 5) : r.clock_time) : '';
+                return recordTime === clockTimeForMatch;
+              });
+              
+              if (matchingRecord && matchingRecord.id) {
+                const updateData = { id: matchingRecord.id };
+                if (createData.branch_code) {
+                  updateData.branch_code = createData.branch_code;
+                }
+                if (createData.remarks) {
+                  updateData.remarks = createData.remarks;
+                }
+                recordsToUpdate.push(updateData);
+              }
+            } catch (error) {
+              console.error('Error querying new record for update:', error);
+              // 繼續處理其他記錄
+            }
+          }
+        }
+        
+        // 批量更新新創建的記錄的 branch_code 和 remarks
+        if (recordsToUpdate.length > 0) {
+          await axios.put('/api/attendances/update-clock-records-details', {
+            clock_records: recordsToUpdate
           });
         }
       }
@@ -517,7 +588,6 @@ const Attendance = ({ noLayout = false }) => {
       setEditClockOutTime(null);
       setEditTimeOffStart(null);
       setEditTimeOffEnd(null);
-      setEditRemarks('');
       setEditStoreId(null);
       setEditClockRecords([]);
       
@@ -534,150 +604,6 @@ const Attendance = ({ noLayout = false }) => {
         icon: 'error',
         title: t('attendance.error'),
         text: error.response?.data?.message || error.message || t('attendance.updateFailed')
-      });
-    }
-  };
-
-  // 一鍵複製到月結表（為群組內所有成員生成）
-  const handleCopyToMonthlySummary = async () => {
-    if (!selectedGroupId || !groupMembers || groupMembers.length === 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: t('attendance.error') || '錯誤',
-        text: t('attendance.noGroupMembers') || '請先選擇群組'
-      });
-      return;
-    }
-
-    try {
-      // 使用當前日期範圍的第一天來確定年份和月份
-      const firstDate = dayjs(startDate).tz('Asia/Hong_Kong');
-      const year = firstDate.year();
-      const month = firstDate.month() + 1; // dayjs月份從0開始
-      // 使用該月的第一天作為attendance_date
-      const attendanceDate = firstDate.startOf('month').format('YYYY-MM-DD');
-
-      const result = await Swal.fire({
-        title: t('attendance.copyToMonthlySummary') || '複製到月結表',
-        text: t('attendance.copyToMonthlySummaryConfirmAll', { year, month }) || `確定要為群組內所有成員生成 ${year}年${month}月的月結表嗎？已有記錄的員工將被略過。`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: t('common.confirm') || '確定',
-        cancelButtonText: t('common.cancel') || '取消'
-      });
-
-      if (!result.isConfirmed) return;
-
-      // 顯示進度提示
-      Swal.fire({
-        title: t('attendance.processing') || '處理中',
-        text: t('attendance.copyingToMonthlySummary') || '正在為群組成員生成月結表...',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        didOpen: () => {
-          Swal.showLoading();
-        }
-      });
-
-      let successCount = 0;
-      let skippedCount = 0;
-      let errorCount = 0;
-      const errors = [];
-
-      // 為每個群組成員生成月結表
-      for (const member of groupMembers) {
-        try {
-          // 確保成員有有效的 ID
-          const userId = member.id || member.user_id;
-          if (!userId) {
-            console.warn(`Member ${member.employee_number} has no valid ID, skipping...`);
-            errorCount++;
-            errors.push({
-              employee_number: member.employee_number || 'N/A',
-              name: member.display_name || member.name || 'N/A',
-              error: '缺少用戶ID'
-            });
-            continue;
-          }
-
-          // 檢查該員工是否已有月結表記錄
-          const checkResponse = await axios.get('/api/monthly-attendance-summaries', {
-            params: {
-              user_id: userId,
-              year: year,
-              month: month
-            }
-          });
-
-          // 如果已有記錄且daily_data長度不是0，則略過
-          if (checkResponse.data.summaries && checkResponse.data.summaries.length > 0) {
-            const summary = checkResponse.data.summaries[0];
-            if (summary.daily_data && summary.daily_data.length > 0) {
-              skippedCount++;
-              continue;
-            }
-          }
-
-          // 為該員工生成月結表
-          await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
-            user_id: userId,
-            year: year,
-            month: month,
-            attendance_date: attendanceDate
-          });
-
-          successCount++;
-        } catch (error) {
-          const userId = member.id || member.user_id;
-          console.error(`Copy to monthly summary error for user ${userId}:`, error);
-          errorCount++;
-          errors.push({
-            employee_number: member.employee_number || 'N/A',
-            name: member.display_name || member.name || 'N/A',
-            error: error.response?.data?.message || error.message || t('common.unknownError') || '未知錯誤'
-          });
-        }
-      }
-
-      // 顯示結果
-      let resultMessage = '';
-      if (successCount > 0) {
-        resultMessage += `${t('attendance.successCount') || '成功'}：${successCount} ${t('attendance.employees') || '位員工'}\n`;
-      }
-      if (skippedCount > 0) {
-        resultMessage += `${t('attendance.skippedCount') || '已略過'}：${skippedCount} ${t('attendance.employees') || '位員工'}${t('attendance.withExistingRecords') || '（已有記錄）'}\n`;
-      }
-      if (errorCount > 0) {
-        resultMessage += `${t('attendance.errorCount') || '失敗'}：${errorCount} ${t('attendance.employees') || '位員工'}\n`;
-      }
-
-      if (errorCount > 0) {
-        // 如果有錯誤，顯示詳細錯誤信息
-        let errorDetails = errors.map(e => `${e.employee_number} - ${e.name}: ${e.error}`).join('\n');
-        Swal.fire({
-          icon: 'warning',
-          title: t('attendance.copyToMonthlySummaryCompleted') || '處理完成',
-          html: `<div style="text-align: left;">${resultMessage.replace(/\n/g, '<br>')}</div>
-                 <details style="margin-top: 10px; text-align: left;">
-                   <summary style="cursor: pointer; color: #d32f2f;">${t('attendance.errorDetails') || '錯誤詳情'}</summary>
-                   <pre style="white-space: pre-wrap; font-size: 0.85em; margin-top: 5px;">${errorDetails}</pre>
-                 </details>`,
-          width: '600px'
-        });
-      } else {
-        Swal.fire({
-          icon: 'success',
-          title: t('attendance.copyToMonthlySummaryCompleted') || '處理完成',
-          text: resultMessage.trim() || (t('attendance.copyToMonthlySummarySuccess') || '已成功複製到月結表')
-        });
-      }
-    } catch (error) {
-      console.error('Copy to monthly summary error:', error);
-      Swal.fire({
-        icon: 'error',
-        title: t('attendance.error') || '錯誤',
-        text: error.response?.data?.message || t('attendance.copyToMonthlySummaryFailed') || '複製到月結表失敗'
       });
     }
   };
@@ -699,94 +625,6 @@ const Attendance = ({ noLayout = false }) => {
     }
     
     return totalMinutes;
-  };
-
-  // 自動對比考勤並生成備註
-  const handleAutoCompare = () => {
-    if (!editingAttendance) return;
-    
-    const issues = [];
-    
-    // 獲取排班時間
-    const schedule = editingAttendance.schedule;
-    const scheduleStartTime = schedule?.start_time;
-    const scheduleEndTime = schedule?.end_time;
-    
-    // 獲取有效的打卡記錄
-    const validRecords = editClockRecords.filter(r => r.is_valid === true);
-    const sortedRecords = [...validRecords].sort((a, b) => {
-      const timeA = a.editableTime || (a.clock_time ? (typeof a.clock_time === 'string' ? a.clock_time.substring(0, 5) : a.clock_time) : '');
-      const timeB = b.editableTime || (b.clock_time ? (typeof b.clock_time === 'string' ? b.clock_time.substring(0, 5) : b.clock_time) : '');
-      return timeA.localeCompare(timeB);
-    });
-    
-    // 獲取實際打卡時間
-    const clockInTime = sortedRecords.length > 0 ? (sortedRecords[0].editableTime || (sortedRecords[0].clock_time ? (typeof sortedRecords[0].clock_time === 'string' ? sortedRecords[0].clock_time.substring(0, 5) : sortedRecords[0].clock_time) : '')) : null;
-    // 下班時間取最後一條有效記錄
-    const clockOutTime = sortedRecords.length > 0 ? (sortedRecords[sortedRecords.length - 1].editableTime || (sortedRecords[sortedRecords.length - 1].clock_time ? (typeof sortedRecords[sortedRecords.length - 1].clock_time === 'string' ? sortedRecords[sortedRecords.length - 1].clock_time.substring(0, 5) : sortedRecords[sortedRecords.length - 1].clock_time) : '')) : null;
-    
-    // 檢查缺勤
-    if (sortedRecords.length === 0) {
-      issues.push(t('attendance.absent'));
-    } else {
-      // 檢查遲到：第一個有效打卡時間大於排班的開始時間
-      if (scheduleStartTime && clockInTime) {
-        const scheduleStart = scheduleStartTime.substring(0, 5); // HH:mm
-        const [scheduleHour, scheduleMinute] = scheduleStart.split(':').map(Number);
-        const [clockInHour, clockInMinute] = clockInTime.split(':').map(Number);
-        
-        // 處理跨天的情況（小時可能超過24，如26:00表示第二天凌晨2:00）
-        let scheduleTotalMinutes = scheduleHour * 60 + scheduleMinute;
-        if (scheduleHour >= 24) {
-          scheduleTotalMinutes = (scheduleHour - 24) * 60 + scheduleMinute + 24 * 60;
-        }
-        
-        let clockInTotalMinutes = clockInHour * 60 + clockInMinute;
-        if (clockInHour >= 24) {
-          clockInTotalMinutes = (clockInHour - 24) * 60 + clockInMinute + 24 * 60;
-        }
-        // 如果打卡時間的小時數小於排班開始時間的小時數，且打卡時間在12點之前，可能是跨天
-        else if (clockInHour < scheduleHour && clockInHour < 12) {
-          clockInTotalMinutes = clockInTotalMinutes + 24 * 60;
-        }
-        
-        // 第一個有效打卡時間大於排班開始時間，則為遲到
-        if (clockInTotalMinutes > scheduleTotalMinutes) {
-          const lateMinutes = clockInTotalMinutes - scheduleTotalMinutes;
-          issues.push(t('attendance.lateMinutes', { minutes: lateMinutes }));
-        }
-      }
-      
-      // 檢查早退和超時工作（需要有排班結束時間和實際下班時間）
-      if (scheduleEndTime && clockOutTime) {
-        const scheduleStartHour = scheduleStartTime ? parseInt(scheduleStartTime.substring(0, 2)) : null;
-        const scheduleEndMinutes = timeToMinutes(scheduleEndTime, true, scheduleStartHour);
-        const clockOutMinutes = timeToMinutes(clockOutTime, true, scheduleStartHour);
-        
-        if (scheduleEndMinutes !== null && clockOutMinutes !== null) {
-          if (clockOutMinutes < scheduleEndMinutes) {
-            const earlyMinutes = scheduleEndMinutes - clockOutMinutes;
-            issues.push(t('attendance.earlyLeaveMinutes', { minutes: earlyMinutes }));
-          } else if (clockOutMinutes > scheduleEndMinutes) {
-            const overtimeMinutes = clockOutMinutes - scheduleEndMinutes;
-            if (overtimeMinutes >= 15) {
-              issues.push(t('attendance.overtimeMinutes', { minutes: overtimeMinutes }));
-            }
-          }
-        }
-      }
-    }
-    
-    // 生成備註
-    if (issues.length > 0) {
-      const remarksText = issues.join('、');
-      setEditRemarks(remarksText);
-    } else {
-      // 如果沒有問題，可以清空備註或顯示正常
-      if (editRemarks.trim() === '') {
-        setEditRemarks(t('attendance.normal'));
-      }
-    }
   };
 
   const handleDeleteAttendance = async (attendanceId) => {
@@ -1138,46 +976,46 @@ const Attendance = ({ noLayout = false }) => {
                     {t('attendance.refresh')}
                   </Button>
                   {canEdit && (
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      onClick={() => setCsvImportDialogOpen(true)}
-                      startIcon={<UploadIcon />}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        boxShadow: 1,
-                        '&:hover': {
-                          boxShadow: 3,
-                          transform: 'translateY(-2px)',
-                          transition: 'all 0.2s',
-                        },
-                      }}
-                    >
-                      {t('attendance.importCSV')}
-                    </Button>
-                  )}
-                  {canEdit && selectedGroupId && (
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      onClick={handleCopyToMonthlySummary}
-                      startIcon={<ContentCopyIcon />}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        boxShadow: 1,
-                        '&:hover': {
-                          boxShadow: 3,
-                          transform: 'translateY(-2px)',
-                          transition: 'all 0.2s',
-                        },
-                      }}
-                    >
-                      {t('attendance.copyToMonthlySummary') || '複製到月結表'}
-                    </Button>
+                    <>
+                      <Button
+                        variant={isEditMode ? "contained" : "outlined"}
+                        color={isEditMode ? "success" : "primary"}
+                        onClick={() => setIsEditMode(!isEditMode)}
+                        startIcon={<EditIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          boxShadow: isEditMode ? 3 : 1,
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {isEditMode ? t('schedule.exitEdit') : t('common.edit')}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="secondary"
+                        onClick={() => setCsvImportDialogOpen(true)}
+                        startIcon={<UploadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          boxShadow: 1,
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {t('attendance.importCSV')}
+                      </Button>
+                    </>
                   )}
                 </Box>
               </Grid>
@@ -1202,35 +1040,49 @@ const Attendance = ({ noLayout = false }) => {
                     <TableRow>
                       <TableCell
                         sx={{
-                          bgcolor: 'primary.main',
-                          color: 'primary.contrastText',
-                          fontWeight: 600,
+                          bgcolor: '#2c3e50',
+                          color: '#ffffff',
+                          fontWeight: 700,
                           fontSize: '0.95rem',
-                          py: 2,
+                          py: 2.5,
+                          px: 2,
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 2,
+                          boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+                          borderRight: '2px solid rgba(255,255,255,0.1)',
                         }}
                       >
                         {t('attendance.employee')}
                       </TableCell>
                       {dates.map((date, index) => {
-                        const bgColor = index % 2 === 0 ? '#1976d2' : '#d4af37';
+                        const bgColor = index % 2 === 0 ? '#34495e' : '#2c3e50';
                         return (
                           <TableCell 
                             key={date.format('YYYY-MM-DD')} 
                             align="center"
                             sx={{
                               bgcolor: bgColor,
-                              color: 'white',
+                              color: '#ffffff',
                               fontWeight: 600,
                               fontSize: '0.9rem',
-                              py: 2,
+                              py: 2.5,
+                              px: 1.5,
                               minWidth: 120,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                bgcolor: index % 2 === 0 ? '#3d566e' : '#354a5f',
+                                transform: 'translateY(-1px)',
+                                boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+                              },
                             }}
                           >
                             <Box>
-                              <Typography variant="body2" display="block" sx={{ fontWeight: 600 }}>
+                              <Typography variant="body2" display="block" sx={{ fontWeight: 700, letterSpacing: '0.5px' }}>
                                 {formatDateDisplay(date)}
                               </Typography>
-                              <Typography variant="caption" display="block" sx={{ opacity: 0.9, mt: 0.5 }}>
+                              <Typography variant="caption" display="block" sx={{ opacity: 0.85, mt: 0.5, fontSize: '0.7rem', letterSpacing: '0.3px' }}>
                                 {date.format('ddd')}
                               </Typography>
                             </Box>
@@ -1285,54 +1137,66 @@ const Attendance = ({ noLayout = false }) => {
                               }}
                             >
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() => {
-                                    // 確保 item 有 attendance_date，如果沒有則使用 dateStr
-                                    const itemToEdit = item ? {
-                                      ...item,
-                                      attendance_date: item.attendance_date || dateStr, // 確保有 attendance_date
-                                      clock_records: item.clock_records || [] // 確保有 clock_records 屬性，即使為空
-                                    } : {
-                                      user_id: userData.user_id,
-                                      employee_number: userData.employee_number,
-                                      display_name: userData.display_name,
-                                      attendance_date: dateStr, // 明確設置 attendance_date
-                                      schedule: null,
-                                      attendance: null,
-                                      clock_records: [] // 確保有 clock_records 屬性
-                                    };
-                                    console.log('Opening edit dialog with item:', itemToEdit);
-                                    console.log('itemToEdit.clock_records:', itemToEdit.clock_records);
-                                    console.log('itemToEdit.clock_records type:', typeof itemToEdit.clock_records);
-                                    console.log('itemToEdit.clock_records isArray:', Array.isArray(itemToEdit.clock_records));
-                                    handleOpenEditDialog(itemToEdit);
-                                  }}
-                                  sx={{ 
-                                    minWidth: 'auto', 
-                                    p: 0.5,
-                                    borderRadius: 1.5,
-                                    borderColor: 'primary.main',
-                                    '&:hover': {
-                                      bgcolor: 'primary.main',
-                                      color: 'white',
-                                      transform: 'scale(1.05)',
-                                      transition: 'all 0.2s',
-                                    },
-                                  }}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </Button>
+                                {isEditMode && (
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    onClick={() => {
+                                      // 確保 item 有 attendance_date，如果沒有則使用 dateStr
+                                      const itemToEdit = item ? {
+                                        ...item,
+                                        attendance_date: item.attendance_date || dateStr, // 確保有 attendance_date
+                                        clock_records: item.clock_records || [] // 確保有 clock_records 屬性，即使為空
+                                      } : {
+                                        user_id: userData.user_id,
+                                        employee_number: userData.employee_number,
+                                        display_name: userData.display_name,
+                                        attendance_date: dateStr, // 明確設置 attendance_date
+                                        schedule: null,
+                                        attendance: null,
+                                        clock_records: [] // 確保有 clock_records 屬性
+                                      };
+                                      console.log('Opening edit dialog with item:', itemToEdit);
+                                      console.log('itemToEdit.clock_records:', itemToEdit.clock_records);
+                                      console.log('itemToEdit.clock_records type:', typeof itemToEdit.clock_records);
+                                      console.log('itemToEdit.clock_records isArray:', Array.isArray(itemToEdit.clock_records));
+                                      handleOpenEditDialog(itemToEdit);
+                                    }}
+                                    sx={{ 
+                                      minWidth: 'auto', 
+                                      p: 0.5,
+                                      borderRadius: 1.5,
+                                      borderColor: '#bdbdbd',
+                                      color: '#bdbdbd',
+                                      '&:hover': {
+                                        bgcolor: '#e0e0e0',
+                                        color: '#757575',
+                                        transform: 'scale(1.05)',
+                                        transition: 'all 0.2s',
+                                      },
+                                    }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </Button>
+                                )}
                                 {item && (
                                   <>
                                     {item.schedule && (
                                       <Box sx={{ mb: 0.5 }}>
                                         {/* 只有在有開始時間或結束時間時才顯示排班時間 */}
                                         {(item.schedule.start_time || item.schedule.end_time) && (
-                                          <Typography variant="caption" display="block" sx={{ fontSize: '0.7rem', color: '#1976d2', fontWeight: 600 }}>
-                                            {t('attendance.roster')}: {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
-                                          </Typography>
+                                          <Box
+                                            component="div"
+                                            sx={{
+                                              display: 'inline-block',
+                                              fontSize: '0.7rem',
+                                              fontWeight: 600,
+                                              color: '#1565c0', // 深藍色文字
+                                              padding: '2px 6px'
+                                            }}
+                                          >
+                                            {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
+                                          </Box>
                                         )}
                                         {/* 顯示假期類型（包括已批准的假期和排班中的假期） */}
                                         {item.schedule.leave_type_name_zh && (
@@ -1355,7 +1219,7 @@ const Attendance = ({ noLayout = false }) => {
                                               fontSize: '0.65rem', 
                                               height: '18px', 
                                               mt: (item.schedule.start_time || item.schedule.end_time) ? 0.25 : 0,
-                                              bgcolor: item.schedule.is_approved_leave ? '#28a745' : '#d4af37', // 已批准的假期使用綠色
+                                              bgcolor: '#c62828', // 偏深紅色
                                               color: 'white',
                                               '& .MuiChip-label': {
                                                 color: 'white',
@@ -1393,7 +1257,7 @@ const Attendance = ({ noLayout = false }) => {
                                       if (sortedRecords.length > 0) {
                                         return (
                                           <>
-                                            <Box sx={{ mb: 0.5 }}>
+                                            <Box sx={{ mb: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
                                               {sortedRecords.map((record, idx) => {
                                                 const timeStr = record.clock_time ? 
                                                   (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : 
@@ -1403,11 +1267,10 @@ const Attendance = ({ noLayout = false }) => {
                                                   <Typography 
                                                     key={idx}
                                                     variant="caption" 
-                                                    display="block" 
                                                     sx={{ 
                                                       fontSize: '0.7rem', 
-                                                      color: '#1976d2',
-                                                      fontWeight: 600
+                                                      color: '#757575',
+                                                      fontWeight: 400
                                                     }}
                                                   >
                                                     {timeStr}
@@ -1472,16 +1335,15 @@ const Attendance = ({ noLayout = false }) => {
         <Dialog 
           open={editDialogOpen} 
           onClose={() => {
-            setEditDialogOpen(false);
-            setEditingAttendance(null);
-            setEditClockInTime(null);
-            setEditClockOutTime(null);
-            setEditTimeOffStart(null);
-            setEditTimeOffEnd(null);
-            setEditRemarks('');
-            setEditStoreId(null);
-            setEditClockRecords([]);
-            setEditClockTimes([]);
+      setEditDialogOpen(false);
+      setEditingAttendance(null);
+      setEditClockInTime(null);
+      setEditClockOutTime(null);
+      setEditTimeOffStart(null);
+      setEditTimeOffEnd(null);
+      setEditStoreId(null);
+      setEditClockRecords([]);
+      setEditClockTimes([]);
           }}
           maxWidth="sm"
           fullWidth
@@ -1614,109 +1476,157 @@ const Attendance = ({ noLayout = false }) => {
                                 }
                               }}
                             >
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                                <Checkbox
-                                  checked={isValid}
-                                  disabled={!canEdit}
-                                  onChange={(e) => {
-                                    if (!canEdit) return;
-                                    const updated = editClockRecords.map(r => {
-                                      // 使用 id 或 tempId 來匹配記錄
-                                      if (record.id) {
-                                        if (r.id === record.id) {
-                                          return { ...r, is_valid: e.target.checked === true };
-                                        }
-                                      } else if (record.tempId) {
-                                        // 對於新記錄，使用 tempId 匹配
-                                        if (r.tempId === record.tempId) {
-                                          return { ...r, is_valid: e.target.checked === true };
-                                        }
-                                      }
-                                      return r;
-                                    });
-                                    setEditClockRecords(updated);
-                                  }}
-                                  size="small"
-                                />
-                                <TextField
-                                  label={t('attendance.clockTime') || '打卡時間'}
-                                  value={editableTime}
-                                  disabled={!canEdit}
-                                  onChange={(e) => {
-                                    if (!canEdit) return;
-                                    const timeValue = e.target.value;
-                                    // 允許輸入過程中的中間狀態
-                                    let isValidInput = false;
-                                    
-                                    // 空字符串
-                                    if (timeValue === '') {
-                                      isValidInput = true;
-                                    }
-                                    // 單個數字 0-3（小時第一位，支援 0-32）
-                                    else if (/^[0-3]$/.test(timeValue)) {
-                                      isValidInput = true;
-                                    }
-                                    // 兩位數字 00-32（小時）
-                                    else if (/^([0-2][0-9]|3[0-2])$/.test(timeValue)) {
-                                      isValidInput = true;
-                                    }
-                                    // 小時加冒號，如 "12:" 或 "32:"
-                                    else if (/^([0-2][0-9]|3[0-2]):$/.test(timeValue)) {
-                                      isValidInput = true;
-                                    }
-                                    // 小時加冒號加單個數字 0-5（分鐘第一位），如 "12:3" 或 "32:3"
-                                    else if (/^([0-2][0-9]|3[0-2]):[0-5]$/.test(timeValue)) {
-                                      isValidInput = true;
-                                    }
-                                    // 完整的 HH:mm 格式
-                                    else if (/^([0-2][0-9]|3[0-2]):[0-5][0-9]$/.test(timeValue)) {
-                                      isValidInput = true;
-                                    }
-                                    
-                                    if (isValidInput) {
-                                      // 直接更新狀態，確保正確匹配記錄
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                                  <Checkbox
+                                    checked={isValid}
+                                    disabled={!canEdit}
+                                    onChange={(e) => {
+                                      if (!canEdit) return;
                                       const updated = editClockRecords.map(r => {
+                                        // 使用 id 或 tempId 來匹配記錄
                                         if (record.id) {
-                                          // 有 id 的記錄，使用 id 匹配
                                           if (r.id === record.id) {
-                                            return { ...r, editableTime: timeValue };
+                                            return { ...r, is_valid: e.target.checked === true };
                                           }
                                         } else if (record.tempId) {
-                                          // 新記錄（沒有 id），使用 tempId 匹配
+                                          // 對於新記錄，使用 tempId 匹配
                                           if (r.tempId === record.tempId) {
-                                            return { ...r, editableTime: timeValue };
+                                            return { ...r, is_valid: e.target.checked === true };
                                           }
                                         }
                                         return r;
                                       });
                                       setEditClockRecords(updated);
-                                    }
-                                  }}
-                                  placeholder="HH:mm"
-                                  size="small"
-                                  sx={{ flex: 1, maxWidth: 150 }}
-                                  inputProps={{
-                                    maxLength: 5
-                                  }}
-                                />
-                                {canEdit && (
-                                  <IconButton
-                                    color="error"
+                                    }}
                                     size="small"
-                                    onClick={() => {
-                                      if (record.id) {
-                                        // 有 id 的記錄，標記為無效
-                                        handleRemoveClockTime(record.id);
-                                      } else if (record.tempId) {
-                                        // 沒有 id 的新記錄，使用 tempId 刪除
-                                        handleRemoveClockTime(null, record.tempId);
+                                  />
+                                  <TextField
+                                    label={t('attendance.clockTime') || '打卡時間'}
+                                    value={editableTime}
+                                    disabled={!canEdit}
+                                    onChange={(e) => {
+                                      if (!canEdit) return;
+                                      const timeValue = e.target.value;
+                                      // 允許輸入過程中的中間狀態
+                                      let isValidInput = false;
+                                      
+                                      // 空字符串
+                                      if (timeValue === '') {
+                                        isValidInput = true;
+                                      }
+                                      // 單個數字 0-3（小時第一位，支援 0-32）
+                                      else if (/^[0-3]$/.test(timeValue)) {
+                                        isValidInput = true;
+                                      }
+                                      // 兩位數字 00-32（小時）
+                                      else if (/^([0-2][0-9]|3[0-2])$/.test(timeValue)) {
+                                        isValidInput = true;
+                                      }
+                                      // 小時加冒號，如 "12:" 或 "32:"
+                                      else if (/^([0-2][0-9]|3[0-2]):$/.test(timeValue)) {
+                                        isValidInput = true;
+                                      }
+                                      // 小時加冒號加單個數字 0-5（分鐘第一位），如 "12:3" 或 "32:3"
+                                      else if (/^([0-2][0-9]|3[0-2]):[0-5]$/.test(timeValue)) {
+                                        isValidInput = true;
+                                      }
+                                      // 完整的 HH:mm 格式
+                                      else if (/^([0-2][0-9]|3[0-2]):[0-5][0-9]$/.test(timeValue)) {
+                                        isValidInput = true;
+                                      }
+                                      
+                                      if (isValidInput) {
+                                        // 直接更新狀態，確保正確匹配記錄
+                                        const updated = editClockRecords.map(r => {
+                                          if (record.id) {
+                                            // 有 id 的記錄，使用 id 匹配
+                                            if (r.id === record.id) {
+                                              return { ...r, editableTime: timeValue };
+                                            }
+                                          } else if (record.tempId) {
+                                            // 新記錄（沒有 id），使用 tempId 匹配
+                                            if (r.tempId === record.tempId) {
+                                              return { ...r, editableTime: timeValue };
+                                            }
+                                          }
+                                          return r;
+                                        });
+                                        setEditClockRecords(updated);
                                       }
                                     }}
-                                    sx={{ flexShrink: 0 }}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                )}
+                                    placeholder="HH:mm"
+                                    size="small"
+                                    sx={{ flex: 1, maxWidth: 150 }}
+                                    inputProps={{
+                                      maxLength: 5
+                                    }}
+                                  />
+                                  <TextField
+                                    label={t('attendance.branchCode') || '分行代碼'}
+                                    value={record.editableBranchCode !== undefined ? record.editableBranchCode : (record.branch_code || '')}
+                                    disabled={!canEdit}
+                                    onChange={(e) => {
+                                      if (!canEdit) return;
+                                      const updated = editClockRecords.map(r => {
+                                        if (record.id) {
+                                          if (r.id === record.id) {
+                                            return { ...r, editableBranchCode: e.target.value };
+                                          }
+                                        } else if (record.tempId) {
+                                          if (r.tempId === record.tempId) {
+                                            return { ...r, editableBranchCode: e.target.value };
+                                          }
+                                        }
+                                        return r;
+                                      });
+                                      setEditClockRecords(updated);
+                                    }}
+                                    size="small"
+                                    sx={{ flex: 1, maxWidth: 120 }}
+                                  />
+                                  <TextField
+                                    label={t('attendance.remarks') || '備註'}
+                                    value={record.editableRemarks !== undefined ? record.editableRemarks : (record.remarks || '')}
+                                    disabled={!canEdit}
+                                    onChange={(e) => {
+                                      if (!canEdit) return;
+                                      const updated = editClockRecords.map(r => {
+                                        if (record.id) {
+                                          if (r.id === record.id) {
+                                            return { ...r, editableRemarks: e.target.value };
+                                          }
+                                        } else if (record.tempId) {
+                                          if (r.tempId === record.tempId) {
+                                            return { ...r, editableRemarks: e.target.value };
+                                          }
+                                        }
+                                        return r;
+                                      });
+                                      setEditClockRecords(updated);
+                                    }}
+                                    size="small"
+                                    sx={{ flex: 1 }}
+                                  />
+                                  {canEdit && (
+                                    <IconButton
+                                      color="error"
+                                      size="small"
+                                      onClick={() => {
+                                        if (record.id) {
+                                          // 有 id 的記錄，標記為無效
+                                          handleRemoveClockTime(record.id);
+                                        } else if (record.tempId) {
+                                          // 沒有 id 的新記錄，使用 tempId 刪除
+                                          handleRemoveClockTime(null, record.tempId);
+                                        }
+                                      }}
+                                      sx={{ flexShrink: 0 }}
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  )}
+                                </Box>
                               </Box>
                             </ListItem>
                           );
@@ -1751,51 +1661,20 @@ const Attendance = ({ noLayout = false }) => {
                   </Box>
                 )}
               </Box>
-              
-              <Grid container spacing={2} sx={{ mt: 2 }}>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                    <TextField
-                      label={t('attendance.remarks')}
-                      value={editRemarks}
-                      onChange={(e) => setEditRemarks(e.target.value)}
-                      fullWidth
-                      multiline
-                      rows={3}
-                    />
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      onClick={handleAutoCompare}
-                      sx={{
-                        minWidth: 'auto',
-                        whiteSpace: 'nowrap',
-                        mt: 0.5,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                      }}
-                      startIcon={<CheckCircleIcon />}
-                    >
-                      {t('attendance.autoCompare')}
-                    </Button>
-                  </Box>
-                </Grid>
-              </Grid>
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 3, pt: 2, gap: 1 }}>
             <Button 
               onClick={() => {
-                setEditDialogOpen(false);
-                setEditingAttendance(null);
-                setEditClockInTime(null);
-                setEditClockOutTime(null);
-                setEditTimeOffStart(null);
-                setEditTimeOffEnd(null);
-                setEditRemarks('');
-                setEditStoreId(null);
-                setEditClockRecords([]);
-                setEditClockTimes([]);
+      setEditDialogOpen(false);
+      setEditingAttendance(null);
+      setEditClockInTime(null);
+      setEditClockOutTime(null);
+      setEditTimeOffStart(null);
+      setEditTimeOffEnd(null);
+      setEditStoreId(null);
+      setEditClockRecords([]);
+      setEditClockTimes([]);
               }}
               sx={{
                 borderRadius: 2,

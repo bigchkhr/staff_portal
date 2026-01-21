@@ -6,11 +6,11 @@ exports.up = function(knex) {
     table.integer('department_group_id').unsigned().notNullable()
       .references('id').inTable('department_groups').onDelete('CASCADE');
     table.date('schedule_date').notNullable(); // 排班日期
-    table.time('start_time').nullable(); // 開始時間
-    table.string('end_time', 10).nullable(); // 結束時間（支援跨日格式，如26:00表示翌日凌晨2:00）
-    table.integer('leave_type_id').unsigned().nullable()
+    table.time('start_time'); // 開始時間
+    table.string('end_time', 10); // 結束時間（支援跨日格式，如26:00表示翌日凌晨2:00）
+    table.integer('leave_type_id').unsigned()
       .references('id').inTable('leave_types').onDelete('SET NULL');
-    table.string('leave_session', 2).nullable(); // 'AM', 'PM', or null for full day
+    table.string('leave_session', 2); // 'AM', 'PM', or null for full day
     table.integer('created_by_id').unsigned().notNullable()
       .references('id').inTable('users').onDelete('RESTRICT');
     table.integer('updated_by_id').unsigned().nullable()

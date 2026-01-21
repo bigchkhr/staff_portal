@@ -153,6 +153,65 @@ class ScheduleController {
         leaveApplications
       );
       
+      // 獲取當前群組的店舖 ID 列表（從當前群組的排班記錄中提取）
+      const currentGroupStoreIds = [...new Set(schedules
+        .filter(s => s.store_id)
+        .map(s => s.store_id)
+      )];
+      
+      // 獲取跨群組的 helper 排班：其他群組中選擇了當前群組店舖的排班記錄
+      let helperSchedules = [];
+      if (currentGroupStoreIds.length > 0) {
+        // 直接使用 knex 查詢，因為 Schedule.findAll 不支持按 store_id 篩選
+        const helperSchedulesQuery = await knex('schedules')
+          .leftJoin('users', 'schedules.user_id', 'users.id')
+          .leftJoin('positions', 'users.position_id', 'positions.id')
+          .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
+          .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+          .leftJoin('stores', 'schedules.store_id', 'stores.id')
+          .whereNot('schedules.department_group_id', filters.department_group_id)
+          .whereIn('schedules.store_id', currentGroupStoreIds)
+          .where('schedules.schedule_date', '>=', filters.start_date)
+          .where('schedules.schedule_date', '<=', filters.end_date)
+          .select(
+            'schedules.*',
+            'users.display_name as user_name',
+            'users.name_zh as user_name_zh',
+            'users.employee_number',
+            'positions.employment_mode as position_employment_mode',
+            'positions.name as position_name',
+            'positions.name_zh as position_name_zh',
+            'department_groups.name as group_name',
+            'department_groups.name_zh as group_name_zh',
+            'leave_types.code as leave_type_code',
+            'leave_types.name as leave_type_name',
+            'leave_types.name_zh as leave_type_name_zh',
+            'stores.id as store_id',
+            'stores.store_code as store_code',
+            'stores.store_short_name_ as store_short_name'
+          )
+          .orderBy('schedules.schedule_date', 'asc')
+          .orderBy('users.employee_number', 'asc');
+        
+        // 格式化日期
+        helperSchedules = helperSchedulesQuery.map(schedule => {
+          if (schedule.schedule_date) {
+            if (schedule.schedule_date instanceof Date) {
+              const date = schedule.schedule_date;
+              const year = date.getFullYear();
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const day = String(date.getDate()).padStart(2, '0');
+              schedule.schedule_date = `${year}-${month}-${day}`;
+            } else if (typeof schedule.schedule_date === 'string') {
+              schedule.schedule_date = schedule.schedule_date.split('T')[0].substring(0, 10);
+            }
+          }
+          return schedule;
+        });
+        
+        console.log(`Found ${helperSchedules.length} helper schedules from other groups`);
+      }
+      
       if (schedulesWithLeave.length > 0) {
         // 找出有假期且有 session 的記錄作為示例
         const sampleWithSession = schedulesWithLeave.find(s => s.leave_session);
@@ -167,7 +226,10 @@ class ScheduleController {
         }
         console.log('Sample schedule with leave:', schedulesWithLeave[0]);
       }
-      res.json({ schedules: schedulesWithLeave });
+      res.json({ 
+        schedules: schedulesWithLeave,
+        helperSchedules: helperSchedules || []
+      });
     } catch (error) {
       console.error('Get schedules error:', error);
       console.error('Error stack:', error.stack);
@@ -834,6 +896,106 @@ class ScheduleController {
     } catch (error) {
       console.error('Get accessible schedule groups error:', error);
       res.status(500).json({ message: '獲取可訪問的排班群組列表時發生錯誤', error: error.message });
+    }
+  }
+
+  // 更新群組的 checker 編輯權限設置（只有 approver1, approver2, approver3 可以操作）
+  async updateCheckerEditPermission(req, res) {
+    try {
+      const { department_group_id } = req.params;
+      const { allow_checker_edit } = req.body;
+      const userId = req.user.id;
+
+      if (allow_checker_edit === undefined) {
+        return res.status(400).json({ message: '缺少必填欄位 allow_checker_edit' });
+      }
+
+      // 檢查用戶是否為 approver1, approver2 或 approver3
+      const group = await DepartmentGroup.findById(department_group_id);
+      if (!group) {
+        return res.status(404).json({ message: '群組不存在' });
+      }
+
+      // 取得用戶所屬的授權群組
+      const User = require('../database/models/User');
+      const userDelegationGroups = await User.getDelegationGroups(userId);
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+      const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+      const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+      const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+
+      // 系統管理員也可以操作
+      if (!req.user.is_system_admin && !isApprover1 && !isApprover2 && !isApprover3) {
+        return res.status(403).json({ message: '您沒有權限修改此設置' });
+      }
+
+      // 更新設置
+      const updatedGroup = await DepartmentGroup.update(department_group_id, {
+        allow_checker_edit: Boolean(allow_checker_edit)
+      });
+
+      res.json({ 
+        message: '設置更新成功',
+        group: updatedGroup
+      });
+    } catch (error) {
+      console.error('Update checker edit permission error:', error);
+      res.status(500).json({ message: '更新設置失敗', error: error.message });
+    }
+  }
+
+  // 批量更新所有群組的 checker 編輯權限設置（只有 approver1, approver2, approver3 可以操作）
+  async batchUpdateCheckerEditPermission(req, res) {
+    try {
+      const { allow_checker_edit } = req.body;
+      const userId = req.user.id;
+
+      if (allow_checker_edit === undefined) {
+        return res.status(400).json({ message: '缺少必填欄位 allow_checker_edit' });
+      }
+
+      const newValue = Boolean(allow_checker_edit);
+
+      // 獲取用戶所屬的授權群組
+      const User = require('../database/models/User');
+      const userDelegationGroups = await User.getDelegationGroups(userId);
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+      // 獲取所有未關閉的部門群組
+      const allGroups = await DepartmentGroup.findAll({ closed: false });
+
+      // 過濾出用戶有權限操作的群組（用戶是該群組的 approver1, approver2 或 approver3）
+      const groupsToUpdate = allGroups.filter(group => {
+        if (req.user.is_system_admin) {
+          return true; // 系統管理員可以操作所有群組
+        }
+
+        const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+        const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+        const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+
+        return isApprover1 || isApprover2 || isApprover3;
+      });
+
+      if (groupsToUpdate.length === 0) {
+        return res.status(403).json({ message: '您沒有權限修改任何群組的設置' });
+      }
+
+      // 批量更新所有有權限的群組
+      const groupIds = groupsToUpdate.map(g => g.id);
+      await knex('department_groups')
+        .whereIn('id', groupIds)
+        .update({ allow_checker_edit: newValue });
+
+      res.json({ 
+        message: `成功更新 ${groupsToUpdate.length} 個群組的設置`,
+        updated_count: groupsToUpdate.length,
+        allow_checker_edit: newValue
+      });
+    } catch (error) {
+      console.error('Batch update checker edit permission error:', error);
+      res.status(500).json({ message: '批量更新設置失敗', error: error.message });
     }
   }
 }

@@ -26,6 +26,7 @@ import {
   IconButton,
   Tooltip,
   FormControlLabel,
+  Switch,
   Card,
   CardContent,
   Divider,
@@ -75,6 +76,7 @@ const Schedule = ({ noLayout = false }) => {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [helperSchedules, setHelperSchedules] = useState([]);
   const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong'));
   const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').add(6, 'day'));
   const [loading, setLoading] = useState(false);
@@ -102,6 +104,8 @@ const Schedule = ({ noLayout = false }) => {
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [pendingError, setPendingError] = useState(null); // 待顯示的錯誤訊息
+  const [allowCheckerEdit, setAllowCheckerEdit] = useState(true); // checker 是否可以編輯排班表
+  const [canControlCheckerEdit, setCanControlCheckerEdit] = useState(false); // 當前用戶是否可以控制 checker 編輯權限
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -116,6 +120,16 @@ const Schedule = ({ noLayout = false }) => {
       checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate]);
+
+  // 當群組改變時，更新 allow_checker_edit 狀態
+  useEffect(() => {
+    if (selectedGroupId) {
+      const group = departmentGroups.find(g => g.id === selectedGroupId);
+      if (group) {
+        setAllowCheckerEdit(group.allow_checker_edit !== false);
+      }
+    }
+  }, [selectedGroupId, departmentGroups]);
 
   // 監聽 modal 關閉，如果有待顯示的錯誤訊息，則顯示
   useEffect(() => {
@@ -219,7 +233,9 @@ const Schedule = ({ noLayout = false }) => {
         }
       });
       const schedulesData = response.data.schedules || [];
+      const helperSchedulesData = response.data.helperSchedules || [];
       console.log('Fetched schedules:', schedulesData);
+      console.log('Fetched helper schedules:', helperSchedulesData);
       console.log('Schedule dates:', schedulesData.map(s => ({ 
         id: s.id, 
         user_id: s.user_id, 
@@ -234,6 +250,7 @@ const Schedule = ({ noLayout = false }) => {
         end: endDate.format('YYYY-MM-DD') 
       });
       setSchedules(schedulesData);
+      setHelperSchedules(helperSchedulesData);
     } catch (error) {
       console.error('Fetch schedules error:', error);
       const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || t('schedule.fetchSchedulesFailed');
@@ -253,12 +270,18 @@ const Schedule = ({ noLayout = false }) => {
       const group = departmentGroups.find(g => g.id === selectedGroupId);
       if (!group) {
         setCanEdit(false);
+        setCanControlCheckerEdit(false);
+        setAllowCheckerEdit(true);
         return;
       }
+
+      // 設置 allow_checker_edit 狀態
+      setAllowCheckerEdit(group.allow_checker_edit !== false);
 
       // 檢查用戶是否為系統管理員
       if (user.is_system_admin) {
         setCanEdit(true);
+        setCanControlCheckerEdit(true);
         return;
       }
 
@@ -271,10 +294,19 @@ const Schedule = ({ noLayout = false }) => {
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
       const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
 
-      setCanEdit(isChecker || isApprover1 || isApprover2 || isApprover3);
+      // 只有 approver1, approver2, approver3 可以控制 checker 編輯權限
+      setCanControlCheckerEdit(isApprover1 || isApprover2 || isApprover3);
+
+      // 如果用戶是 checker，需要檢查 allow_checker_edit 設置
+      if (isChecker) {
+        setCanEdit(group.allow_checker_edit !== false);
+      } else {
+        setCanEdit(isApprover1 || isApprover2 || isApprover3);
+      }
     } catch (error) {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
+      setCanControlCheckerEdit(false);
     }
   };
 
@@ -991,12 +1023,8 @@ const Schedule = ({ noLayout = false }) => {
                                       sx={{ 
                                         fontSize: '0.7rem', 
                                         mb: 0.5, 
-                                        color: 'primary.contrastText',
-                                        bgcolor: 'primary.main',
+                                        color: '#1565c0',
                                         fontWeight: 600,
-                                        px: 0.75,
-                                        py: 0.25,
-                                        borderRadius: 1,
                                       }}
                                     >
                                       {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
@@ -1055,12 +1083,8 @@ const Schedule = ({ noLayout = false }) => {
                                       sx={{ 
                                         fontSize: '0.7rem', 
                                         mb: 0.5, 
-                                        color: 'primary.contrastText',
-                                        bgcolor: 'primary.main',
+                                        color: '#1565c0',
                                         fontWeight: 600,
-                                        px: 0.75,
-                                        py: 0.25,
-                                        borderRadius: 1,
                                       }}
                                     >
                                       {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
@@ -1092,15 +1116,16 @@ const Schedule = ({ noLayout = false }) => {
                                   {/* 顯示店舖 */}
                                   {schedule.store_code && (
                                     <Chip 
-                                      label={schedule.store_code}
+                                      label={schedule.store_short_name || schedule.store_code}
                                       size="small" 
-                                      color="secondary"
                                       sx={{ 
                                         fontSize: '0.65rem', 
                                         height: '20px', 
                                         mb: 0.5,
                                         fontWeight: 600,
                                         boxShadow: 1,
+                                        bgcolor: '#424242',
+                                        color: '#ffffff',
                                       }}
                                     />
                                   )}
@@ -1123,6 +1148,97 @@ const Schedule = ({ noLayout = false }) => {
                   })}
                 </TableRow>
               ))}
+              {/* 統計行：顯示每日 FT 和 PT 數量 */}
+              <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>
+                <TableCell
+                  sx={{
+                    bgcolor: 'grey.100',
+                    borderRight: '2px solid',
+                    borderColor: 'divider',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 2,
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    minWidth: 120,
+                    maxWidth: 120,
+                    boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+                  }}
+                >
+                  {t('schedule.summary') || '統計'}
+                </TableCell>
+                {dates.map(date => {
+                  const dateStr = date.format('YYYY-MM-DD');
+                  // 計算該日期有排班的 FT 和 PT 數量
+                  let ftCount = 0;
+                  let ptCount = 0;
+                  
+                  // 統計群組成員（只計算有排班時間的）
+                  groupMembers.forEach(member => {
+                    const schedule = getScheduleForUserAndDate(member.id, date);
+                    // 判斷是否有排班時間：必須有 start_time 或 end_time（不包括只有 leave_type 但沒有時間的）
+                    const hasScheduleTime = schedule && (
+                      schedule.start_time || 
+                      schedule.end_time
+                    );
+                    
+                    if (hasScheduleTime) {
+                      const employmentMode = member.position_employment_mode || member.employment_mode;
+                      if (employmentMode === 'FT') {
+                        ftCount++;
+                      } else if (employmentMode === 'PT') {
+                        ptCount++;
+                      }
+                    }
+                  });
+                  
+                  // 統計 helper schedules（只計算有排班時間的）
+                  helperSchedules.forEach(helper => {
+                    const helperDateStr = typeof helper.schedule_date === 'string' 
+                      ? helper.schedule_date.split('T')[0] 
+                      : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                    
+                    if (helperDateStr === dateStr) {
+                      // 判斷是否有排班時間：必須有 start_time 或 end_time
+                      const hasScheduleTime = helper.start_time || helper.end_time;
+                      
+                      if (hasScheduleTime) {
+                        const employmentMode = helper.position_employment_mode;
+                        if (employmentMode === 'FT') {
+                          ftCount++;
+                        } else if (employmentMode === 'PT') {
+                          ptCount++;
+                        }
+                      }
+                    }
+                  });
+                  
+                  return (
+                    <TableCell
+                      key={dateStr}
+                      align="center"
+                      sx={{
+                        py: 1,
+                        borderRight: '1px solid',
+                        borderColor: 'divider',
+                        fontWeight: 600,
+                        fontSize: '0.75rem',
+                        bgcolor: 'grey.100',
+                        minWidth: 80,
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, alignItems: 'center' }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', fontSize: '0.7rem' }}>
+                          FT: {ftCount}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: 'secondary.main', fontSize: '0.7rem' }}>
+                          PT: {ptCount}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
             </TableBody>
               </Table>
             </TableContainer>
@@ -1595,6 +1711,103 @@ const Schedule = ({ noLayout = false }) => {
     return dates;
   };
 
+  // 更新 checker 編輯權限設置
+  const handleToggleCheckerEdit = async (event) => {
+    const newValue = event.target.checked;
+    if (!selectedGroupId) return;
+
+    try {
+      await axios.put(`/api/schedules/group/${selectedGroupId}/checker-edit-permission`, {
+        allow_checker_edit: newValue
+      });
+      
+      setAllowCheckerEdit(newValue);
+      
+      // 更新本地群組數據
+      setDepartmentGroups(prevGroups => 
+        prevGroups.map(g => 
+          g.id === selectedGroupId 
+            ? { ...g, allow_checker_edit: newValue }
+            : g
+        )
+      );
+
+      // 重新檢查編輯權限（因為 checker 的權限可能改變）
+      await checkEditPermission();
+
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: newValue ? t('schedule.checkerEditEnabled') : t('schedule.checkerEditDisabled'),
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Update checker edit permission error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+      // 恢復原值
+      setAllowCheckerEdit(!newValue);
+    }
+  };
+
+  // 批量更新所有群組的 checker 編輯權限設置
+  const handleBatchUpdateCheckerEdit = async (enable) => {
+    const confirmText = enable 
+      ? t('schedule.confirmEnableAllCheckerEdit')
+      : t('schedule.confirmDisableAllCheckerEdit');
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('schedule.confirmBatchUpdate'),
+      text: confirmText,
+      showCancelButton: true,
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33'
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+        allow_checker_edit: enable
+      });
+
+      // 更新本地所有群組數據
+      setDepartmentGroups(prevGroups => 
+        prevGroups.map(g => ({ ...g, allow_checker_edit: enable }))
+      );
+
+      // 如果當前選中的群組也在更新列表中，更新當前群組的狀態
+      if (selectedGroupId) {
+        setAllowCheckerEdit(enable);
+        await checkEditPermission();
+      }
+
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.batchUpdateSuccess', { count: response.data.updated_count }),
+        timer: 3000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Batch update checker edit permission error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.batchUpdateFailed')
+      });
+    }
+  };
+
   const dates = generateDateRange();
 
   const content = (
@@ -1626,6 +1839,53 @@ const Schedule = ({ noLayout = false }) => {
             </Typography>
             <Divider sx={{ mt: 2 }} />
           </Box>
+
+          {/* 批量控制區塊 - 放在控制面板上方 */}
+          {canControlCheckerEdit && (
+            <Card 
+              elevation={1}
+              sx={{ 
+                mb: 3,
+                p: 2,
+                borderRadius: 2,
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider'
+              }}
+            >
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 500, mb: 1.5 }}>
+                  {t('schedule.batchControl')}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    onClick={() => handleBatchUpdateCheckerEdit(true)}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t('schedule.enableAllCheckerEdit')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={() => handleBatchUpdateCheckerEdit(false)}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {t('schedule.disableAllCheckerEdit')}
+                  </Button>
+                </Box>
+              </Box>
+            </Card>
+          )}
 
           <Card 
             elevation={2}
@@ -1719,7 +1979,7 @@ const Schedule = ({ noLayout = false }) => {
                 </Grid>
               )}
               <Grid item xs={12} md={3}>
-                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                   {canEdit && (
                     <>
                       <Button
@@ -1765,6 +2025,35 @@ const Schedule = ({ noLayout = false }) => {
                   )}
                 </Box>
               </Grid>
+              {canControlCheckerEdit && (
+                <Grid item xs={12}>
+                  <Card 
+                    elevation={1}
+                    sx={{ 
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor: 'background.paper',
+                      border: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={allowCheckerEdit}
+                          onChange={handleToggleCheckerEdit}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {t('schedule.allowCheckerEdit')}
+                        </Typography>
+                      }
+                    />
+                  </Card>
+                </Grid>
+              )}
             </Grid>
           </Card>
 
@@ -1779,6 +2068,7 @@ const Schedule = ({ noLayout = false }) => {
             isMobile ? (
               renderWeekCalendarView()
             ) : (
+            <>
             <Card elevation={2} sx={{ borderRadius: 2, overflow: 'hidden' }}>
               <TableContainer>
                 <Table size="small" stickyHeader>
@@ -1906,14 +2196,9 @@ const Schedule = ({ noLayout = false }) => {
                                           display="block" 
                                           sx={{ 
                                             mb: 0.5, 
-                                            color: 'primary.main', 
+                                            color: '#1565c0',
                                             fontWeight: 600,
                                             fontSize: '0.75rem',
-                                            bgcolor: 'primary.light',
-                                            color: 'primary.contrastText',
-                                            px: 1,
-                                            py: 0.25,
-                                            borderRadius: 1,
                                           }}
                                         >
                                           {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
@@ -1946,15 +2231,16 @@ const Schedule = ({ noLayout = false }) => {
                                       {/* 顯示店舖 */}
                                       {schedule.store_code && (
                                         <Chip 
-                                          label={schedule.store_code}
+                                          label={schedule.store_short_name || schedule.store_code}
                                           size="small" 
-                                          color="secondary"
                                           sx={{ 
                                             fontSize: '0.7rem', 
                                             height: '22px', 
                                             mb: 0.5,
                                             fontWeight: 600,
                                             boxShadow: 1,
+                                            bgcolor: '#424242',
+                                            color: '#ffffff',
                                           }}
                                         />
                                       )}
@@ -1989,14 +2275,9 @@ const Schedule = ({ noLayout = false }) => {
                                           display="block" 
                                           sx={{ 
                                             mb: 0.5, 
-                                            color: 'primary.main', 
+                                            color: '#1565c0',
                                             fontWeight: 600,
                                             fontSize: '0.75rem',
-                                            bgcolor: 'primary.light',
-                                            color: 'primary.contrastText',
-                                            px: 1,
-                                            py: 0.25,
-                                            borderRadius: 1,
                                           }}
                                         >
                                           {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
@@ -2029,15 +2310,16 @@ const Schedule = ({ noLayout = false }) => {
                                       {/* 顯示店舖 */}
                                       {schedule.store_code && (
                                         <Chip 
-                                          label={schedule.store_code}
+                                          label={schedule.store_short_name || schedule.store_code}
                                           size="small" 
-                                          color="secondary"
                                           sx={{ 
                                             fontSize: '0.7rem', 
                                             height: '22px', 
                                             mb: 0.5,
                                             fontWeight: 600,
                                             boxShadow: 1,
+                                            bgcolor: '#424242',
+                                            color: '#ffffff',
                                           }}
                                         />
                                       )}
@@ -2061,10 +2343,224 @@ const Schedule = ({ noLayout = false }) => {
                       })}
                     </TableRow>
                   ))}
+                  {/* 顯示跨群組的 helper */}
+                  {(() => {
+                    // 按用戶分組 helper schedules
+                    const helperByUser = {};
+                    helperSchedules.forEach(helper => {
+                      const userId = helper.user_id;
+                      if (!helperByUser[userId]) {
+                        helperByUser[userId] = {
+                          user_id: userId,
+                          employee_number: helper.employee_number,
+                          display_name: helper.user_name || helper.user_name_zh || '',
+                          group_name: helper.group_name_zh || helper.group_name || '',
+                          position_name: helper.position_name,
+                          position_name_zh: helper.position_name_zh,
+                          schedules: {}
+                        };
+                      }
+                      const dateStr = typeof helper.schedule_date === 'string' 
+                        ? helper.schedule_date.split('T')[0] 
+                        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                      helperByUser[userId].schedules[dateStr] = helper;
+                    });
+                    
+                    return Object.values(helperByUser).map(helperUser => (
+                      <TableRow key={`helper-${helperUser.user_id}`}>
+                        <TableCell
+                          sx={{
+                            bgcolor: 'grey.50',
+                            borderRight: '2px solid',
+                            borderColor: 'divider',
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 1,
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
+                              {helperUser.employee_number}
+                            </Typography>
+                            <Typography variant="body2" color="text.primary" sx={{ fontWeight: 500 }}>
+                              {helperUser.display_name}
+                            </Typography>
+                            {helperUser.position_name || helperUser.position_name_zh ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.75rem', mt: 0.5 }}>
+                                {i18n.language === 'en'
+                                  ? (helperUser.position_name || helperUser.position_name_zh)
+                                  : (helperUser.position_name_zh || helperUser.position_name)}
+                              </Typography>
+                            ) : null}
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                display: 'inline-block',
+                                fontSize: '0.75rem', 
+                                mt: 0.5,
+                                bgcolor: '#c62828',
+                                color: '#ffffff',
+                                px: 1,
+                                py: 0.5,
+                                borderRadius: '20px',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {t('schedule.helper') || 'Helper'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        {dates.map(date => {
+                          const dateStr = date.format('YYYY-MM-DD');
+                          const schedule = helperUser.schedules[dateStr];
+                          return (
+                            <TableCell 
+                              key={dateStr} 
+                              align="center"
+                              sx={{
+                                py: 1.5,
+                                borderRight: '1px solid',
+                                borderColor: 'divider',
+                                '&:hover': {
+                                  bgcolor: 'action.hover',
+                                },
+                              }}
+                            >
+                              {schedule ? (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+                                  {(schedule.start_time || schedule.end_time) && (
+                                    <Typography 
+                                      variant="caption" 
+                                      display="block" 
+                                      sx={{ 
+                                        fontSize: '0.7rem', 
+                                        mb: 0.5, 
+                                        color: '#1565c0',
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? (schedule.end_time.length > 5 ? schedule.end_time.substring(0, 5) : schedule.end_time) : '--:--'}
+                                    </Typography>
+                                  )}
+                                  {schedule.store_short_name && (
+                                    <Chip 
+                                      label={schedule.store_short_name}
+                                      size="small" 
+                                      sx={{ 
+                                        fontSize: '0.65rem', 
+                                        height: '20px', 
+                                        mb: 0.5,
+                                        fontWeight: 600,
+                                        boxShadow: 1,
+                                        bgcolor: '#424242',
+                                        color: '#ffffff',
+                                      }}
+                                    />
+                                  )}
+                                </Box>
+                              ) : (
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                  ---
+                                </Typography>
+                              )}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ));
+                  })()}
+                  {/* 統計行：顯示每日 FT 和 PT 數量 */}
+                  <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>
+                    <TableCell
+                      sx={{
+                        bgcolor: 'grey.100',
+                        borderRight: '2px solid',
+                        borderColor: 'divider',
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 1,
+                        fontWeight: 600,
+                        fontSize: '0.9rem',
+                      }}
+                    >
+                      {t('schedule.summary') || '統計'}
+                    </TableCell>
+                    {dates.map(date => {
+                      const dateStr = date.format('YYYY-MM-DD');
+                      // 計算該日期有排班的 FT 和 PT 數量
+                      let ftCount = 0;
+                      let ptCount = 0;
+                      
+                      // 統計群組成員（只計算有排班時間的）
+                      groupMembers.forEach(member => {
+                        const schedule = getScheduleForUserAndDate(member.id, date);
+                        // 判斷是否有排班時間：必須有 start_time 或 end_time（不包括只有 leave_type 但沒有時間的）
+                        const hasScheduleTime = schedule && (
+                          schedule.start_time || 
+                          schedule.end_time
+                        );
+                        
+                        if (hasScheduleTime) {
+                          const employmentMode = member.position_employment_mode || member.employment_mode;
+                          if (employmentMode === 'FT') {
+                            ftCount++;
+                          } else if (employmentMode === 'PT') {
+                            ptCount++;
+                          }
+                        }
+                      });
+                      
+                      // 統計 helper schedules（只計算有排班時間的）
+                      helperSchedules.forEach(helper => {
+                        const helperDateStr = typeof helper.schedule_date === 'string' 
+                          ? helper.schedule_date.split('T')[0] 
+                          : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                        
+                        if (helperDateStr === dateStr) {
+                          // 判斷是否有排班時間：必須有 start_time 或 end_time
+                          const hasScheduleTime = helper.start_time || helper.end_time;
+                          
+                          if (hasScheduleTime) {
+                            const employmentMode = helper.position_employment_mode;
+                            if (employmentMode === 'FT') {
+                              ftCount++;
+                            } else if (employmentMode === 'PT') {
+                              ptCount++;
+                            }
+                          }
+                        }
+                      });
+                      
+                      return (
+                        <TableCell
+                          key={dateStr}
+                          align="center"
+                          sx={{
+                            py: 1.5,
+                            borderRight: '1px solid',
+                            borderColor: 'divider',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            bgcolor: 'grey.100',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                              FT: {ftCount}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'secondary.main' }}>
+                              PT: {ptCount}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
                 </TableBody>
               </Table>
               </TableContainer>
             </Card>
+            </>
             )
           ) : (
             <Card 
