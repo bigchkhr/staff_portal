@@ -80,7 +80,7 @@ class EmployeeDocument {
       }
     }
 
-    return await query.orderBy('employee_documents.created_at', 'desc');
+    return await query.orderBy('employee_documents.id', 'desc');
   }
 
   static async findById(id) {

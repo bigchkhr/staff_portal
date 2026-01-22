@@ -124,6 +124,59 @@ const MyAttendance = () => {
     return time.toString().substring(0, 5);
   };
 
+  // 將時間字符串轉換為分鐘數（從當天00:00開始的總分鐘數）
+  const parseTime = (timeStr) => {
+    if (!timeStr) return null;
+    try {
+      const timeOnly = timeStr.split(':').slice(0, 2).join(':');
+      const [hours, minutes] = timeOnly.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return null;
+      return hours * 60 + minutes;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // 計算遲到分鐘數
+  const calculateLateMinutes = (item) => {
+    if (!item || !item.schedule || !item.schedule.start_time) {
+      return null;
+    }
+
+    // 獲取有效的上班打卡記錄（is_valid === true 且 in_out 以 'IN' 開頭）
+    const validClockInRecords = item.clock_records?.filter(r => 
+      r.is_valid === true && 
+      r.clock_time && 
+      r.in_out && 
+      r.in_out.toUpperCase().startsWith('IN')
+    ) || [];
+    
+    if (validClockInRecords.length === 0) {
+      return null;
+    }
+
+    // 按時間排序，取第一個（最早的）作為上班打卡時間
+    const sortedRecords = [...validClockInRecords].sort((a, b) => {
+      const timeA = a.clock_time || '';
+      const timeB = b.clock_time || '';
+      return timeA.localeCompare(timeB);
+    });
+
+    const firstClockInTime = sortedRecords[0]?.clock_time;
+    if (!firstClockInTime) {
+      return null;
+    }
+
+    const scheduleStart = parseTime(item.schedule.start_time);
+    const actualStart = parseTime(firstClockInTime);
+
+    if (scheduleStart !== null && actualStart !== null && actualStart > scheduleStart) {
+      return actualStart - scheduleStart;
+    }
+
+    return null;
+  };
+
   const formatDate = (date) => {
     if (!date) return '';
     const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
@@ -398,6 +451,26 @@ const MyAttendance = () => {
                                         </Box>
                                       );
                                     })}
+                                    {/* 顯示遲到信息 */}
+                                    {(() => {
+                                      const lateMinutes = calculateLateMinutes(item);
+                                      if (lateMinutes !== null && lateMinutes > 0) {
+                                        return (
+                                          <Typography 
+                                            variant="caption" 
+                                            sx={{ 
+                                              color: '#8B0000', // 深紅色
+                                              fontWeight: 600,
+                                              mt: 0.5,
+                                              fontSize: '0.85rem'
+                                            }}
+                                          >
+                                            遲到 {lateMinutes} 分鐘
+                                          </Typography>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
                                   </Box>
                                 ) : (
                                   <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mt: 0.5 }}>

@@ -842,9 +842,7 @@ const GroupLeaveCalendar = () => {
                                       const leaveTypeName = getLeaveTypeName(schedule);
                                       const leavePeriodText = getLeavePeriodText(schedule);
                                       const leavePeriodColor = getLeavePeriodColor(schedule);
-                                      const memberName = i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
-                                        ? member.name_zh || member.name
-                                        : member.name;
+                                      const memberName = member.display_name || member.name;
                                       
                                       return (
                                         <Box 
