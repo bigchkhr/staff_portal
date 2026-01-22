@@ -12,8 +12,11 @@ import {
   MenuItem,
   FormControlLabel,
   Switch,
-  Box
+  Box,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
+import { Refresh as RefreshIcon, Visibility, VisibilityOff } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 
@@ -36,11 +39,13 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
   });
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (open) {
       fetchDepartments();
       fetchPositions();
+      setShowPassword(false);
       
       if (editing && initialData) {
         setFormData({
@@ -128,6 +133,54 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const generateRandomPassword = async () => {
+    // 生成包含大小寫字母、數字和特殊字符的隨機密碼
+    const length = 12;
+    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+    const numbers = '0123456789';
+    const special = '!@#$%^&*';
+    const allChars = uppercase + lowercase + numbers + special;
+    
+    let password = '';
+    // 確保至少包含一個大寫字母、小寫字母、數字和特殊字符
+    password += uppercase[Math.floor(Math.random() * uppercase.length)];
+    password += lowercase[Math.floor(Math.random() * lowercase.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += special[Math.floor(Math.random() * special.length)];
+    
+    // 填充剩餘長度
+    for (let i = password.length; i < length; i++) {
+      password += allChars[Math.floor(Math.random() * allChars.length)];
+    }
+    
+    // 打亂字符順序
+    password = password.split('').sort(() => Math.random() - 0.5).join('');
+    
+    setFormData(prev => ({ ...prev, password }));
+    
+    // 自動複製到剪貼板
+    try {
+      await navigator.clipboard.writeText(password);
+      // 可以選擇顯示提示消息，但這裡先不顯示，避免打擾用戶
+    } catch (err) {
+      console.error('複製到剪貼板失敗:', err);
+      // 如果 Clipboard API 不可用，可以嘗試使用 fallback 方法
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = password;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (fallbackErr) {
+        console.error('Fallback 複製方法也失敗:', fallbackErr);
+      }
+    }
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{editing ? t('adminUsers.editUser') : t('adminUsers.addUser')}</DialogTitle>
@@ -174,13 +227,42 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             value={formData.email}
             onChange={handleChange('email')}
           />
-          <TextField
-            label={editing ? t('adminUsers.newPassword') : t('adminUsers.password')}
-            type="password"
-            value={formData.password}
-            onChange={handleChange('password')}
-            required={!editing}
-          />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <TextField
+              label={editing ? t('adminUsers.newPassword') : t('adminUsers.password')}
+              type={showPassword ? 'text' : 'password'}
+              value={formData.password}
+              onChange={handleChange('password')}
+              required={!editing}
+              fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                      aria-label="切換密碼顯示"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Button
+              variant="contained"
+              onClick={generateRandomPassword}
+              startIcon={<RefreshIcon />}
+              sx={{
+                mt: 0.5,
+                minWidth: 'auto',
+                whiteSpace: 'nowrap',
+                textTransform: 'none',
+              }}
+            >
+              {t('adminUsers.generateRandomPassword')}
+            </Button>
+          </Box>
           <FormControl>
             <InputLabel>{t('adminUsers.department')}</InputLabel>
             <Select

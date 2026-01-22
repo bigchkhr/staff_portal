@@ -265,35 +265,60 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     }
 
     // 計算總工作時數
-    if (clockInTime && clockOutTime) {
-      const start = parseTime(clockInTime);
+    // 全日上班總時數 = 打卡最後時間 - 排班開始時間（如果有排班時間）
+    // 如果沒有排班時間，則 = 打卡最後時間 - 當日首次打卡時間
+    if (clockOutTime) {
       const end = parseTime(clockOutTime);
       
-      if (start !== null && end !== null) {
-        let workMinutes = end - start;
-        // 如果有Break時間，需要減去
-        if (result.break_duration !== null) {
-          workMinutes -= result.break_duration;
+      if (end !== null) {
+        let start = null;
+        
+        // 優先使用排班開始時間
+        if (scheduleStartTime) {
+          start = parseTime(scheduleStartTime);
+        } 
+        // 如果沒有排班開始時間，使用首次打卡時間
+        else if (clockInTime) {
+          start = parseTime(clockInTime);
         }
-        result.total_work_hours = workMinutes / 60;
+        
+        if (start !== null) {
+          let workMinutes = end - start;
+          // 如果有遲到時間，需要減去
+          if (result.late_minutes !== null && result.late_minutes > 0) {
+            workMinutes -= result.late_minutes;
+          }
+          result.total_work_hours = workMinutes / 60;
+        }
       }
     }
 
     // 計算超時工作時間
+    let overtimeMinutes = null;
     if (scheduleEndTime && clockOutTime) {
       const scheduleEnd = parseTime(scheduleEndTime);
       const actualEnd = parseTime(clockOutTime);
       
       if (scheduleEnd !== null && actualEnd !== null && actualEnd > scheduleEnd) {
-        const overtimeMinutes = actualEnd - scheduleEnd;
+        overtimeMinutes = actualEnd - scheduleEnd;
         if (overtimeMinutes >= 15) {
           result.overtime_hours = overtimeMinutes / 60;
-
-          // 應計工作時數：按 employment_mode 向下取整
-          const mode = (employmentMode || '').toString().trim().toUpperCase();
-          const interval = mode === 'PT' ? 15 : 30; // FT（或未知）預設 30 分鐘
-          result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, interval);
         }
+      }
+    }
+
+    // 計算應計工作時數
+    const mode = (employmentMode || '').toString().trim().toUpperCase();
+    if (mode === 'PT') {
+      // PT員工：應計工作時數 = 全日上班總時數，向下取整到15分鐘
+      if (result.total_work_hours !== null && result.total_work_hours !== undefined) {
+        const totalWorkMinutes = result.total_work_hours * 60; // 將小時轉換為分鐘
+        result.approved_overtime_minutes = floorMinutesToInterval(totalWorkMinutes, 15);
+      }
+    } else {
+      // FT員工：保持現有計法（只在有超時工作時計算應計工作時數，向下取整到30分鐘）
+      if (overtimeMinutes !== null && overtimeMinutes >= 15) {
+        result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, 30);
       }
     }
 
@@ -662,6 +687,11 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     ];
 
     // 表格標題 - 使用英文避免字體問題（需與頁面 table 欄位一致）
+    // 根據 employment_mode 決定標題
+    const employmentMode = selectedUser?.position_employment_mode;
+    const mode = (employmentMode || '').toString().trim().toUpperCase();
+    const approvedOTLabel = mode === 'FT' ? 'Accrued OT Hours' : 'Accrued Work Hours';
+    
     const tableHeaders = [
       'Date',
       'Roster',
@@ -671,12 +701,14 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       'Break',
       'Work',
       'Overtime',
-      'Approved OT'
+      approvedOTLabel
     ];
 
     // 確保有數據才生成表格
+    let finalY = 40;
     if (tableData.length === 0) {
       doc.text('No data available', 14, 50);
+      finalY = 50;
     } else {
       // 添加表格 - 不設置自定義字體，使用默認字體
       // 縱向模式下需要調整列寬，總寬度約為 180mm（A4 縱向寬度減去邊距）
@@ -715,8 +747,66 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
           6: { cellWidth: 18 }, // Work
           7: { cellWidth: 18 },  // Overtime
           8: { cellWidth: 20 }  // Approved OT
+        },
+        didDrawPage: (data) => {
+          finalY = data.cursor.y;
         }
       });
+      
+      // 獲取表格結束位置
+      const tableEndY = doc.lastAutoTable.finalY || finalY;
+      finalY = tableEndY + 10;
+    }
+
+    // 添加統計信息
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary:', 14, finalY);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    finalY += 7;
+    
+    // 應計工作時數/應計超時工作時數
+    doc.text(`${approvedOTLabel}: ${totals.approved_overtime_minutes > 0 ? formatTime(totals.approved_overtime_minutes) : '--'}`, 14, finalY);
+    finalY += 6;
+    
+    // 總遲到分鐘數（只有 >= 10 分鐘時才顯示）
+    if (totals.late_minutes >= 10) {
+      doc.text(`Total Late Minutes: ${formatTime(totals.late_minutes)}`, 14, finalY);
+      finalY += 6;
+    }
+
+    // 勤工獎資格檢查（僅對FT員工）
+    if (mode === 'FT') {
+      // 定義不符合資格的假期類型
+      const disqualifiedLeaveTypes = [
+        '無薪事假',
+        '無薪病假',
+        '病假 (疾病津貼)',
+        '全薪病假',
+        '工傷病假',
+        '產假',
+        '侍產假',
+        '恩恤假'
+      ];
+      
+      // 檢查是否有不符合資格的假期
+      const hasDisqualifiedLeave = dailyData.some(day => {
+        const leaveType = day.schedule?.leave_type_name_zh || 
+                         day.attendance_data?.schedule?.leave_type_name_zh;
+        return leaveType && disqualifiedLeaveTypes.includes(leaveType);
+      });
+      
+      // 如果遲到 >= 10分鐘或有不符合資格的假期，顯示提示
+      if (totals.late_minutes >= 10 || hasDisqualifiedLeave) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(255, 0, 0); // 紅色
+        doc.setFontSize(9);
+        doc.text('Not eligible for attendance bonus this month', 14, finalY);
+        doc.setTextColor(0, 0, 0); // 恢復黑色
+        doc.setFont('helvetica', 'normal');
+      }
     }
 
     // 生成文件名 - 使用英文避免文件名問題
@@ -853,7 +943,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
                       <MenuItem key={m} value={m}>
-                        {m} {t('attendance.month') || '月'}
+                        {t(`attendance.month${m}`) || ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1]}
                       </MenuItem>
                     ))}
                   </Select>
@@ -867,7 +957,14 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={3}>
                     <Typography variant="body2" color="text.secondary">
-                      {t('attendance.approvedOvertimeHours') || '應計工作時數'}：
+                      {(() => {
+                        const selectedUser = users.find(u => u.id === selectedUserId);
+                        const employmentMode = selectedUser?.position_employment_mode;
+                        const mode = (employmentMode || '').toString().trim().toUpperCase();
+                        return mode === 'FT' 
+                          ? (t('attendance.approvedOvertimeHoursForFT') || '應計超時工作時數')
+                          : (t('attendance.approvedOvertimeHours') || '應計工作時數');
+                      })()}：
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 600, color: '#1565C0' }}>
                       {(() => {
@@ -902,6 +999,58 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                     );
                   })()}
                 </Grid>
+                
+                {/* 勤工獎資格檢查 - 僅對FT員工顯示 */}
+                {(() => {
+                  const selectedUser = users.find(u => u.id === selectedUserId);
+                  const employmentMode = selectedUser?.position_employment_mode;
+                  
+                  // 只檢查FT員工
+                  if (employmentMode && employmentMode.toString().trim().toUpperCase() === 'FT') {
+                    // 計算總遲到時間
+                    const totalLate = dailyData.reduce((sum, day) => {
+                      return sum + (day.late_minutes || 0);
+                    }, 0);
+                    
+                    // 定義不符合資格的假期類型
+                    const disqualifiedLeaveTypes = [
+                      '無薪事假',
+                      '無薪病假',
+                      '病假 (疾病津貼)',
+                      '全薪病假',
+                      '工傷病假',
+                      '產假',
+                      '侍產假',
+                      '恩恤假'
+                    ];
+                    
+                    // 檢查是否有不符合資格的假期
+                    const hasDisqualifiedLeave = dailyData.some(day => {
+                      const leaveType = day.schedule?.leave_type_name_zh || 
+                                       day.attendance_data?.schedule?.leave_type_name_zh;
+                      return leaveType && disqualifiedLeaveTypes.includes(leaveType);
+                    });
+                    
+                    // 如果遲到 >= 10分鐘或有不符合資格的假期，顯示提示
+                    if (totalLate >= 10 || hasDisqualifiedLeave) {
+                      return (
+                        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: 'error.main',
+                              fontSize: '0.875rem',
+                              fontWeight: 500
+                            }}
+                          >
+                            {t('attendance.notEligibleForAttendanceBonus') || '本月不符合領取勤工獎資格'}
+                          </Typography>
+                        </Box>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
               </Box>
             )}
           </Card>
@@ -943,7 +1092,14 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                         {t('attendance.overtimeHours') || '超時工作時間'}
                       </TableCell>
                       <TableCell sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 600 }}>
-                        {t('attendance.approvedOvertimeHours') || '應計工作時數'}
+                        {(() => {
+                          const selectedUser = users.find(u => u.id === selectedUserId);
+                          const employmentMode = selectedUser?.position_employment_mode;
+                          const mode = (employmentMode || '').toString().trim().toUpperCase();
+                          return mode === 'FT' 
+                            ? (t('attendance.approvedOvertimeHoursForFT') || '應計超時工作時數')
+                            : (t('attendance.approvedOvertimeHours') || '應計工作時數');
+                        })()}
                       </TableCell>
                       <TableCell sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 600 }}>
                         {t('attendance.details') || '詳情'}
@@ -1085,7 +1241,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                   {schedule.leave_type_name_zh ? (
                                     <Box sx={{ mb: 0.5 }}>
                                       <Chip
-                                        icon={schedule.is_approved_leave ? <CheckCircleIcon /> : <EventIcon />}
                                         label={
                                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -1105,17 +1260,13 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                           fontWeight: 600,
                                           boxShadow: schedule.is_approved_leave 
                                             ? '0 2px 4px rgba(76, 175, 80, 0.3)' 
-                                            : '0 2px 4px rgba(237, 108, 2, 0.3)',
-                                          '& .MuiChip-icon': {
-                                            fontSize: '1rem'
-                                          }
+                                            : '0 2px 4px rgba(237, 108, 2, 0.3)'
                                         }}
                                       />
                                     </Box>
                                   ) : null}
                                   {(schedule.start_time || schedule.end_time) ? (
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: schedule.leave_type_name_zh ? 0.5 : 0 }}>
-                                      <ScheduleIcon sx={{ fontSize: '0.875rem', color: 'text.secondary' }} />
+                                    <Box sx={{ mt: schedule.leave_type_name_zh ? 0.5 : 0 }}>
                                       <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 500 }}>
                                         {schedule.start_time ? formatTimeDisplay(schedule.start_time) : '--:--'} - {schedule.end_time ? formatTimeDisplay(schedule.end_time) : '--:--'}
                                       </Typography>
@@ -1388,7 +1539,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                   {t('attendance.leaveType') || '假期類型'}:
                                 </Typography>
                                 <Chip
-                                  icon={schedule.is_approved_leave ? <CheckCircleIcon /> : <EventIcon />}
                                   label={
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -1407,10 +1557,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                     fontWeight: 600,
                                     boxShadow: schedule.is_approved_leave 
                                       ? '0 2px 6px rgba(76, 175, 80, 0.3)' 
-                                      : '0 2px 6px rgba(237, 108, 2, 0.3)',
-                                    '& .MuiChip-icon': {
-                                      fontSize: '1.1rem'
-                                    }
+                                      : '0 2px 6px rgba(237, 108, 2, 0.3)'
                                   }}
                                 />
                               </Grid>
@@ -1442,6 +1589,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                               <TableCell>{t('attendance.inOut') || '進出'}</TableCell>
                               <TableCell>{t('attendance.branchCode') || '分行代碼'}</TableCell>
                               <TableCell>{t('attendance.isValid') || '有效'}</TableCell>
+                              <TableCell>{t('attendance.remarks') || '備註'}</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -1457,6 +1605,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                     <Chip label={t('common.no') || '否'} size="small" />
                                   )}
                                 </TableCell>
+                                <TableCell>{record.remarks || '--'}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>

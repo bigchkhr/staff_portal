@@ -224,13 +224,31 @@ class MonthlyAttendanceSummaryController {
     }
 
     // 計算總工作時數
-    if (clockInTime && clockOutTime) {
-      const start = this.parseTime(clockInTime);
+    // 全日上班總時數 = 打卡最後時間 - 排班開始時間（如果有排班時間）
+    // 如果沒有排班時間，則 = 打卡最後時間 - 當日首次打卡時間
+    if (clockOutTime) {
       const end = this.parseTime(clockOutTime);
       
-      if (start !== null && end !== null) {
-        const totalMinutes = end - start;
-        result.total_work_hours = (totalMinutes / 60).toFixed(2);
+      if (end !== null) {
+        let start = null;
+        
+        // 優先使用排班開始時間
+        if (scheduleStartTime) {
+          start = this.parseTime(scheduleStartTime);
+        } 
+        // 如果沒有排班開始時間，使用首次打卡時間
+        else if (clockInTime) {
+          start = this.parseTime(clockInTime);
+        }
+        
+        if (start !== null) {
+          let totalMinutes = end - start;
+          // 如果有遲到時間，需要減去
+          if (result.late_minutes !== null && result.late_minutes > 0) {
+            totalMinutes -= result.late_minutes;
+          }
+          result.total_work_hours = (totalMinutes / 60).toFixed(2);
+        }
       }
     }
 

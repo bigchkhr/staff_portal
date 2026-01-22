@@ -1981,79 +1981,66 @@ const Schedule = ({ noLayout = false }) => {
               <Grid item xs={12} md={3}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                   {canEdit && (
-                    <>
-                      <Button
-                        variant={editMode ? 'contained' : 'outlined'}
-                        onClick={() => setEditMode(!editMode)}
-                        startIcon={<EditIcon />}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          boxShadow: editMode ? 3 : 0,
-                          '&:hover': {
-                            boxShadow: 4,
-                            transform: 'translateY(-2px)',
-                            transition: 'all 0.2s',
-                          },
-                        }}
-                      >
-                        {editMode ? t('schedule.exitEdit') : t('schedule.edit')}
-                      </Button>
-                      {editMode && (
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          onClick={handleBatchEdit}
-                          startIcon={<SaveIcon />}
-                          sx={{
-                            borderRadius: 2,
-                            textTransform: 'none',
-                            fontWeight: 600,
-                            boxShadow: 3,
-                            '&:hover': {
-                              boxShadow: 5,
-                              transform: 'translateY(-2px)',
-                              transition: 'all 0.2s',
-                            },
-                          }}
-                        >
-                          {t('schedule.batchEdit')}
-                        </Button>
-                      )}
-                    </>
+                    <Button
+                      variant={editMode ? 'contained' : 'outlined'}
+                      onClick={() => setEditMode(!editMode)}
+                      startIcon={<EditIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: editMode ? 3 : 0,
+                        '&:hover': {
+                          boxShadow: 4,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {editMode ? t('schedule.exitEdit') : t('schedule.edit')}
+                    </Button>
                   )}
-                </Box>
-              </Grid>
-              {canControlCheckerEdit && (
-                <Grid item xs={12}>
-                  <Card 
-                    elevation={1}
-                    sx={{ 
-                      p: 2,
-                      borderRadius: 2,
-                      bgcolor: 'background.paper',
-                      border: '1px solid',
-                      borderColor: 'divider'
-                    }}
-                  >
+                  {canControlCheckerEdit && (
                     <FormControlLabel
                       control={
                         <Switch
                           checked={allowCheckerEdit}
                           onChange={handleToggleCheckerEdit}
                           color="primary"
+                          size="small"
                         />
                       }
                       label={
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
                           {t('schedule.allowCheckerEdit')}
                         </Typography>
                       }
+                      sx={{ ml: 0, mr: 0 }}
                     />
-                  </Card>
-                </Grid>
-              )}
+                  )}
+                  {canEdit && editMode && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleBatchEdit}
+                      startIcon={<SaveIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: 3,
+                        '&:hover': {
+                          boxShadow: 5,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {t('schedule.batchEdit')}
+                    </Button>
+                  )}
+                </Box>
+              </Grid>
             </Grid>
           </Card>
 
