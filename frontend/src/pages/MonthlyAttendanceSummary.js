@@ -44,6 +44,7 @@ import {
   Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -63,6 +64,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => dayjs().tz('Asia/Hong_Kong').year());
@@ -80,6 +82,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // 從 URL 參數中獲取 employee_number 並設置 selectedUserId
+  useEffect(() => {
+    const employeeNumber = searchParams.get('employee_number');
+    if (employeeNumber && users.length > 0) {
+      const foundUser = users.find(u => u.employee_number === employeeNumber);
+      if (foundUser) {
+        setSelectedUserId(foundUser.id);
+      }
+    }
+  }, [searchParams, users]);
 
   useEffect(() => {
     if (selectedUserId && selectedYear && selectedMonth) {

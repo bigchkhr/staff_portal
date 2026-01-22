@@ -310,6 +310,55 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
+  // 檢查用戶是否為 checker、approver1、approver2、approver3
+  const canViewLeaveTypeDetail = () => {
+    // 系統管理員可以看到詳細假期類別
+    if (user.is_system_admin) {
+      return true;
+    }
+
+    const group = departmentGroups.find(g => g.id === selectedGroupId);
+    if (!group) {
+      return false;
+    }
+
+    const userDelegationGroups = user.delegation_groups || [];
+    const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+    const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
+    const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+    const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+    const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+
+    return isChecker || isApprover1 || isApprover2 || isApprover3;
+  };
+
+  // 獲取應該顯示的假期類別文字
+  const getLeaveTypeDisplayText = (schedule) => {
+    if (!schedule || (!schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code)) {
+      return null;
+    }
+
+    const canViewDetail = canViewLeaveTypeDetail();
+    
+    // 如果不能查看詳細類別，只顯示「假期」
+    if (!canViewDetail) {
+      const periodText = schedule.leave_session 
+        ? ` (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+        : '';
+      return i18n.language === 'en' ? `Leave${periodText}` : `假期${periodText}`;
+    }
+
+    // 可以查看詳細類別，顯示具體的假期類別
+    const leaveTypeDisplay = i18n.language === 'en'
+      ? (schedule.leave_type_code || schedule.leave_type_name)
+      : (schedule.leave_type_name_zh || schedule.leave_type_name);
+    
+    return schedule.leave_session 
+      ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
+      : leaveTypeDisplay;
+  };
+
   const getScheduleForUserAndDate = (userId, date) => {
     // 如果 date 為 null 或 undefined，返回 null
     if (!date) {
@@ -1030,18 +1079,9 @@ const Schedule = ({ noLayout = false }) => {
                                       {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
                                     </Typography>
                                   )}
-                                  {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                  {getLeaveTypeDisplayText(schedule) && (
                                     <Chip
-                                      label={
-                                        (() => {
-                                          const leaveTypeDisplay = i18n.language === 'en'
-                                            ? (schedule.leave_type_code || schedule.leave_type_name)
-                                            : (schedule.leave_type_name_zh || schedule.leave_type_name);
-                                          return schedule.leave_session
-                                            ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
-                                            : leaveTypeDisplay;
-                                        })()
-                                      }
+                                      label={getLeaveTypeDisplayText(schedule)}
                                       size="small"
                                       color="primary"
                                       sx={{ 
@@ -1090,18 +1130,9 @@ const Schedule = ({ noLayout = false }) => {
                                       {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
                                     </Typography>
                                   )}
-                                  {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                  {getLeaveTypeDisplayText(schedule) && (
                                     <Chip
-                                      label={
-                                        (() => {
-                                          const leaveTypeDisplay = i18n.language === 'en'
-                                            ? (schedule.leave_type_code || schedule.leave_type_name)
-                                            : (schedule.leave_type_name_zh || schedule.leave_type_name);
-                                          return schedule.leave_session
-                                            ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
-                                            : leaveTypeDisplay;
-                                        })()
-                                      }
+                                      label={getLeaveTypeDisplayText(schedule)}
                                       size="small"
                                       color="primary"
                                       sx={{ 
@@ -1192,26 +1223,38 @@ const Schedule = ({ noLayout = false }) => {
                     }
                   });
                   
-                  // 統計 helper schedules（只計算有排班時間的）
-                  helperSchedules.forEach(helper => {
-                    const helperDateStr = typeof helper.schedule_date === 'string' 
-                      ? helper.schedule_date.split('T')[0] 
-                      : dayjs(helper.schedule_date).format('YYYY-MM-DD');
-                    
-                    if (helperDateStr === dateStr) {
-                      // 判斷是否有排班時間：必須有 start_time 或 end_time
-                      const hasScheduleTime = helper.start_time || helper.end_time;
+                  // 統計 helper schedules（只計算有排班時間的，且 store_short_name 匹配的）
+                  const selectedStore = selectedDefaultStoreId 
+                    ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
+                    : null;
+                  const selectedStoreShortName = selectedStore?.store_short_name_ || null;
+                  
+                  if (selectedStoreShortName) {
+                    helperSchedules.forEach(helper => {
+                      // 只統計 store_short_name 匹配的 helper
+                      if (helper.store_short_name !== selectedStoreShortName) {
+                        return;
+                      }
                       
-                      if (hasScheduleTime) {
-                        const employmentMode = helper.position_employment_mode;
-                        if (employmentMode === 'FT') {
-                          ftCount++;
-                        } else if (employmentMode === 'PT') {
-                          ptCount++;
+                      const helperDateStr = typeof helper.schedule_date === 'string' 
+                        ? helper.schedule_date.split('T')[0] 
+                        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                      
+                      if (helperDateStr === dateStr) {
+                        // 判斷是否有排班時間：必須有 start_time 或 end_time
+                        const hasScheduleTime = helper.start_time || helper.end_time;
+                        
+                        if (hasScheduleTime) {
+                          const employmentMode = helper.position_employment_mode;
+                          if (employmentMode === 'FT') {
+                            ftCount++;
+                          } else if (employmentMode === 'PT') {
+                            ptCount++;
+                          }
                         }
                       }
-                    }
-                  });
+                    });
+                  }
                   
                   return (
                     <TableCell
@@ -2192,18 +2235,9 @@ const Schedule = ({ noLayout = false }) => {
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
-                                      {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                      {getLeaveTypeDisplayText(schedule) && (
                                         <Chip 
-                                          label={
-                                            (() => {
-                                              const leaveTypeDisplay = i18n.language === 'en'
-                                                ? (schedule.leave_type_code || schedule.leave_type_name)
-                                                : (schedule.leave_type_name_zh || schedule.leave_type_name);
-                                              return schedule.leave_session 
-                                                ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
-                                                : leaveTypeDisplay;
-                                            })()
-                                          }
+                                          label={getLeaveTypeDisplayText(schedule)}
                                           size="small" 
                                           color="primary"
                                           sx={{ 
@@ -2271,18 +2305,9 @@ const Schedule = ({ noLayout = false }) => {
                                         </Typography>
                                       )}
                                       {/* 顯示假期類型 */}
-                                      {(schedule.leave_type_name_zh || schedule.leave_type_name || schedule.leave_type_code) && (
+                                      {getLeaveTypeDisplayText(schedule) && (
                                         <Chip 
-                                          label={
-                                            (() => {
-                                              const leaveTypeDisplay = i18n.language === 'en'
-                                                ? (schedule.leave_type_code || schedule.leave_type_name)
-                                                : (schedule.leave_type_name_zh || schedule.leave_type_name);
-                                              return schedule.leave_session 
-                                                ? `${leaveTypeDisplay} (${schedule.leave_session === 'AM' ? t('schedule.morning') : t('schedule.afternoon')})`
-                                                : leaveTypeDisplay;
-                                            })()
-                                          }
+                                          label={getLeaveTypeDisplayText(schedule)}
                                           size="small" 
                                           color="primary"
                                           sx={{ 
@@ -2332,9 +2357,25 @@ const Schedule = ({ noLayout = false }) => {
                   ))}
                   {/* 顯示跨群組的 helper */}
                   {(() => {
-                    // 按用戶分組 helper schedules
+                    // 獲取選中的 store 的 store_short_name_
+                    const selectedStore = selectedDefaultStoreId 
+                      ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
+                      : null;
+                    const selectedStoreShortName = selectedStore?.store_short_name_ || null;
+                    
+                    // 按用戶分組 helper schedules，只處理 store_short_name 匹配的 helper
                     const helperByUser = {};
                     helperSchedules.forEach(helper => {
+                      // 如果選中了 store，只處理 store_short_name 匹配的 helper
+                      if (selectedStoreShortName) {
+                        if (helper.store_short_name !== selectedStoreShortName) {
+                          return; // 跳過不匹配的 helper
+                        }
+                      } else {
+                        // 如果沒有選中 store，不顯示任何 helper
+                        return;
+                      }
+                      
                       const userId = helper.user_id;
                       if (!helperByUser[userId]) {
                         helperByUser[userId] = {
@@ -2497,26 +2538,38 @@ const Schedule = ({ noLayout = false }) => {
                         }
                       });
                       
-                      // 統計 helper schedules（只計算有排班時間的）
-                      helperSchedules.forEach(helper => {
-                        const helperDateStr = typeof helper.schedule_date === 'string' 
-                          ? helper.schedule_date.split('T')[0] 
-                          : dayjs(helper.schedule_date).format('YYYY-MM-DD');
-                        
-                        if (helperDateStr === dateStr) {
-                          // 判斷是否有排班時間：必須有 start_time 或 end_time
-                          const hasScheduleTime = helper.start_time || helper.end_time;
+                      // 統計 helper schedules（只計算有排班時間的，且 store_short_name 匹配的）
+                      const selectedStore = selectedDefaultStoreId 
+                        ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
+                        : null;
+                      const selectedStoreShortName = selectedStore?.store_short_name_ || null;
+                      
+                      if (selectedStoreShortName) {
+                        helperSchedules.forEach(helper => {
+                          // 只統計 store_short_name 匹配的 helper
+                          if (helper.store_short_name !== selectedStoreShortName) {
+                            return;
+                          }
                           
-                          if (hasScheduleTime) {
-                            const employmentMode = helper.position_employment_mode;
-                            if (employmentMode === 'FT') {
-                              ftCount++;
-                            } else if (employmentMode === 'PT') {
-                              ptCount++;
+                          const helperDateStr = typeof helper.schedule_date === 'string' 
+                            ? helper.schedule_date.split('T')[0] 
+                            : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                          
+                          if (helperDateStr === dateStr) {
+                            // 判斷是否有排班時間：必須有 start_time 或 end_time
+                            const hasScheduleTime = helper.start_time || helper.end_time;
+                            
+                            if (hasScheduleTime) {
+                              const employmentMode = helper.position_employment_mode;
+                              if (employmentMode === 'FT') {
+                                ftCount++;
+                              } else if (employmentMode === 'PT') {
+                                ptCount++;
+                              }
                             }
                           }
-                        }
-                      });
+                        });
+                      }
                       
                       return (
                         <TableCell

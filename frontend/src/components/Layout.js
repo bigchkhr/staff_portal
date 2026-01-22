@@ -67,15 +67,18 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [isApprovalMember, setIsApprovalMember] = useState(false);
 
   useEffect(() => {
     fetchPendingCount();
+    checkApprovalMembership();
     // 設置定時刷新，減少更新頻率
     const interval = setInterval(() => {
       fetchPendingCount();
     }, 60000); // 改為每60秒更新一次
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isSystemAdmin]);
 
   // 當路由變化到批核相關頁面時，刷新待批核數量
   useEffect(() => {
@@ -95,6 +98,46 @@ const Layout = ({ children }) => {
     }
   };
 
+  const checkApprovalMembership = async () => {
+    // 系統管理員可以看到「我的批核」
+    if (isSystemAdmin) {
+      setIsApprovalMember(true);
+      return;
+    }
+
+    if (!user || !user.delegation_groups || user.delegation_groups.length === 0) {
+      setIsApprovalMember(false);
+      return;
+    }
+
+    try {
+      // 獲取所有部門群組
+      const response = await axios.get('/api/groups/department');
+      const departmentGroups = response.data.groups || [];
+      
+      // 獲取用戶所屬的授權群組 ID
+      const userDelegationGroupIds = user.delegation_groups.map(g => Number(g.id));
+      
+      // 檢查是否有任何部門群組的 checker_id、approver_1_id、approver_2_id、approver_3_id 匹配用戶的授權群組
+      const isMember = departmentGroups.some(group => {
+        const checkerId = group.checker_id ? Number(group.checker_id) : null;
+        const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
+        const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
+        const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
+        
+        return (checkerId !== null && userDelegationGroupIds.includes(checkerId)) ||
+               (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
+               (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
+               (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
+      });
+      
+      setIsApprovalMember(isMember);
+    } catch (error) {
+      console.error('檢查批核成員身份錯誤:', error);
+      setIsApprovalMember(false);
+    }
+  };
+
   const menuItems = [
     { key: 'dashboard', icon: <DashboardIcon />, path: '/', show: true },
     { key: 'myApplications', icon: <AssignmentIcon />, path: '/my-applications', show: true },
@@ -106,7 +149,7 @@ const Layout = ({ children }) => {
         </Badge>
       ), 
       path: '/my-approvals', 
-      show: true 
+      show: isApprovalMember 
     },
     { key: 'shiftManagement', icon: <CalendarTodayIcon />, path: '/shift-management', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },

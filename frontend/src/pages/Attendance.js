@@ -48,6 +48,7 @@ import {
   Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -1105,9 +1106,30 @@ const Attendance = ({ noLayout = false }) => {
                           }}
                         >
                           <Box>
-                            <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
-                              {userData.employee_number}
-                            </Typography>
+                            {canEdit ? (
+                              <Typography 
+                                variant="body2" 
+                                fontWeight="bold" 
+                                component={Link}
+                                to={`/monthly-attendance-summary?employee_number=${userData.employee_number}`}
+                                sx={{ 
+                                  color: 'primary.main', 
+                                  mb: 0.5,
+                                  textDecoration: 'none',
+                                  '&:hover': {
+                                    textDecoration: 'underline',
+                                    color: 'primary.dark',
+                                  },
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {userData.employee_number}
+                              </Typography>
+                            ) : (
+                              <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
+                                {userData.employee_number}
+                              </Typography>
+                            )}
                             <Typography variant="body2" color="text.primary" sx={{ fontWeight: 500 }}>
                               {userData.display_name}
                             </Typography>
