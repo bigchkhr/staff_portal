@@ -1419,7 +1419,7 @@ const Attendance = ({ noLayout = false }) => {
                             label={t('schedule.store')}
                           >
                             <MenuItem value="">
-                              <em>{t('common.none')}</em>
+                              <em>{t('schedule.selectStore')}</em>
                             </MenuItem>
                             {stores.map(store => (
                               <MenuItem key={store.id} value={store.id}>

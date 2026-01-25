@@ -681,7 +681,7 @@ class LeaveController {
   // 銷假申請
   async requestReversal(req, res) {
     try {
-      const { application_id } = req.body;
+      const { application_id, source } = req.body;
 
       if (!application_id) {
         return res.status(400).json({ message: '請提供原始申請 ID' });
@@ -703,14 +703,17 @@ class LeaveController {
         return res.status(403).json({ message: '只能為自己的申請進行銷假' });
       }
 
-      // HR Group 成員在 leave/history 中進行銷假操作，直接批准，無需走批核流程
-      // 普通用戶的銷假申請需要走批核流程
-      const isHRDirectApproval = isHR;
+      // 如果來自 leaveHistory 頁面，HR Group 成員也要走批核流程，與普通用戶一樣
+      // 只有從 approvalHistory 頁面發起的銷假，HR 才能一鍵批核
+      const isFromLeaveHistory = source === 'leaveHistory';
+      const isHRDirectApproval = isHR && !isFromLeaveHistory;
 
       console.log('[requestReversal] 銷假申請參數:', {
         application_id,
+        source,
         userId: req.user.id,
         isHR,
+        isFromLeaveHistory,
         isHRDirectApproval,
         isApplicant
       });

@@ -75,12 +75,8 @@ const UserSearchDialog = ({ open, onClose, onSelect, selectedUserId = null }) =>
       setLoading(true);
       const response = await axios.get('/api/admin/users');
       const usersList = response.data.users || [];
-      // 按 employee_number 排序
-      usersList.sort((a, b) => {
-        const aNum = a.employee_number || '';
-        const bNum = b.employee_number || '';
-        return aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // 按 ID 降序排序（最新用戶排在最前）
+      usersList.sort((a, b) => b.id - a.id);
       setUsers(usersList);
       setFilteredUsers(usersList); // 初始顯示所有用戶
     } catch (error) {

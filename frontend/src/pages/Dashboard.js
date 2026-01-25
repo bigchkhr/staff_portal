@@ -182,9 +182,9 @@ const Dashboard = () => {
       console.error('Fetch news detail error:', error);
       await Swal.fire({
         icon: 'error',
-        title: '錯誤',
-        text: '獲取消息詳情時發生錯誤',
-        confirmButtonText: '確定',
+        title: t('common.error'),
+        text: t('dashboard.news.deleteNewsFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#d33'
       });
     }
@@ -200,11 +200,11 @@ const Dashboard = () => {
   const handleDeleteNews = async (newsId) => {
     const result = await Swal.fire({
       icon: 'warning',
-      title: '確認刪除',
-      text: '確定要刪除此消息嗎？',
+      title: t('dashboard.news.confirmDelete'),
+      text: t('dashboard.news.confirmDeleteNews'),
       showCancelButton: true,
-      confirmButtonText: '確定',
-      cancelButtonText: '取消',
+      confirmButtonText: t('dashboard.news.confirm'),
+      cancelButtonText: t('dashboard.news.cancel'),
       confirmButtonColor: '#d33',
       cancelButtonColor: '#3085d6'
     });
@@ -215,9 +215,9 @@ const Dashboard = () => {
       await axios.delete(`/api/news/${newsId}`);
       await Swal.fire({
         icon: 'success',
-        title: '成功',
-        text: '消息已刪除',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.success'),
+        text: t('dashboard.news.newsDeleted'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#3085d6'
       });
       await fetchNews();
@@ -225,9 +225,9 @@ const Dashboard = () => {
       console.error('Delete news error:', error);
       await Swal.fire({
         icon: 'error',
-        title: '刪除失敗',
-        text: error.response?.data?.message || '刪除消息時發生錯誤',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.deleteFailed'),
+        text: error.response?.data?.message || t('dashboard.news.deleteNewsFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#d33'
       });
     }
@@ -372,11 +372,11 @@ const Dashboard = () => {
       // 刪除服務器上的附件
       const result = await Swal.fire({
         icon: 'warning',
-        title: '確認刪除',
-        text: '確定要刪除此附件嗎？',
+        title: t('dashboard.news.confirmDelete'),
+        text: t('dashboard.news.confirmDeleteAttachment'),
         showCancelButton: true,
-        confirmButtonText: '確定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('dashboard.news.confirm'),
+        cancelButtonText: t('dashboard.news.cancel'),
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6'
       });
@@ -388,18 +388,18 @@ const Dashboard = () => {
         setNewsAttachments(newsAttachments.filter(a => a.id !== attachment.id));
         await Swal.fire({
           icon: 'success',
-          title: '成功',
-          text: '附件已刪除',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.success'),
+          text: t('dashboard.news.attachmentDeleted'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#3085d6'
         });
       } catch (error) {
         console.error('Delete attachment error:', error);
         await Swal.fire({
           icon: 'error',
-          title: '刪除失敗',
-          text: error.response?.data?.message || '刪除附件時發生錯誤',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.deleteFailed'),
+          text: error.response?.data?.message || t('dashboard.news.deleteAttachmentFailed'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#d33'
         });
       }
@@ -425,9 +425,9 @@ const Dashboard = () => {
       if (!newsForm.title || newsForm.title.trim() === '') {
         await Swal.fire({
           icon: 'warning',
-          title: '提示',
-          text: '請輸入消息標題',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.hint'),
+          text: t('dashboard.news.pleaseEnterTitle'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#3085d6'
         });
         setSavingNews(false);
@@ -437,9 +437,9 @@ const Dashboard = () => {
       if (!newsForm.content || newsForm.content.trim() === '') {
         await Swal.fire({
           icon: 'warning',
-          title: '提示',
-          text: '請輸入消息內容',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.hint'),
+          text: t('dashboard.news.pleaseEnterContent'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#3085d6'
         });
         setSavingNews(false);
@@ -454,27 +454,22 @@ const Dashboard = () => {
       if (selectedGroupIds.length === 0) {
         await Swal.fire({
           icon: 'warning',
-          title: '提示',
-          text: '請至少選擇一個群組',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.hint'),
+          text: t('dashboard.news.pleaseSelectGroup'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#3085d6'
         });
         setSavingNews(false);
         return;
       }
 
-      // 如果選擇了所有群組，則設置 is_all_employees = true
-      const allGroupIds = departmentGroups.map(g => Number(g.id)).filter(id => !isNaN(id) && id > 0);
-      const isAllSelected = allGroupIds.length > 0 && 
-        selectedGroupIds.length === allGroupIds.length &&
-        allGroupIds.every(id => selectedGroupIds.includes(id));
-      
+      // 消息只發送給選擇的群組，不再自動設置 is_all_employees
       const newsData = {
         title: newsForm.title.trim(),
         content: newsForm.content.trim(),
         is_pinned: newsForm.is_pinned || false,
-        is_all_employees: isAllSelected,
-        group_ids: isAllSelected ? [] : selectedGroupIds
+        is_all_employees: false,
+        group_ids: selectedGroupIds
       };
 
       // 準備附件（只處理暫存的新附件）
@@ -533,18 +528,18 @@ const Dashboard = () => {
       
       await Swal.fire({
         icon: 'success',
-        title: '成功',
-        text: editingNews ? '消息更新成功' : '消息發布成功',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.success'),
+        text: editingNews ? t('dashboard.news.newsUpdated') : t('dashboard.news.newsPublished'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#3085d6'
       });
     } catch (error) {
       console.error('Create news error:', error);
       await Swal.fire({
         icon: 'error',
-        title: '發布失敗',
-        text: error.response?.data?.message || '發布消息時發生錯誤',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.publishFailed'),
+        text: error.response?.data?.message || t('dashboard.news.publishNewsFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#d33'
       });
       setSavingNews(false);
@@ -606,9 +601,9 @@ const Dashboard = () => {
       if (!myTodoForm.title || myTodoForm.title.trim() === '') {
         await Swal.fire({
           icon: 'warning',
-          title: '提示',
-          text: '請填寫標題',
-          confirmButtonText: '確定',
+          title: t('dashboard.news.hint'),
+          text: t('dashboard.news.pleaseEnterTitle'),
+          confirmButtonText: t('dashboard.news.confirm'),
           confirmButtonColor: '#3085d6'
         });
         setSavingMyTodo(false);
@@ -627,18 +622,18 @@ const Dashboard = () => {
       
       await Swal.fire({
         icon: 'success',
-        title: '成功',
-        text: editingMyTodo ? '個人待辦事項更新成功' : '個人待辦事項建立成功',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.success'),
+        text: t('dashboard.news.todoSaved'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#3085d6'
       });
     } catch (error) {
       console.error('Save my todo error:', error);
       await Swal.fire({
         icon: 'error',
-        title: '操作失敗',
-        text: error.response?.data?.message || '操作失敗',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.deleteFailed'),
+        text: error.response?.data?.message || t('dashboard.news.deleteFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#d33'
       });
       setSavingMyTodo(false);
@@ -648,11 +643,11 @@ const Dashboard = () => {
   const handleDeleteMyTodo = async (id) => {
     const result = await Swal.fire({
       icon: 'warning',
-      title: '確認刪除',
-      text: '確定要刪除此個人待辦事項嗎？',
+      title: t('dashboard.news.confirmDelete'),
+      text: t('dashboard.news.confirmDeleteTodo'),
       showCancelButton: true,
-      confirmButtonText: '確定',
-      cancelButtonText: '取消',
+      confirmButtonText: t('dashboard.news.confirm'),
+      cancelButtonText: t('dashboard.news.cancel'),
       confirmButtonColor: '#d33',
       cancelButtonColor: '#3085d6'
     });
@@ -663,9 +658,9 @@ const Dashboard = () => {
       await axios.delete(`/api/todos/my/${id}`);
       await Swal.fire({
         icon: 'success',
-        title: '成功',
-        text: '個人待辦事項刪除成功',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.success'),
+        text: t('dashboard.news.todoDeleted'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#3085d6'
       });
       await fetchMyTodos();
@@ -673,9 +668,9 @@ const Dashboard = () => {
       console.error('Delete my todo error:', error);
       await Swal.fire({
         icon: 'error',
-        title: '刪除失敗',
-        text: error.response?.data?.message || '刪除失敗',
-        confirmButtonText: '確定',
+        title: t('dashboard.news.deleteFailed'),
+        text: error.response?.data?.message || t('dashboard.news.deleteFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
         confirmButtonColor: '#d33'
       });
     }
@@ -733,7 +728,7 @@ const Dashboard = () => {
         >
           <Typography variant="h5" gutterBottom={isMobile}>
             <ArticleIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
-            最新消息
+            {t('dashboard.news.title')}
           </Typography>
           {/* 如果用戶有權限的部門群組列表不為空，或者是用戶是消息群組管理員/HR成員，則顯示發布按鈕 */}
           {(departmentGroups.length > 0 || isNewsGroupManager || isHRMember) && (
@@ -744,7 +739,7 @@ const Dashboard = () => {
               fullWidth={isMobile}
               size={isMobile ? 'medium' : 'medium'}
             >
-              發布消息
+              {t('dashboard.news.publish')}
             </Button>
           )}
         </Box>
@@ -756,7 +751,7 @@ const Dashboard = () => {
         ) : newsList.length === 0 ? (
           <Paper sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body1" color="text.secondary">
-              暫無最新消息
+              {t('dashboard.news.noNews')}
             </Typography>
           </Paper>
         ) : (
@@ -770,7 +765,7 @@ const Dashboard = () => {
                       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                         {news.is_pinned && (
                           <Chip
-                            label="置頂"
+                            label={t('dashboard.news.pinNews')}
                             color="warning"
                             size="small"
                             sx={{ mt: 0.5 }}
@@ -798,7 +793,7 @@ const Dashboard = () => {
                           </Typography>
                           <Box sx={{ display: 'flex', gap: 2, mt: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                             <Typography variant="caption" color="text.secondary">
-                              發布者: {news.creator_display_name || news.creator_email || '未知'}
+                              {t('dashboard.news.postedBy')}: {news.creator_display_name || news.creator_email || '-'}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               發布時間: {formatDate(news.created_at)}
@@ -1171,7 +1166,7 @@ const Dashboard = () => {
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {viewingNews?.is_pinned && (
-              <Chip label="置頂" color="warning" size="small" />
+              <Chip label={t('dashboard.news.pinNews')} color="warning" size="small" />
             )}
             <Typography variant="h6" component="span">
               {viewingNews?.title}
@@ -1183,7 +1178,7 @@ const Dashboard = () => {
             <>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
-                  發布者: {viewingNews.creator_display_name || viewingNews.creator_email || '未知'}
+                  {t('dashboard.news.postedBy')}: {viewingNews.creator_display_name || viewingNews.creator_email || '-'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   發布時間: {formatDate(viewingNews.created_at)}
@@ -1197,7 +1192,7 @@ const Dashboard = () => {
                 <>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="subtitle2" gutterBottom>
-                    附件 ({viewingNews.attachments.length} 個)
+                    {t('dashboard.news.attachmentsCount', { count: viewingNews.attachments.length })}
                   </Typography>
                   <List dense>
                     {viewingNews.attachments.map((attachment) => (
@@ -1228,7 +1223,7 @@ const Dashboard = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseNewsDetail} variant="outlined">
-            關閉
+            {t('dashboard.news.close')}
           </Button>
           </DialogActions>
         </Dialog>
@@ -1244,14 +1239,14 @@ const Dashboard = () => {
           fullScreen={isMobile}
         >
           <DialogTitle>
-            {editingNews ? '編輯消息' : '發布新消息'}
+            {editingNews ? t('dashboard.news.edit') : t('dashboard.news.publishNew')}
           </DialogTitle>
           <DialogContent>
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="消息標題"
+                  label={t('dashboard.news.newsTitle')}
                   value={newsForm.title}
                   onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
                   required
@@ -1260,7 +1255,7 @@ const Dashboard = () => {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="消息內容"
+                  label={t('dashboard.news.newsContent')}
                   multiline
                   rows={6}
                   value={newsForm.content}
@@ -1276,12 +1271,12 @@ const Dashboard = () => {
                       onChange={(e) => setNewsForm({ ...newsForm, is_pinned: e.target.checked })}
                     />
                   }
-                  label="置頂消息"
+                  label={t('dashboard.news.pinNews')}
                 />
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="subtitle2" gutterBottom>
-                  選擇接收群組（部門群組）
+                  {t('dashboard.news.selectGroups')}
                 </Typography>
                 {loadingDepartmentGroups ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
@@ -1290,30 +1285,6 @@ const Dashboard = () => {
                 ) : (
                   <Paper variant="outlined" sx={{ maxHeight: 300, overflow: 'auto' }}>
                     <List dense>
-                      <ListItem disablePadding>
-                        <ListItemButton onClick={handleSelectAllGroups}>
-                          <ListItemIcon>
-                            <Checkbox
-                              edge="start"
-                              checked={
-                                departmentGroups.length > 0 &&
-                                departmentGroups.every(g => (newsForm.group_ids || []).includes(g.id))
-                              }
-                              indeterminate={
-                                (newsForm.group_ids || []).length > 0 &&
-                                (newsForm.group_ids || []).length < departmentGroups.length
-                              }
-                              tabIndex={-1}
-                              disableRipple
-                            />
-                          </ListItemIcon>
-                          <ListItemText 
-                            primary="全選所有群組（發送給所有員工）"
-                            primaryTypographyProps={{ fontWeight: 'bold' }}
-                          />
-                        </ListItemButton>
-                      </ListItem>
-                      <Divider />
                       {departmentGroups.map((group) => {
                         const isSelected = (newsForm.group_ids || []).includes(group.id);
                         return (
@@ -1328,7 +1299,7 @@ const Dashboard = () => {
                                 />
                               </ListItemIcon>
                               <ListItemText 
-                                primary={group.name_zh || group.name}
+                                primary={i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name)}
                                 secondary={group.description || ''}
                               />
                             </ListItemButton>
@@ -1340,13 +1311,13 @@ const Dashboard = () => {
                 )}
                 {newsForm.group_ids && newsForm.group_ids.length > 0 && (
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    已選擇 {newsForm.group_ids.length} 個群組
+                    {t('dashboard.news.selectedGroups', { count: newsForm.group_ids.length })}
                   </Typography>
                 )}
               </Grid>
               <Grid item xs={12}>
                 <Typography variant="subtitle2" gutterBottom>
-                  附件
+                  {t('dashboard.news.attachments')}
                 </Typography>
                 <Box sx={{ mb: 2 }}>
                   <input
@@ -1366,11 +1337,11 @@ const Dashboard = () => {
                       disabled={uploadingAttachments || savingNews}
                       fullWidth
                     >
-                      {uploadingAttachments ? '上傳中...' : '選擇附件'}
+                      {uploadingAttachments ? t('dashboard.news.uploading') : t('dashboard.news.selectAttachment')}
                     </Button>
                   </label>
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                    支援格式：PDF、JPG、JPEG、PNG、GIF、BMP、WEBP、TIFF、DOC、DOCX（每個檔案最大 10MB）
+                    {t('dashboard.news.attachmentFormats')}
                   </Typography>
                 </Box>
                 {newsAttachments.length > 0 && (
@@ -1395,7 +1366,7 @@ const Dashboard = () => {
                           </ListItemIcon>
                           <ListItemText
                             primary={attachment.file_name}
-                            secondary={attachment.is_temp ? `暫存 - ${formatFileSize(attachment.file_size || 0)}` : formatFileSize(attachment.file_size || 0)}
+                            secondary={attachment.is_temp ? `${t('dashboard.news.tempFile')} - ${formatFileSize(attachment.file_size || 0)}` : formatFileSize(attachment.file_size || 0)}
                           />
                         </ListItem>
                       ))}
@@ -1411,7 +1382,7 @@ const Dashboard = () => {
               fullWidth={isMobile}
               size={isMobile ? 'large' : 'medium'}
             >
-              取消
+              {t('dashboard.news.cancel')}
             </Button>
             <Button
               onClick={handleCreateNews}
@@ -1423,10 +1394,10 @@ const Dashboard = () => {
               {savingNews ? (
                 <>
                   <CircularProgress size={16} sx={{ mr: 1 }} />
-                  {editingNews ? '更新中...' : '發布中...'}
+                  {editingNews ? t('dashboard.news.updating') : t('dashboard.news.publishing')}
                 </>
               ) : (
-                editingNews ? '更新' : '發布'
+                editingNews ? t('dashboard.news.update') : t('dashboard.news.publishBtn')
               )}
             </Button>
           </DialogActions>

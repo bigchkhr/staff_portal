@@ -617,7 +617,7 @@ const LeaveApplication = () => {
             label={t('leaveApplication.days')}
             type="number"
             value={formData.days}
-            onChange={(e) => setFormData(prev => ({ ...prev, days: e.target.value }))}
+            disabled
             required
             sx={{ mb: 2 }}
             inputProps={{ min: 0.5, step: 0.5 }}

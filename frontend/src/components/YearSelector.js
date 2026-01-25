@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import axios from 'axios';
 import { AVAILABLE_YEARS } from '../constants/years';
 
 /**
@@ -29,6 +30,22 @@ const YearSelector = ({
 }) => {
   const { t } = useTranslation();
   const displayLabel = label || t(labelKey);
+  const [years, setYears] = useState(AVAILABLE_YEARS);
+
+  useEffect(() => {
+    const fetchYears = async () => {
+      try {
+        const response = await axios.get('/api/system-years/active');
+        if (response.data && response.data.length > 0) {
+          setYears(response.data);
+        }
+      } catch (error) {
+        // 如果 API 失敗，使用預設的年份常量
+        console.warn('Failed to fetch system years, using default:', error);
+      }
+    };
+    fetchYears();
+  }, []);
 
   const handleChange = (e) => {
     if (onChange) {
@@ -51,7 +68,7 @@ const YearSelector = ({
         required={required}
         disabled={disabled}
       >
-        {AVAILABLE_YEARS.map((year) => (
+        {years.map((year) => (
           <MenuItem key={year} value={year}>
             {year}{suffix}
           </MenuItem>

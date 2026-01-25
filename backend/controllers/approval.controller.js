@@ -491,6 +491,7 @@ class ApprovalController {
         start_date_from, 
         end_date_to,
         application_type,
+        keyword,
         page,
         limit
       } = req.query;
@@ -602,6 +603,18 @@ class ApprovalController {
         }
       }
 
+      // 關鍵字搜尋：搜尋 transaction_id、申請人名稱、員工編號
+      if (keyword && keyword.trim()) {
+        const searchKeyword = keyword.trim().toLowerCase();
+        query = query.where(function() {
+          this.whereRaw('LOWER(CAST(leave_applications.id AS TEXT)) LIKE ?', [`%${searchKeyword}%`])
+              .orWhereRaw('LOWER(users.display_name) LIKE ?', [`%${searchKeyword}%`])
+              .orWhereRaw('LOWER(users.employee_number) LIKE ?', [`%${searchKeyword}%`])
+              .orWhereRaw('LOWER(leave_types.name_zh) LIKE ?', [`%${searchKeyword}%`])
+              .orWhereRaw('LOWER(leave_types.name) LIKE ?', [`%${searchKeyword}%`]);
+        });
+      }
+
       // 根據 application_type 參數決定是否查詢假期申請
       const allLeaveApplications = (!application_type || application_type === 'leave') 
         ? await query.orderBy('leave_applications.created_at', 'desc')
@@ -662,6 +675,16 @@ class ApprovalController {
           }
         }
 
+        // 關鍵字搜尋
+        if (keyword && keyword.trim()) {
+          const searchKeyword = keyword.trim().toLowerCase();
+          extraWorkingHoursQuery = extraWorkingHoursQuery.where(function() {
+            this.whereRaw('LOWER(CAST(extra_working_hours_applications.id AS TEXT)) LIKE ?', [`%${searchKeyword}%`])
+                .orWhereRaw('LOWER(users.display_name) LIKE ?', [`%${searchKeyword}%`])
+                .orWhereRaw('LOWER(users.employee_number) LIKE ?', [`%${searchKeyword}%`]);
+          });
+        }
+
         allExtraWorkingHoursApplications = await extraWorkingHoursQuery.orderBy('extra_working_hours_applications.created_at', 'desc');
       }
       
@@ -718,6 +741,16 @@ class ApprovalController {
           } else if (end_date_to) {
             outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.start_date', '<=', end_date_to);
           }
+        }
+
+        // 關鍵字搜尋
+        if (keyword && keyword.trim()) {
+          const searchKeyword = keyword.trim().toLowerCase();
+          outdoorWorkQuery = outdoorWorkQuery.where(function() {
+            this.whereRaw('LOWER(CAST(outdoor_work_applications.id AS TEXT)) LIKE ?', [`%${searchKeyword}%`])
+                .orWhereRaw('LOWER(users.display_name) LIKE ?', [`%${searchKeyword}%`])
+                .orWhereRaw('LOWER(users.employee_number) LIKE ?', [`%${searchKeyword}%`]);
+          });
         }
 
         allOutdoorWorkApplications = await outdoorWorkQuery.orderBy('outdoor_work_applications.created_at', 'desc');

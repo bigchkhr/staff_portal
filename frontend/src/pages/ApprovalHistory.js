@@ -344,6 +344,12 @@ const ApprovalHistory = () => {
         limit
       };
       
+      // 關鍵字搜尋
+      const currentKeyword = overrideParams.keyword !== undefined ? overrideParams.keyword : searchKeyword;
+      if (currentKeyword && currentKeyword.trim()) {
+        params.keyword = currentKeyword.trim();
+      }
+      
       // 狀態篩選
       const currentStatusFilter = overrideParams.statusFilter !== undefined ? overrideParams.statusFilter : activeStatusFilter;
       if (currentStatusFilter !== 'all') {
@@ -398,7 +404,7 @@ const ApprovalHistory = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, activeStatusFilter, activeFilterLeaveType, activeFilterFlowType, activeFilterApplicationType, activeFilterDepartmentGroup, activeFilterYear, activeFilterMonth, activeDateFrom, activeDateTo]);
+  }, [page, limit, searchKeyword, activeStatusFilter, activeFilterLeaveType, activeFilterFlowType, activeFilterApplicationType, activeFilterDepartmentGroup, activeFilterYear, activeFilterMonth, activeDateFrom, activeDateTo]);
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -638,6 +644,7 @@ const ApprovalHistory = () => {
     // 重置到第一頁並使用最新參數觸發搜尋
     setPage(1);
     fetchApprovalHistory({
+      keyword: search,
       statusFilter,
       filterLeaveType,
       filterFlowType,
@@ -653,30 +660,14 @@ const ApprovalHistory = () => {
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
-      setSearchKeyword(search);
-      fetchApprovalHistory();
+      handleSearch();
     }
-  }, [search, fetchApprovalHistory]);
+  }, [handleSearch]);
 
+  // 搜尋已由後端處理，直接使用後端返回的資料
   const filteredApplications = useMemo(() => {
-    return applications.filter(app => {
-      if (!searchKeyword) return true;
-      
-      const keyword = searchKeyword.toLowerCase();
-      const transactionId = app.transaction_id?.toString().toLowerCase() || '';
-      const leaveTypeNameZh = app.leave_type_name_zh?.toLowerCase() || '';
-      const applicantNameZh = app.applicant_display_name?.toLowerCase() || '';
-      const applicantUsername = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
-      const applicationType = app.application_type === 'extra_working_hours' ? t('approvalHistory.extraWorkingHoursApplication') : 
-                              app.application_type === 'outdoor_work' ? t('approvalHistory.outdoorWorkApplication') : '';
-      
-      return transactionId.includes(keyword) ||
-             leaveTypeNameZh.includes(keyword) ||
-             applicantNameZh.includes(keyword) ||
-             applicantUsername.includes(keyword) ||
-             applicationType.toLowerCase().includes(keyword);
-    });
-  }, [applications, searchKeyword, t]);
+    return applications;
+  }, [applications]);
 
   const isHRMember = useMemo(() => user?.is_hr_member || user?.is_system_admin, [user]);
 

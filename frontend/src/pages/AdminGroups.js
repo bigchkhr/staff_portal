@@ -327,11 +327,14 @@ const AdminGroups = () => {
   const filteredAvailableUsers = useMemo(() => {
     const trimmedSearch = memberSearchKeyword.trim().toLowerCase();
     
+    // 先按 ID 降序排序
+    const sortedUsers = [...availableUsers].sort((a, b) => b.id - a.id);
+    
     if (!trimmedSearch) {
-      return availableUsers;
+      return sortedUsers;
     }
 
-    return availableUsers.filter((u) => {
+    return sortedUsers.filter((u) => {
       const englishFullName = `${u.given_name || ''} ${u.surname || ''}`.trim();
       const reversedEnglishFullName = `${u.surname || ''} ${u.given_name || ''}`.trim();
 

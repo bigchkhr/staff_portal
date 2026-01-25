@@ -119,7 +119,7 @@ const Schedule = ({ noLayout = false }) => {
       fetchSchedules();
       checkEditPermission();
     }
-  }, [selectedGroupId, startDate, endDate]);
+  }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
 
   // 當群組改變時，更新 allow_checker_edit 狀態
   useEffect(() => {
@@ -229,7 +229,8 @@ const Schedule = ({ noLayout = false }) => {
         params: {
           department_group_id: selectedGroupId,
           start_date: startDateStr,
-          end_date: endDateStr
+          end_date: endDateStr,
+          helper_store_id: selectedDefaultStoreId || undefined
         }
       });
       const schedulesData = response.data.schedules || [];
@@ -1223,38 +1224,27 @@ const Schedule = ({ noLayout = false }) => {
                     }
                   });
                   
-                  // 統計 helper schedules（只計算有排班時間的，且 store_short_name 匹配的）
-                  const selectedStore = selectedDefaultStoreId 
-                    ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
-                    : null;
-                  const selectedStoreShortName = selectedStore?.store_short_name_ || null;
-                  
-                  if (selectedStoreShortName) {
-                    helperSchedules.forEach(helper => {
-                      // 只統計 store_short_name 匹配的 helper
-                      if (helper.store_short_name !== selectedStoreShortName) {
-                        return;
-                      }
+                  // 統計 helper schedules（只計算有排班時間的）
+                  // 後端已經根據選擇的店舖篩選了 helper，直接統計所有返回的 helper
+                  helperSchedules.forEach(helper => {
+                    const helperDateStr = typeof helper.schedule_date === 'string' 
+                      ? helper.schedule_date.split('T')[0] 
+                      : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                    
+                    if (helperDateStr === dateStr) {
+                      // 判斷是否有排班時間：必須有 start_time 或 end_time
+                      const hasScheduleTime = helper.start_time || helper.end_time;
                       
-                      const helperDateStr = typeof helper.schedule_date === 'string' 
-                        ? helper.schedule_date.split('T')[0] 
-                        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
-                      
-                      if (helperDateStr === dateStr) {
-                        // 判斷是否有排班時間：必須有 start_time 或 end_time
-                        const hasScheduleTime = helper.start_time || helper.end_time;
-                        
-                        if (hasScheduleTime) {
-                          const employmentMode = helper.position_employment_mode;
-                          if (employmentMode === 'FT') {
-                            ftCount++;
-                          } else if (employmentMode === 'PT') {
-                            ptCount++;
-                          }
+                      if (hasScheduleTime) {
+                        const employmentMode = helper.position_employment_mode;
+                        if (employmentMode === 'FT') {
+                          ftCount++;
+                        } else if (employmentMode === 'PT') {
+                          ptCount++;
                         }
                       }
-                    });
-                  }
+                    }
+                  });
                   
                   return (
                     <TableCell
@@ -1896,36 +1886,36 @@ const Schedule = ({ noLayout = false }) => {
                 borderColor: 'divider'
               }}
             >
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 500, mb: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
                   {t('schedule.batchControl')}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Button
-                    variant="outlined"
-                    color="success"
-                    onClick={() => handleBatchUpdateCheckerEdit(true)}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t('schedule.enableAllCheckerEdit')}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={() => handleBatchUpdateCheckerEdit(false)}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t('schedule.disableAllCheckerEdit')}
-                  </Button>
-                </Box>
+                <Button
+                  variant="outlined"
+                  color="success"
+                  size="small"
+                  onClick={() => handleBatchUpdateCheckerEdit(true)}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('schedule.enableAll')}
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  onClick={() => handleBatchUpdateCheckerEdit(false)}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('schedule.disableAll')}
+                </Button>
               </Box>
             </Card>
           )}
@@ -1996,31 +1986,29 @@ const Schedule = ({ noLayout = false }) => {
                   }}
                 />
               </Grid>
-              {editMode && (
-                <Grid item xs={12} md={3}>
-                  <FormControl fullWidth>
-                    <InputLabel>{t('schedule.defaultStore') || t('schedule.store')}</InputLabel>
-                    <Select
-                      value={selectedDefaultStoreId || ''}
-                      onChange={(e) => setSelectedDefaultStoreId(e.target.value || null)}
-                      label={t('schedule.defaultStore') || t('schedule.store')}
-                      sx={{
-                        bgcolor: 'background.paper',
-                        borderRadius: 1,
-                      }}
-                    >
-                      <MenuItem value="">
-                        <em>{t('common.none')}</em>
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth>
+                  <InputLabel>{t('schedule.selectStoreForHelper') || t('schedule.store')}</InputLabel>
+                  <Select
+                    value={selectedDefaultStoreId || ''}
+                    onChange={(e) => setSelectedDefaultStoreId(e.target.value || null)}
+                    label={t('schedule.selectStoreForHelper') || t('schedule.store')}
+                    sx={{
+                      bgcolor: 'background.paper',
+                      borderRadius: 1,
+                    }}
+                  >
+                    <MenuItem value="">
+                      <em>{t('schedule.allStores')}</em>
+                    </MenuItem>
+                    {[...stores].sort((a, b) => (a.store_short_name_ || '').localeCompare(b.store_short_name_ || '')).map(store => (
+                      <MenuItem key={store.id} value={store.id}>
+                        {store.store_short_name_ || store.store_code} {store.store_short_name_ ? `(${store.store_code})` : ''}
                       </MenuItem>
-                      {stores.map(store => (
-                        <MenuItem key={store.id} value={store.id}>
-                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              )}
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
               <Grid item xs={12} md={3}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                   {canEdit && (
@@ -2538,38 +2526,27 @@ const Schedule = ({ noLayout = false }) => {
                         }
                       });
                       
-                      // 統計 helper schedules（只計算有排班時間的，且 store_short_name 匹配的）
-                      const selectedStore = selectedDefaultStoreId 
-                        ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
-                        : null;
-                      const selectedStoreShortName = selectedStore?.store_short_name_ || null;
-                      
-                      if (selectedStoreShortName) {
-                        helperSchedules.forEach(helper => {
-                          // 只統計 store_short_name 匹配的 helper
-                          if (helper.store_short_name !== selectedStoreShortName) {
-                            return;
-                          }
+                      // 統計 helper schedules（只計算有排班時間的）
+                      // 後端已經根據選擇的店舖篩選了 helper，直接統計所有返回的 helper
+                      helperSchedules.forEach(helper => {
+                        const helperDateStr = typeof helper.schedule_date === 'string' 
+                          ? helper.schedule_date.split('T')[0] 
+                          : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                        
+                        if (helperDateStr === dateStr) {
+                          // 判斷是否有排班時間：必須有 start_time 或 end_time
+                          const hasScheduleTime = helper.start_time || helper.end_time;
                           
-                          const helperDateStr = typeof helper.schedule_date === 'string' 
-                            ? helper.schedule_date.split('T')[0] 
-                            : dayjs(helper.schedule_date).format('YYYY-MM-DD');
-                          
-                          if (helperDateStr === dateStr) {
-                            // 判斷是否有排班時間：必須有 start_time 或 end_time
-                            const hasScheduleTime = helper.start_time || helper.end_time;
-                            
-                            if (hasScheduleTime) {
-                              const employmentMode = helper.position_employment_mode;
-                              if (employmentMode === 'FT') {
-                                ftCount++;
-                              } else if (employmentMode === 'PT') {
-                                ptCount++;
-                              }
+                          if (hasScheduleTime) {
+                            const employmentMode = helper.position_employment_mode;
+                            if (employmentMode === 'FT') {
+                              ftCount++;
+                            } else if (employmentMode === 'PT') {
+                              ptCount++;
                             }
                           }
-                        });
-                      }
+                        }
+                      });
                       
                       return (
                         <TableCell
@@ -2697,7 +2674,7 @@ const Schedule = ({ noLayout = false }) => {
                       label={t('schedule.leaveType')}
                     >
                       <MenuItem value="">
-                        <em>{t('common.none')}</em>
+                        <em>{t('schedule.selectLeaveType')}</em>
                       </MenuItem>
                       {leaveTypes.map(lt => (
                         <MenuItem key={lt.id} value={lt.id}>
@@ -2735,11 +2712,11 @@ const Schedule = ({ noLayout = false }) => {
                       label={t('schedule.store')}
                     >
                       <MenuItem value="">
-                        <em>{t('common.none')}</em>
+                        <em>{t('schedule.selectStore')}</em>
                       </MenuItem>
-                      {stores.map(store => (
+                      {[...stores].sort((a, b) => (a.store_short_name_ || '').localeCompare(b.store_short_name_ || '')).map(store => (
                         <MenuItem key={store.id} value={store.id}>
-                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                          {store.store_short_name_ || store.store_code} {store.store_short_name_ ? `(${store.store_code})` : ''}
                         </MenuItem>
                       ))}
                     </Select>
@@ -2960,7 +2937,7 @@ const Schedule = ({ noLayout = false }) => {
                       label={t('schedule.leaveType')}
                     >
                       <MenuItem value="">
-                        <em>{t('common.none')}</em>
+                        <em>{t('schedule.selectLeaveType')}</em>
                       </MenuItem>
                       {leaveTypes.map(lt => (
                         <MenuItem key={lt.id} value={lt.id}>
@@ -2998,11 +2975,11 @@ const Schedule = ({ noLayout = false }) => {
                       label={t('schedule.store')}
                     >
                       <MenuItem value="">
-                        <em>{t('common.none')}</em>
+                        <em>{t('schedule.selectStore')}</em>
                       </MenuItem>
-                      {stores.map(store => (
+                      {[...stores].sort((a, b) => (a.store_short_name_ || '').localeCompare(b.store_short_name_ || '')).map(store => (
                         <MenuItem key={store.id} value={store.id}>
-                          {store.store_code} {store.store_short_name_ ? `(${store.store_short_name_})` : ''}
+                          {store.store_short_name_ || store.store_code} {store.store_short_name_ ? `(${store.store_code})` : ''}
                         </MenuItem>
                       ))}
                     </Select>

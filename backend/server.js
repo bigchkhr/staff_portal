@@ -83,6 +83,7 @@ const newsGroupRoutes = require('./routes/newsGroup.routes');
 const contactRoutes = require('./routes/contact.routes');
 const storeRoutes = require('./routes/store.routes');
 const monthlyAttendanceSummaryRoutes = require('./routes/monthlyAttendanceSummary.routes');
+const systemYearRoutes = require('./routes/systemYear.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -107,6 +108,7 @@ app.use('/api/news-groups', newsGroupRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/monthly-attendance-summaries', monthlyAttendanceSummaryRoutes);
+app.use('/api/system-years', systemYearRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

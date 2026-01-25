@@ -236,7 +236,8 @@ const LeaveHistory = () => {
 
     try {
       const response = await axios.post('/api/leaves/reverse', {
-        application_id: application.id
+        application_id: application.id,
+        source: 'leaveHistory' // 標識來源頁面，要求走批核流程
       });
       
       // 使用後端返回的消息
@@ -286,7 +287,7 @@ const LeaveHistory = () => {
     
     // leave/history 只顯示自己的申請，所以只能為自己的申請進行銷假
     // HR Group 成員在 leave/history 中也是只看到自己的申請
-    // 但 HR Group 成員可以通過 API 為任何申請進行銷假（一鍵批核）
+    // 在此頁面中，HR Group 成員銷假也需要走批核流程，與普通用戶一樣
     return application.user_id === user.id;
   };
 

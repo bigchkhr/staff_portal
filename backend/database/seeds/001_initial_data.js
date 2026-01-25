@@ -85,6 +85,15 @@ exports.seed = async function (knex) {
   await knex('public_holidays').del();
   await knex('positions').del();
   await knex('departments').del();
+  await knex('system_years').del();
+
+  // 建立系統年份
+  await knex('system_years').insert([
+    { year: 2023, is_active: true, display_order: 1 },
+    { year: 2024, is_active: true, display_order: 2 },
+    { year: 2025, is_active: true, display_order: 3 },
+    { year: 2026, is_active: true, display_order: 4 }
+  ]);
 
   // 建立部門
   await knex('departments').insert([
@@ -193,7 +202,7 @@ exports.seed = async function (knex) {
   const delegationGroups = await knex('delegation_groups').insert([
     { name: 'HR Group', name_zh: 'HR群組', description: '', user_ids: [1, 29, 31], closed: false },
     { name: 'Accounting', name_zh: '會計部授權群組', description: '', user_ids: [3], closed: false },
-    { name: 'B2B', name_zh: '商務部授權群組', description: '', user_ids: [450,451], closed: false },
+    { name: 'B2B', name_zh: '商務部授權群組', description: '', user_ids: [451], closed: false },
     { name: 'Business Development', name_zh: '業務拓展部授權群組', description: '', user_ids: [], closed: false },
     { name: 'Category', name_zh: '品類部授權群組', description: '', user_ids: [], closed: false },
     { name: 'General Administration', name_zh: '行政部授權群組', description: '', user_ids: [26], closed: false },
@@ -229,6 +238,7 @@ exports.seed = async function (knex) {
     { name: 'Retail Checker - YL3', name_zh: 'YL3覆核授權群組', description: '', user_ids: [], closed: true },
     { name: 'Retail Checker - YL4', name_zh: 'YL4覆核授權群組', description: '', user_ids: [316], closed: false },
     { name: 'Direct Reporting to MD', name_zh: 'Direct Reporting to MD', description: '', user_ids: [68], closed: false },
+    { name: 'B2B (HoReca)', name_zh: '商務部授權群組 (HoReca)', description: '', user_ids: [450], closed: false },
   ]).returning('*');
 
   // 取得各授權群組的 ID
@@ -262,12 +272,23 @@ exports.seed = async function (knex) {
       closed: false
     },
     {
-      name: 'B2B',
-      name_zh: '企客業務部群組',
+      name: 'B2B (General)',
+      name_zh: '商務部群組 (General)',
       description: '',
-      user_ids: [205, 478, 487, 489 ,490],
+      user_ids: [205, 478, 489 ,490],
       checker_id: null,
       approver_1_id: b2bDelegId,
+      approver_2_id: null,
+      approver_3_id: hrGroupId,
+      closed: false
+    },
+    {
+      name: 'B2B (HoReCa)',
+      name_zh: '商務部群組 (HoReCa)',
+      description: '',
+      user_ids: [487, 490],
+      checker_id: null,
+      approver_1_id: 39,
       approver_2_id: null,
       approver_3_id: hrGroupId,
       closed: false
@@ -650,7 +671,7 @@ exports.seed = async function (knex) {
       name: 'Direct Reporting to MD',
       name_zh: 'Direct Reporting to MD',
       description: '',
-      user_ids: [3, 19, 450, 451, 478, 26, 29, 475, 412, 23, 291, 265, 284, 312],
+      user_ids: [3, 19, 450, 451, 478, 26, 29, 412, 23, 291, 265, 284, 312],
       checker_id: null,
       approver_1_id: 38,
       approver_2_id: null,

@@ -18,7 +18,8 @@ import {
   Work as WorkIcon,
   Group as GroupIcon,
   CalendarToday as CalendarTodayIcon,
-  Storefront as StorefrontIcon
+  Storefront as StorefrontIcon,
+  DateRange as DateRangeIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -71,6 +72,12 @@ const SystemMaintenance = () => {
       icon: <StorefrontIcon sx={{ fontSize: 48 }} />,
       path: '/admin/stores',
       translationKey: 'storeManagement'
+    },
+    {
+      key: 'yearManagement',
+      icon: <DateRangeIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/years',
+      translationKey: 'yearManagement'
     }
   ];
 

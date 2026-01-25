@@ -8,7 +8,7 @@ class ScheduleController {
   // 取得排班列表
   async getSchedules(req, res) {
     try {
-      const { department_group_id, user_id, start_date, end_date, schedule_date } = req.query;
+      const { department_group_id, user_id, start_date, end_date, schedule_date, helper_store_id } = req.query;
       const userId = req.user.id;
 
       console.log('getSchedules called with params:', {
@@ -17,6 +17,7 @@ class ScheduleController {
         start_date,
         end_date,
         schedule_date,
+        helper_store_id,
         userId
       });
 
@@ -153,15 +154,25 @@ class ScheduleController {
         leaveApplications
       );
       
-      // 獲取當前群組的店舖 ID 列表（從當前群組的排班記錄中提取）
-      const currentGroupStoreIds = [...new Set(schedules
-        .filter(s => s.store_id)
-        .map(s => s.store_id)
-      )];
+      // 獲取跨群組的 helper 排班：其他群組中選擇了指定店舖的排班記錄
+      // 如果前端傳了 helper_store_id，就使用它；否則從當前群組的排班記錄中提取
+      let targetStoreIds = [];
+      if (helper_store_id) {
+        // 使用前端指定的店舖 ID
+        targetStoreIds = [parseInt(helper_store_id, 10)];
+        console.log('Using helper_store_id from request:', helper_store_id);
+      } else {
+        // 從當前群組的排班記錄中提取店舖 ID（舊邏輯，作為備用）
+        targetStoreIds = [...new Set(schedules
+          .filter(s => s.store_id)
+          .map(s => s.store_id)
+        )];
+        console.log('Using store IDs from current group schedules:', targetStoreIds);
+      }
       
-      // 獲取跨群組的 helper 排班：其他群組中選擇了當前群組店舖的排班記錄
+      // 獲取跨群組的 helper 排班
       let helperSchedules = [];
-      if (currentGroupStoreIds.length > 0) {
+      if (targetStoreIds.length > 0) {
         // 直接使用 knex 查詢，因為 Schedule.findAll 不支持按 store_id 篩選
         const helperSchedulesQuery = await knex('schedules')
           .leftJoin('users', 'schedules.user_id', 'users.id')
@@ -170,7 +181,7 @@ class ScheduleController {
           .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
           .leftJoin('stores', 'schedules.store_id', 'stores.id')
           .whereNot('schedules.department_group_id', filters.department_group_id)
-          .whereIn('schedules.store_id', currentGroupStoreIds)
+          .whereIn('schedules.store_id', targetStoreIds)
           .where('schedules.schedule_date', '>=', filters.start_date)
           .where('schedules.schedule_date', '<=', filters.end_date)
           .select(
@@ -209,7 +220,7 @@ class ScheduleController {
           return schedule;
         });
         
-        console.log(`Found ${helperSchedules.length} helper schedules from other groups`);
+        console.log(`Found ${helperSchedules.length} helper schedules from other groups for store IDs:`, targetStoreIds);
       }
       
       if (schedulesWithLeave.length > 0) {
