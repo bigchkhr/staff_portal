@@ -49,6 +49,7 @@ import MyRoster from './pages/MyRoster';
 import MyAttendance from './pages/MyAttendance';
 import MyContacts from './pages/MyContacts';
 import MonthlyAttendanceSummary from './pages/MonthlyAttendanceSummary';
+import MonthlyAttendanceReport from './pages/MonthlyAttendanceReport';
 import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 
@@ -119,6 +120,8 @@ function App() {
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />
             <Route path="/tools/stores" element={<PrivateRoute><StoreDirectory /></PrivateRoute>} />
             <Route path="/monthly-attendance-summary" element={<PrivateRoute><MonthlyAttendanceSummary /></PrivateRoute>} />
+            <Route path="/monthly-attendance-report/:id" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
+            <Route path="/monthly-attendance-report" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
             <Route path="/admin/years" element={<PrivateRoute><YearManagement /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

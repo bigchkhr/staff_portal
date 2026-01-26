@@ -41,10 +41,11 @@ import {
   ExpandLess as ExpandLessIcon,
   Event as EventIcon,
   CheckCircle as CheckCircleIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -65,6 +66,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => dayjs().tz('Asia/Hong_Kong').year());
@@ -78,6 +80,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedDayDetail, setSelectedDayDetail] = useState(null);
   const [clockRecordsCache, setClockRecordsCache] = useState(new Map()); // 緩存已獲取的打卡記錄
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -502,6 +505,61 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!selectedUserId || !selectedYear || !selectedMonth) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.warning'),
+        text: t('attendance.pleaseSelectEmployeeYearMonth')
+      });
+      return;
+    }
+
+    try {
+      setGeneratingReport(true);
+      
+      // 顯示載入提示
+      Swal.fire({
+        title: t('attendance.generating'),
+        text: t('attendance.generating'),
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      const response = await axios.post('/api/monthly-attendance-reports/generate', {
+        user_id: selectedUserId,
+        year: selectedYear,
+        month: selectedMonth
+      });
+
+      Swal.fire({
+        icon: 'success',
+        title: t('attendance.success'),
+        text: response.data.message || t('attendance.reportGenerated')
+      });
+
+      // 導航到編輯頁面
+      const reportId = response.data.report?.id;
+      if (reportId) {
+        navigate(`/monthly-attendance-report/${reportId}`);
+      } else {
+        // 如果沒有返回 reportId，重新載入月結數據
+        await fetchSummary();
+      }
+    } catch (error) {
+      console.error('Generate report error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: error.response?.data?.message || t('attendance.generateReportFailed')
+      });
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -1065,6 +1123,22 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                   }
                   return null;
                 })()}
+              </Box>
+            )}
+
+            {/* 生成月報按鈕 */}
+            {summary && selectedUserId && (
+              <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<DescriptionIcon />}
+                  onClick={handleGenerateReport}
+                  disabled={generatingReport || !selectedUserId || !selectedYear || !selectedMonth}
+                  sx={{ minWidth: 200 }}
+                >
+                  {generatingReport ? t('attendance.generating') : t('attendance.generateReport')}
+                </Button>
               </Box>
             )}
           </Card>

@@ -14,7 +14,8 @@ import {
   CalendarToday as CalendarTodayIcon,
   AccessTime as AccessTimeIcon,
   EventNote as EventNoteIcon,
-  Assessment as AssessmentIcon
+  Assessment as AssessmentIcon,
+  Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -154,6 +155,13 @@ const ShiftManagement = () => {
       icon: <AssessmentIcon sx={{ fontSize: 48 }} />,
       path: '/monthly-attendance-summary',
       translationKey: 'monthlyAttendanceSummary',
+      show: canViewApproverFeatures
+    },
+    {
+      key: 'monthlyAttendanceReport',
+      icon: <DescriptionIcon sx={{ fontSize: 48 }} />,
+      path: '/monthly-attendance-report',
+      translationKey: 'monthlyAttendanceReport',
       show: canViewApproverFeatures
     }
   ];

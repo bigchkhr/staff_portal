@@ -58,7 +58,7 @@ class MonthlyAttendanceSummaryController {
     return lastDayUTC8.getUTCDate();
   }
   // 計算一天的考勤數據
-  async calculateDailyAttendance(attendanceData, scheduleData) {
+  async calculateDailyAttendance(attendanceData, scheduleData, employmentMode = null) {
     // 確保日期使用 UTC+8 時區格式化
     const attendanceDate = attendanceData.attendance_date;
     const dateStr = this.formatDateToUTC8(attendanceDate);
@@ -253,13 +253,37 @@ class MonthlyAttendanceSummaryController {
     }
 
     // 計算超時工作時間
+    let overtimeMinutes = null;
     if (scheduleEndTime && clockOutTime) {
       const scheduleEnd = this.parseTime(scheduleEndTime);
       const actualEnd = this.parseTime(clockOutTime);
       
       if (actualEnd !== null && scheduleEnd !== null && actualEnd > scheduleEnd) {
-        const overtimeMinutes = actualEnd - scheduleEnd;
+        overtimeMinutes = actualEnd - scheduleEnd;
         result.overtime_hours = (overtimeMinutes / 60).toFixed(2);
+      }
+    }
+
+    // 計算應計超時工作時數（approved_overtime_minutes）
+    if (employmentMode) {
+      const mode = employmentMode.toString().trim().toUpperCase();
+      
+      // 輔助函數：向下取整到指定間隔
+      const floorMinutesToInterval = (minutes, interval) => {
+        return Math.floor(minutes / interval) * interval;
+      };
+      
+      if (mode === 'PT') {
+        // PT員工：應計工作時數 = 全日上班總時數，向下取整到15分鐘
+        if (result.total_work_hours !== null && result.total_work_hours !== undefined) {
+          const totalWorkMinutes = parseFloat(result.total_work_hours) * 60; // 將小時轉換為分鐘
+          result.approved_overtime_minutes = floorMinutesToInterval(totalWorkMinutes, 15);
+        }
+      } else if (mode === 'FT') {
+        // FT員工：只在有超時工作時計算應計工作時數，向下取整到30分鐘
+        if (overtimeMinutes !== null && overtimeMinutes >= 15) {
+          result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, 30);
+        }
       }
     }
 
@@ -638,6 +662,13 @@ class MonthlyAttendanceSummaryController {
         return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
 
+      // 獲取用戶信息（用於獲取 employment_mode）
+      const user = await User.findById(user_id);
+      if (!user) {
+        return res.status(404).json({ message: '找不到用戶' });
+      }
+      const employmentMode = (user.position_employment_mode || user.employment_mode || '').toString().trim().toUpperCase();
+
       // 獲取該用戶該月的考勤數據（使用 UTC+8 時區）
       // 確保使用 UTC+8 時區處理日期
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -843,8 +874,8 @@ class MonthlyAttendanceSummaryController {
           });
         }
 
-        // 計算該天的考勤數據
-        const calculatedData = await this.calculateDailyAttendance(attendanceData, scheduleData || {});
+        // 計算該天的考勤數據（傳入 employment_mode 以便計算 approved_overtime_minutes）
+        const calculatedData = await this.calculateDailyAttendance(attendanceData, scheduleData || {}, employmentMode);
 
         // 更新或添加該天的數據
         const existingIndex = dailyData.findIndex(d => d.date === dateStr);
@@ -902,6 +933,13 @@ class MonthlyAttendanceSummaryController {
       if (!hasPermission) {
         return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
+
+      // 獲取用戶信息（用於獲取 employment_mode）
+      const user = await User.findById(user_id);
+      if (!user) {
+        return res.status(404).json({ message: '找不到用戶' });
+      }
+      const employmentMode = (user.position_employment_mode || user.employment_mode || '').toString().trim().toUpperCase();
 
       // 如果沒有傳入 schedule_data，嘗試從數據庫獲取
       let finalScheduleData = schedule_data || {};
@@ -962,7 +1000,8 @@ class MonthlyAttendanceSummaryController {
 
       const calculatedData = await this.calculateDailyAttendance(
         attendance_data || {},
-        finalScheduleData
+        finalScheduleData,
+        employmentMode
       );
 
       res.json({ daily_data: calculatedData });
