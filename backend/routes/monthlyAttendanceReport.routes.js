@@ -21,5 +21,8 @@ router.put('/:id', monthlyAttendanceReportController.updateReport.bind(monthlyAt
 // 刪除月報
 router.delete('/:id', monthlyAttendanceReportController.deleteReport.bind(monthlyAttendanceReportController));
 
+// 導出月報為 CSV
+router.get('/export/csv', monthlyAttendanceReportController.exportToCSV.bind(monthlyAttendanceReportController));
+
 module.exports = router;
 

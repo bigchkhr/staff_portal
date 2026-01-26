@@ -881,8 +881,16 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       }
     }
 
-    // 生成文件名 - 使用英文避免文件名問題
-    const fileName = `MonthlySummary_${selectedUser?.employee_number || 'User'}_${selectedYear}_${selectedMonth}.pdf`;
+    // 生成文件名 - 使用 user id 和 display name
+    const sanitizeFileName = (str) => {
+      if (!str) return '';
+      // 移除或替換文件名中不允許的字符
+      return str.replace(/[<>:"/\\|?*]/g, '_').trim();
+    };
+    
+    const userId = selectedUser?.id || 'Unknown';
+    const displayName = sanitizeFileName(selectedUser?.display_name || selectedUser?.name_zh || selectedUser?.name || 'User');
+    const fileName = `MonthlySummary_${userId}_${displayName}.pdf`;
     
     // 保存 PDF
     doc.save(fileName);

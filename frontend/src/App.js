@@ -50,6 +50,7 @@ import MyAttendance from './pages/MyAttendance';
 import MyContacts from './pages/MyContacts';
 import MonthlyAttendanceSummary from './pages/MonthlyAttendanceSummary';
 import MonthlyAttendanceReport from './pages/MonthlyAttendanceReport';
+import MonthlyAttendanceReportExport from './pages/MonthlyAttendanceReportExport';
 import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 
@@ -122,6 +123,7 @@ function App() {
             <Route path="/monthly-attendance-summary" element={<PrivateRoute><MonthlyAttendanceSummary /></PrivateRoute>} />
             <Route path="/monthly-attendance-report/:id" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
             <Route path="/monthly-attendance-report" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
+            <Route path="/monthly-attendance-report-export" element={<PrivateRoute><MonthlyAttendanceReportExport /></PrivateRoute>} />
             <Route path="/admin/years" element={<PrivateRoute><YearManagement /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

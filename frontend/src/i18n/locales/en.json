@@ -68,6 +68,7 @@
     "groupLeaveCalendar": "Group Leave Calendar",
     "monthlyAttendanceSummary": "Monthly Attendance Summary",
     "monthlyAttendanceReport": "Monthly Attendance Report",
+    "monthlyAttendanceReportExport": "Export Monthly Report CSV",
     "systemMaintenance": "System Maintenance",
     "manualApproval": "Manual Approval",
     "applyLeave": "Apply Leave",

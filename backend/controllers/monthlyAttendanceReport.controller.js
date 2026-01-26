@@ -597,6 +597,143 @@ class MonthlyAttendanceReportController {
       res.status(500).json({ message: '刪除月報失敗', error: error.message });
     }
   }
+
+  // 導出月報為 CSV
+  async exportToCSV(req, res) {
+    try {
+      const { year, month } = req.query;
+      const userId = req.user.id;
+
+      if (!year || !month) {
+        return res.status(400).json({ message: '請提供年份和月份' });
+      }
+
+      const yearNum = parseInt(year, 10);
+      const monthNum = parseInt(month, 10);
+
+      if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+        return res.status(400).json({ message: '年份和月份格式不正確' });
+      }
+
+      // 檢查權限 - 需要能夠查看所有報告的權限
+      const hasPermission = await this.checkAccessPermission(userId);
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限導出月報' });
+      }
+
+      // 獲取該月份的所有月報
+      const reports = await MonthlyAttendanceReport.findAll({
+        year: yearNum,
+        month: monthNum
+      });
+
+      if (!reports || reports.length === 0) {
+        return res.status(404).json({ message: '該月份沒有月報記錄' });
+      }
+
+      // 構建 CSV 標題行
+      const headers = [
+        '員工編號',
+        '員工姓名',
+        '員工姓名(中文)',
+        '年份',
+        '月份',
+        '年假',
+        '生日假',
+        '補假',
+        '全薪病假',
+        '病假(疾病津貼)',
+        '無薪病假',
+        '工傷病假',
+        '婚假',
+        '產假',
+        '侍產假',
+        '陪審團假',
+        '恩恤假',
+        '無薪事假',
+        '特別假期',
+        '例假',
+        '累積例假',
+        '法定假期',
+        '缺勤',
+        '上班日數',
+        '遲到次數',
+        '遲到總分鐘數',
+        'FT超時工作時數',
+        'PT工作時數',
+        'Store Manager Allowance',
+        'Attendance Bonus',
+        'Location Allowance',
+        'Incentive',
+        '特別津貼',
+        '備註'
+      ];
+
+      // 構建 CSV 數據行
+      const csvRows = [headers.join(',')];
+
+      for (const report of reports) {
+        const row = [
+          report.user?.employee_number || '',
+          report.user?.display_name || '',
+          report.user?.name_zh || '',
+          report.year,
+          report.month,
+          report.annual_leave_days || 0,
+          report.birthday_leave_days || 0,
+          report.compensatory_leave_days || 0,
+          report.full_paid_sick_leave_days || 0,
+          report.sick_leave_with_allowance_days || 0,
+          report.no_pay_sick_leave_days || 0,
+          report.work_injury_leave_days || 0,
+          report.marriage_leave_days || 0,
+          report.maternity_leave_days || 0,
+          report.paternity_leave_days || 0,
+          report.jury_service_leave_days || 0,
+          report.compassionate_leave_days || 0,
+          report.no_pay_personal_leave_days || 0,
+          report.special_leave_days || 0,
+          report.current_rest_days_days || 0,
+          report.accumulated_rest_days_days || 0,
+          report.statutory_holiday_days || 0,
+          report.absent_days || 0,
+          report.work_days || 0,
+          report.late_count || 0,
+          report.late_total_minutes || 0,
+          report.ft_overtime_hours || 0,
+          report.pt_work_hours || 0,
+          report.store_manager_allowance || 0,
+          report.attendance_bonus || 0,
+          report.location_allowance || 0,
+          report.incentive || 0,
+          report.special_allowance || 0,
+          (report.remarks || '').replace(/"/g, '""') // 處理 CSV 中的引號
+        ];
+
+        // 處理包含逗號或換行的字段，用引號包裹
+        const escapedRow = row.map(field => {
+          const fieldStr = String(field);
+          if (fieldStr.includes(',') || fieldStr.includes('\n') || fieldStr.includes('"')) {
+            return `"${fieldStr.replace(/"/g, '""')}"`;
+          }
+          return fieldStr;
+        });
+
+        csvRows.push(escapedRow.join(','));
+      }
+
+      const csvContent = csvRows.join('\n');
+
+      // 設置響應頭，使用 UTF-8 BOM 以確保 Excel 正確顯示中文
+      const BOM = '\uFEFF';
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="monthly_attendance_report_${yearNum}_${String(monthNum).padStart(2, '0')}.csv"`);
+      res.send(BOM + csvContent);
+    } catch (error) {
+      console.error('Export CSV error:', error);
+      res.status(500).json({ message: '導出 CSV 失敗', error: error.message });
+    }
+  }
 }
 
 module.exports = new MonthlyAttendanceReportController();

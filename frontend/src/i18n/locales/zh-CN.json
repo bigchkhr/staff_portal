@@ -68,6 +68,7 @@
     "groupLeaveCalendar": "群组假期周历",
     "monthlyAttendanceSummary": "月结表",
     "monthlyAttendanceReport": "月报",
+    "monthlyAttendanceReportExport": "导出月报 CSV",
     "systemMaintenance": "系统维护",
     "manualApproval": "人工批核",
     "applyLeave": "申请假期",

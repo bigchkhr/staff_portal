@@ -389,8 +389,16 @@ const MonthlyAttendanceReport = () => {
         currentY += remarksLines.length * 5 + 5;
       }
 
-      // 生成文件名
-      const fileName = `MonthlyReport_${report.user?.employee_number || 'User'}_${report.year}_${report.month}.pdf`;
+      // 生成文件名 - 使用 user id 和 display name
+      const sanitizeFileName = (str) => {
+        if (!str) return '';
+        // 移除或替換文件名中不允許的字符
+        return str.replace(/[<>:"/\\|?*]/g, '_').trim();
+      };
+      
+      const userId = report.user_id || report.user?.id || 'Unknown';
+      const displayName = sanitizeFileName(report.user?.display_name || report.user?.name_zh || report.user?.name || 'User');
+      const fileName = `MonthlyReport_${userId}_${displayName}.pdf`;
       
       // 保存 PDF
       doc.save(fileName);
