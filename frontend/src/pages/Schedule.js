@@ -77,8 +77,9 @@ const Schedule = ({ noLayout = false }) => {
   const [groupMembers, setGroupMembers] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [helperSchedules, setHelperSchedules] = useState([]);
+  // 默認設定為當天到當月最後一天
   const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong'));
-  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').add(6, 'day'));
+  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('month'));
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -120,6 +121,39 @@ const Schedule = ({ noLayout = false }) => {
       checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
+
+  // 處理開始日期變更，自動將結束日期設定為該月的最後一天
+  const handleStartDateChange = (newValue) => {
+    if (!newValue || !newValue.isValid()) return;
+    
+    setStartDate(newValue);
+    
+    // 自動將結束日期設定為該月的最後一天
+    const lastDayOfMonth = newValue.endOf('month');
+    setEndDate(lastDayOfMonth);
+  };
+
+  // 處理結束日期變更，確保在同一個月內
+  const handleEndDateChange = (newValue) => {
+    if (!newValue || !newValue.isValid()) return;
+    
+    // 如果開始日期存在，確保結束日期在同一個月
+    if (startDate && startDate.isValid()) {
+      const startMonth = startDate.month();
+      const startYear = startDate.year();
+      const endMonth = newValue.month();
+      const endYear = newValue.year();
+      
+      // 如果不在同一個月，調整為該月的最後一天
+      if (startMonth !== endMonth || startYear !== endYear) {
+        const lastDayOfMonth = startDate.endOf('month');
+        setEndDate(lastDayOfMonth);
+        return;
+      }
+    }
+    
+    setEndDate(newValue);
+  };
 
   // 當群組改變時，更新 allow_checker_edit 狀態
   useEffect(() => {
@@ -174,17 +208,6 @@ const Schedule = ({ noLayout = false }) => {
       const response = await axios.get(`/api/groups/department/${selectedGroupId}/members`);
       const members = response.data.members || [];
       // 後端已經按 positions.display_order 排序，不需要再次排序
-      console.log('=== Fetch到的成員資料 ===');
-      console.log('成員總數:', members.length);
-      console.log('成員列表:', members);
-      console.log('成員詳細資料:', members.map(m => ({
-        id: m.id,
-        employee_number: m.employee_number,
-        display_name: m.display_name,
-        name_zh: m.name_zh,
-        position_name: m.position_name,
-        position_employment_mode: m.position_employment_mode
-      })));
       setGroupMembers(members);
     } catch (error) {
       console.error('Fetch group members error:', error);
@@ -237,19 +260,12 @@ const Schedule = ({ noLayout = false }) => {
       }
       
       // 獲取原本群組的排班（原舖）
-      // 如果指定了店舖ID，則只獲取該店舖的排班
-      const schedulesParams = {
-        department_group_id: selectedGroupId,
-        start_date: startDateStr,
-        end_date: endDateStr
-      };
-      // 如果選擇了店舖，添加 store_id 參數來過濾排班
-      if (selectedDefaultStoreId) {
-        schedulesParams.store_id = selectedDefaultStoreId;
-      }
-      
       const schedulesResponse = await axios.get('/api/schedules', {
-        params: schedulesParams
+        params: {
+          department_group_id: selectedGroupId,
+          start_date: startDateStr,
+          end_date: endDateStr
+        }
       });
       const schedulesData = schedulesResponse.data.schedules || [];
       
@@ -271,104 +287,33 @@ const Schedule = ({ noLayout = false }) => {
           // 如果獲取幫舖排班失敗，不影響原本群組的排班顯示
         }
       }
-      console.log('=== 📅 Fetch到的排班資料 ===');
-      console.log('📊 查詢參數:', {
-        department_group_id: selectedGroupId,
-        store_id: selectedDefaultStoreId,
-        start_date: startDateStr,
-        end_date: endDateStr
-      });
-      
-      console.log('📋 原舖排班總數:', schedulesData.length);
-      console.log('📋 原舖排班完整資料:', schedulesData);
-      
-      // 顯示每個排班的關鍵信息
-      if (schedulesData.length > 0) {
-        console.log('📋 原舖排班詳細列表:');
-        schedulesData.forEach((s, index) => {
-          console.log(`  [${index + 1}]`, {
-            id: s.id,
-            user_id: s.user_id,
-            employee_number: s.employee_number,
-            user_name: s.user_name || s.user_name_zh,
-            schedule_date: s.schedule_date,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            store_id: s.store_id || s.store_table_id,
-            store_code: s.store_code,
-            leave_type: s.leave_type_name_zh || s.leave_type_name,
-            leave_session: s.leave_session
-          });
-        });
-      } else {
-        console.warn('⚠️ 沒有找到原舖排班記錄');
-      }
-      
-      // 按 employee_number 分組顯示
-      const schedulesByEmployee = {};
-      schedulesData.forEach(s => {
-        const empNum = s.employee_number || `無員工編號(user_id:${s.user_id})`;
-        if (!schedulesByEmployee[empNum]) {
-          schedulesByEmployee[empNum] = [];
-        }
-        schedulesByEmployee[empNum].push({
-          schedule_date: s.schedule_date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          store_id: s.store_id || s.store_table_id,
-          store_code: s.store_code
-        });
-      });
-      console.log('👥 按員工編號分組的排班:', schedulesByEmployee);
-      
-      // 按日期分組顯示
-      const schedulesByDate = {};
-      schedulesData.forEach(s => {
-        const date = s.schedule_date;
-        if (!schedulesByDate[date]) {
-          schedulesByDate[date] = [];
-        }
-        schedulesByDate[date].push({
-          employee_number: s.employee_number,
-          user_name: s.user_name || s.user_name_zh,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          store_code: s.store_code
-        });
-      });
-      console.log('📅 按日期分組的排班:', schedulesByDate);
+      console.log('Fetched schedules:', schedulesData);
+      console.log('Fetched helper schedules:', helperSchedulesData);
+      console.log('Schedule dates:', schedulesData.map(s => ({ 
+        id: s.id, 
+        user_id: s.user_id, 
+        schedule_date: s.schedule_date, 
+        type: typeof s.schedule_date,
+        isDate: s.schedule_date instanceof Date,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        leave_type_name_zh: s.leave_type_name_zh,
+        leave_session: s.leave_session
+      })));
       
       // 調試：檢查有時間的排班記錄
       const schedulesWithTime = schedulesData.filter(s => s.start_time || s.end_time);
-      console.log(`⏰ 有時間的排班記錄: ${schedulesWithTime.length}`, schedulesWithTime.map(s => ({
-        employee_number: s.employee_number,
+      console.log(`Schedules with time: ${schedulesWithTime.length}`, schedulesWithTime.slice(0, 5).map(s => ({
+        id: s.id,
         user_id: s.user_id,
         schedule_date: s.schedule_date,
         start_time: s.start_time,
-        end_time: s.end_time,
-        store_code: s.store_code
+        end_time: s.end_time
       })));
-      
-      // 幫舖排班
-      console.log('🆘 幫舖排班總數:', helperSchedulesData.length);
-      if (helperSchedulesData.length > 0) {
-        console.log('🆘 幫舖排班詳細列表:', helperSchedulesData.map(s => ({
-          id: s.id,
-          employee_number: s.employee_number,
-          user_name: s.user_name || s.user_name_zh,
-          schedule_date: s.schedule_date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          store_id: s.store_id,
-          store_code: s.store_code
-        })));
-      }
-      
-      console.log('📅 查詢日期範圍:', { 
+      console.log('Date range:', { 
         start: startDate.format('YYYY-MM-DD'), 
         end: endDate.format('YYYY-MM-DD') 
       });
-      console.log('=== ✅ 排班資料載入完成 ===');
       setSchedules(schedulesData);
       setHelperSchedules(helperSchedulesData);
     } catch (error) {
@@ -479,26 +424,32 @@ const Schedule = ({ noLayout = false }) => {
       : leaveTypeDisplay;
   };
 
-  const getScheduleForUserAndDate = (userId, employeeNumber, date) => {
+  const getScheduleForUserAndDate = (userId, date) => {
     // 如果 date 為 null 或 undefined，返回 null
     if (!date) {
       return null;
     }
     
-    // 格式化日期為 YYYY-MM-DD
+    // 使用香港時區格式化日期，確保日期有效
     let dateStr;
     try {
+      // 如果 date 已經是 dayjs 對象，直接使用其日期部分（不受時區影響）
       if (dayjs.isDayjs(date)) {
+        // 已經是 dayjs 對象，直接獲取日期字符串（YYYY-MM-DD），不進行時區轉換
+        // 這樣可以避免時區轉換導致的日期偏移
         dateStr = date.format('YYYY-MM-DD');
       } else {
-        const dateObj = dayjs(date);
+        // 需要解析，先解析為本地時間，然後轉換為香港時區
+        let dateObj = dayjs(date);
         if (!dateObj.isValid()) {
           console.warn('Invalid date in getScheduleForUserAndDate:', date);
           return null;
         }
+        // 如果是字符串日期（YYYY-MM-DD），直接使用；否則轉換時區
         if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
           dateStr = date;
         } else {
+          dateObj = dateObj.tz('Asia/Hong_Kong');
           dateStr = dateObj.format('YYYY-MM-DD');
         }
       }
@@ -506,67 +457,89 @@ const Schedule = ({ noLayout = false }) => {
       console.error('Error formatting date in getScheduleForUserAndDate:', error, date);
       return null;
     }
-    
-    // 簡化匹配邏輯：只使用 user_id 匹配
-    // 如果 schedules.user_id == users.id，就 filter 出來
+    // 確保 user_id 類型一致（都轉為數字）
+    const userIdNum = Number(userId);
     const found = schedules.find(s => {
-      // 1. 用戶匹配：只使用 user_id
-      if (!userId || !s.user_id) {
-        return false;
-      }
-      
-      const userMatch = Number(s.user_id) === Number(userId);
-      if (!userMatch) {
-        return false;
-      }
-      
-      // 2. 日期匹配：統一轉換為 YYYY-MM-DD 格式
+      const sUserId = Number(s.user_id);
+      // 處理 schedule_date 可能是 Date 對象或字符串的情況
       let sDateStr = s.schedule_date;
+      
+      // 如果為 null 或 undefined，跳過
       if (!sDateStr) {
         return false;
       }
       
-      // 處理各種日期格式
-      if (sDateStr instanceof Date) {
-        const year = sDateStr.getFullYear();
-        const month = String(sDateStr.getMonth() + 1).padStart(2, '0');
-        const day = String(sDateStr.getDate()).padStart(2, '0');
-        sDateStr = `${year}-${month}-${day}`;
-      } else if (typeof sDateStr === 'string') {
-        // 提取日期部分（YYYY-MM-DD）
-        sDateStr = sDateStr.split('T')[0].substring(0, 10);
-      } else {
-        // 嘗試用 dayjs 解析
-        const parsed = dayjs(sDateStr);
-        if (parsed.isValid()) {
-          sDateStr = parsed.format('YYYY-MM-DD');
+      try {
+        // 處理 Date 對象或字符串，統一轉換為日期字符串（YYYY-MM-DD）
+        if (sDateStr instanceof Date) {
+          // Date 對象，使用本地日期部分（避免時區轉換導致的日期偏移）
+          // 因為數據庫存儲的是純日期，不應該進行時區轉換
+          const year = sDateStr.getFullYear();
+          const month = String(sDateStr.getMonth() + 1).padStart(2, '0');
+          const day = String(sDateStr.getDate()).padStart(2, '0');
+          sDateStr = `${year}-${month}-${day}`;
+        } else if (typeof sDateStr === 'string') {
+          // 字符串格式
+          if (sDateStr.includes('T') && sDateStr.includes('Z')) {
+            // UTC 時間字符串，需要轉換為香港時區
+            const parsed = dayjs.utc(sDateStr);
+            if (!parsed.isValid()) {
+              return false;
+            }
+            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+          } else if (sDateStr.includes('T')) {
+            // 有時區信息的時間字符串，需要轉換
+            const parsed = dayjs(sDateStr);
+            if (!parsed.isValid()) {
+              return false;
+            }
+            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+          } else {
+            // 純日期字符串（YYYY-MM-DD），直接使用，不進行時區轉換
+            // 因為數據庫存儲的是純日期，不應該進行時區轉換
+            sDateStr = sDateStr.split('T')[0].substring(0, 10);
+          }
         } else {
-          return false;
+          // 嘗試用 dayjs 解析其他格式
+          const parsed = dayjs(sDateStr);
+          if (parsed.isValid()) {
+            // 如果是純日期格式，直接格式化；否則轉換時區
+            if (typeof sDateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sDateStr)) {
+              sDateStr = sDateStr;
+            } else {
+              sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+            }
+          } else {
+            return false;
+          }
         }
+      } catch (error) {
+        console.error('Error parsing schedule date:', error, sDateStr);
+        return false;
       }
       
-      // 日期匹配
-      return sDateStr === dateStr;
+      const matches = sUserId === userIdNum && sDateStr === dateStr;
+      if (matches) {
+        console.log('Found schedule match:', { 
+          userId, 
+          sUserId, 
+          dateStr, 
+          sDateStr, 
+          schedule: s 
+        });
+      }
+      return matches;
     });
-    
-    return found || null;
+    return found;
   };
 
-  const handleOpenEditDialog = (userId, date, employeeNumber = null) => {
+  const handleOpenEditDialog = (userId, date) => {
     if (!editMode || !canEdit) return;
     
     // 確保日期有效
     if (!date) {
       console.warn('Invalid date in handleOpenEditDialog');
       return;
-    }
-
-    // 如果沒有提供 employee_number，嘗試從 groupMembers 中查找
-    if (!employeeNumber) {
-      const member = groupMembers.find(m => m.id === userId);
-      if (member) {
-        employeeNumber = member.employee_number;
-      }
     }
 
     // 使用香港時區格式化日期
@@ -598,7 +571,7 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
     
-    const existingSchedule = getScheduleForUserAndDate(userId, employeeNumber, date);
+    const existingSchedule = getScheduleForUserAndDate(userId, date);
 
     if (existingSchedule) {
       setEditingSchedule(existingSchedule);
@@ -1121,7 +1094,7 @@ const Schedule = ({ noLayout = false }) => {
                     </Box>
                   </TableCell>
                   {dates.map(date => {
-                    const schedule = getScheduleForUserAndDate(member.id, member.employee_number, date);
+                    const schedule = getScheduleForUserAndDate(member.id, date);
                     const dateStr = date.format('YYYY-MM-DD');
                     return (
                       <TableCell
@@ -1139,7 +1112,7 @@ const Schedule = ({ noLayout = false }) => {
                               <Button
                                 size="small"
                                 variant="outlined"
-                                onClick={() => handleOpenEditDialog(member.id, date, member.employee_number)}
+                                onClick={() => handleOpenEditDialog(member.id, date)}
                                 sx={{ 
                                   minWidth: 'auto', 
                                   p: 0.5,
@@ -1298,7 +1271,7 @@ const Schedule = ({ noLayout = false }) => {
                   
                   // 統計群組成員（只計算有排班時間的）
                   groupMembers.forEach(member => {
-                    const schedule = getScheduleForUserAndDate(member.id, member.employee_number, date);
+                    const schedule = getScheduleForUserAndDate(member.id, date);
                     // 判斷是否有排班時間：必須有 start_time 或 end_time（不包括只有 leave_type 但沒有時間的）
                     const hasScheduleTime = schedule && (
                       schedule.start_time || 
@@ -2047,7 +2020,7 @@ const Schedule = ({ noLayout = false }) => {
                 <DatePicker
                   label={t('schedule.startDate')}
                   value={startDate}
-                  onChange={(newValue) => setStartDate(newValue)}
+                  onChange={handleStartDateChange}
                   format="DD/MM/YYYY"
                   slotProps={{ 
                     textField: { 
@@ -2064,8 +2037,10 @@ const Schedule = ({ noLayout = false }) => {
                 <DatePicker
                   label={t('schedule.endDate')}
                   value={endDate}
-                  onChange={(newValue) => setEndDate(newValue)}
+                  onChange={handleEndDateChange}
                   format="DD/MM/YYYY"
+                  minDate={startDate?.startOf('month')}
+                  maxDate={startDate?.endOf('month')}
                   slotProps={{ 
                     textField: { 
                       fullWidth: true,
@@ -2249,7 +2224,7 @@ const Schedule = ({ noLayout = false }) => {
                         </Box>
                       </TableCell>
                       {dates.map(date => {
-                        const schedule = getScheduleForUserAndDate(member.id, member.employee_number, date);
+                        const schedule = getScheduleForUserAndDate(member.id, date);
                         const dateStr = date.format('YYYY-MM-DD');
                         // 調試：檢查 schedule 資料
                         if (schedule && schedule.leave_type_name_zh) {
@@ -2280,7 +2255,7 @@ const Schedule = ({ noLayout = false }) => {
                                   <Button
                                     size="small"
                                     variant="outlined"
-                                    onClick={() => handleOpenEditDialog(member.id, date, member.employee_number)}
+                                    onClick={() => handleOpenEditDialog(member.id, date)}
                                     sx={{ 
                                       minWidth: 'auto', 
                                       p: 0.75,
@@ -2600,7 +2575,7 @@ const Schedule = ({ noLayout = false }) => {
                       
                       // 統計群組成員（只計算有排班時間的）
                       groupMembers.forEach(member => {
-                        const schedule = getScheduleForUserAndDate(member.id, member.employee_number, date);
+                        const schedule = getScheduleForUserAndDate(member.id, date);
                         // 判斷是否有排班時間：必須有 start_time 或 end_time（不包括只有 leave_type 但沒有時間的）
                         const hasScheduleTime = schedule && (
                           schedule.start_time || 

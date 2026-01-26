@@ -204,7 +204,7 @@ exports.seed = async function (knex) {
   const delegationGroups = await knex('delegation_groups').insert([
     { name: 'HR Group', name_zh: 'HR群組', description: '', user_ids: [1, 29, 31], closed: false },
     { name: 'Accounting', name_zh: '會計部授權群組', description: '', user_ids: [3], closed: false },
-    { name: 'B2B (Retailer)', name_zh: '商務部授權群組', description: '', user_ids: [451], closed: false },
+    { name: 'B2B (Retailer)', name_zh: '商務部授權群組 (Retailer)', description: '', user_ids: [451], closed: false },
     { name: 'Business Development', name_zh: '業務拓展部授權群組', description: '', user_ids: [], closed: false },
     { name: 'Category', name_zh: '品類部授權群組', description: '', user_ids: [], closed: false },
     { name: 'General Administration', name_zh: '行政部授權群組', description: '', user_ids: [26], closed: false },
@@ -284,17 +284,7 @@ exports.seed = async function (knex) {
       approver_3_id: hrGroupId,
       closed: false
     },
-    {
-      name: 'B2B (HoReCa)',
-      name_zh: '商務部群組 (HoReCa)',
-      description: '',
-      user_ids: [487, 490],
-      checker_id: null,
-      approver_1_id: 39,
-      approver_2_id: null,
-      approver_3_id: hrGroupId,
-      closed: false
-    },
+    
     {
       name: 'Business Development',
       name_zh: '業務拓展部群組',
@@ -687,6 +677,17 @@ exports.seed = async function (knex) {
       user_ids: [68],
       checker_id: null,
       approver_1_id: null,
+      approver_2_id: null,
+      approver_3_id: hrGroupId,
+      closed: false
+    },
+    {
+      name: 'B2B (HoReCa)',
+      name_zh: '商務部群組 (HoReCa)',
+      description: '',
+      user_ids: [487, 490],
+      checker_id: null,
+      approver_1_id: 39,
       approver_2_id: null,
       approver_3_id: hrGroupId,
       closed: false

@@ -46,340 +46,59 @@ class ScheduleController {
   // 取得原本群組的排班列表（原舖）
   async getSchedules(req, res) {
     try {
-      const { department_group_id, user_id, start_date, end_date, schedule_date, store_id } = req.query;
-      const userId = req.user.id;
-
+      const { department_group_id, start_date, end_date } = req.query;
+      
       console.log('=== 📥 收到排班查詢請求 ===');
-      console.log('🌐 請求方法:', req.method);
-      console.log('🔗 請求路徑:', req.path);
-      console.log('🔗 完整URL:', req.originalUrl);
-      console.log('👤 請求用戶ID:', userId);
-      console.log('👤 請求用戶信息:', {
-        id: req.user.id,
-        username: req.user.username,
-        display_name: req.user.display_name,
-        is_system_admin: req.user.is_system_admin
-      });
-      
-      console.log('📋 查詢參數 (req.query):', req.query);
-      console.log('📋 解析後的參數:', {
+      console.log('📋 前端請求參數:', {
         department_group_id,
-        user_id,
         start_date,
-        end_date,
-        schedule_date,
-        store_id
+        end_date
       });
-
-      const filters = {};
-      if (department_group_id) filters.department_group_id = parseInt(department_group_id, 10);
-      if (user_id) filters.user_id = parseInt(user_id, 10);
-      if (start_date) filters.start_date = start_date;
-      if (end_date) filters.end_date = end_date;
-      if (schedule_date) filters.schedule_date = schedule_date;
-      if (store_id) filters.store_id = parseInt(store_id, 10);
-
-      console.log('🔍 處理後的過濾條件 (filters):', filters);
-      console.log('📊 過濾條件詳情:', {
-        has_department_group_id: !!filters.department_group_id,
-        has_user_id: !!filters.user_id,
-        has_date_range: !!(filters.start_date && filters.end_date),
-        has_store_id: !!filters.store_id,
-        date_range: filters.start_date && filters.end_date 
-          ? `${filters.start_date} 至 ${filters.end_date}` 
-          : '未指定'
-      });
-
-      // 如果指定了群組，檢查用戶是否有權限查看
-      if (department_group_id) {
-        const groupId = parseInt(department_group_id, 10);
-        const canView = await this.canViewGroupSchedule(userId, groupId, req.user.is_system_admin);
-        console.log(`Permission check for group ${groupId}:`, canView);
-        if (!canView) {
-          return res.status(403).json({ message: '您沒有權限查看此群組的排班表' });
-        }
-      } else {
-        // 如果沒有指定群組，只返回用戶所屬群組的排班
-        const userGroups = await DepartmentGroup.findByUserId(userId);
-        if (userGroups.length === 0) {
-          return res.json({ schedules: [] });
-        }
-        // 只查詢用戶所屬群組的排班
-        const groupIds = userGroups.map(g => g.id);
-        const allSchedules = await Schedule.findAll({});
-        const filteredSchedules = allSchedules.filter(s => 
-          groupIds.includes(s.department_group_id)
-        );
-        
-        // 如果指定了 user_id，只返回該用戶的排班
-        let targetMembers = [];
-        if (filters.user_id) {
-          // 找到指定的用戶
-          const targetUser = await User.findById(filters.user_id);
-          if (targetUser) {
-            // 檢查該用戶是否屬於這些群組
-            const userGroupsForTarget = await DepartmentGroup.findByUserId(filters.user_id);
-            const targetUserGroupIds = userGroupsForTarget.map(g => g.id);
-            const hasCommonGroup = groupIds.some(gid => targetUserGroupIds.includes(gid));
-            if (hasCommonGroup) {
-              targetMembers = [targetUser];
-            } else {
-              // 如果指定用戶不屬於當前用戶的群組，返回空數組
-              return res.json({ schedules: [] });
-            }
-          } else {
-            return res.json({ schedules: [] });
-          }
-        } else {
-          // 獲取所有群組的成員
-          for (const groupId of groupIds) {
-            const members = await DepartmentGroup.getMembers(groupId);
-            targetMembers.push(...members);
-          }
-          // 去重
-          targetMembers = Array.from(new Map(targetMembers.map(m => [m.id, m])).values());
-        }
-        
-        // 如果指定了 user_id，只獲取該用戶的假期申請
-        let leaveApplications = [];
-        if (filters.user_id) {
-          const leaveResult = await LeaveApplication.findAll({
-            user_id: filters.user_id,
-            status: 'approved',
-            start_date_from: filters.start_date,
-            end_date_to: filters.end_date
-          });
-          const allLeaveApplications = Array.isArray(leaveResult?.applications) ? leaveResult.applications : [];
-          leaveApplications = allLeaveApplications.filter(leave => {
-            // 排除已銷假的假期
-            if (leave.is_reversed) {
-              return false;
-            }
-            // 排除銷假交易本身
-            if (leave.is_reversal_transaction) {
-              return false;
-            }
-            return true;
-          });
-        } else {
-          // 獲取所有群組成員的假期申請
-          leaveApplications = await this.getLeaveApplicationsForGroups(
-            groupIds,
-            filters.start_date,
-            filters.end_date
-          );
-        }
-        
-        // 如果指定了 user_id，使用該用戶所屬的第一個群組ID
-        const targetGroupId = filters.user_id 
-          ? (await DepartmentGroup.findByUserId(filters.user_id))[0]?.id || groupIds[0]
-          : groupIds[0];
-        
-        // 生成完整的排班資料
-        const schedulesWithLeave = this.generateSchedulesForMembersAndDates(
-          targetMembers,
-          filters.start_date,
-          filters.end_date,
-          targetGroupId,
-          filteredSchedules,
-          leaveApplications
-        );
-        
-        // 確保所有排班記錄的日期格式一致（YYYY-MM-DD）
-        const formattedSchedulesWithLeave = schedulesWithLeave.map(schedule => {
-          if (schedule.schedule_date) {
-            schedule.schedule_date = this.formatDateString(schedule.schedule_date);
-          }
-          return schedule;
-        });
-        
-        console.log(`Returning ${formattedSchedulesWithLeave.length} schedules (no department_group_id specified)`);
-        if (formattedSchedulesWithLeave.length > 0) {
-          console.log('Sample schedule:', formattedSchedulesWithLeave[0]);
-        }
-        
-        return res.json({ schedules: formattedSchedulesWithLeave });
-      }
-
-      console.log('Querying schedules with filters:', filters);
       
-      // 確保 department_group_id 存在
-      if (!filters.department_group_id) {
-        console.error('department_group_id is required but not provided');
+      if (!department_group_id) {
         return res.status(400).json({ message: '必須指定群組ID' });
       }
       
-      // 使用 knex 直接查詢原舖排班
+      const groupId = parseInt(department_group_id, 10);
       const knex = require('../config/database');
       
-      // 調試：先檢查資料庫中該群組的所有排班記錄（不限制日期）
-      const allSchedulesDebug = await knex('schedules')
-        .where('department_group_id', filters.department_group_id)
-        .select('id', 'user_id', 'schedule_date', 'start_time', 'end_time')
-        .limit(20)
-        .orderBy('schedule_date', 'desc');
-      console.log(`資料庫中群組 ${filters.department_group_id} 的所有排班記錄（前20條）:`, allSchedulesDebug);
-      
-      // 調試：檢查日期格式和範圍（使用 UTC+8）
-      if (allSchedulesDebug.length > 0) {
-        const firstSchedule = allSchedulesDebug[0];
-        const dateStr = this.formatDateToUTC8(firstSchedule.schedule_date);
-        console.log('日期格式檢查 (UTC+8):', {
-          raw: firstSchedule.schedule_date,
-          formatted_utc8: dateStr,
-          query_start: filters.start_date,
-          query_end: filters.end_date,
-          in_range: dateStr >= filters.start_date && dateStr <= filters.end_date
-        });
-      }
-      
-      // 簡化查詢：只根據 department_group_id 和日期範圍查詢
-      // 當 request 的群組 id = schedules 內的 department_group_id，就返回所有匹配的排班
-      let schedulesQuery = knex('schedules')
-        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+      // 根據 department_group_id 查詢，並 JOIN stores 表獲取店舖信息
+      let query = knex('schedules')
         .leftJoin('stores', 'schedules.store_id', 'stores.id')
-        .where('schedules.department_group_id', filters.department_group_id)
+        .where('schedules.department_group_id', groupId)
         .select(
           'schedules.*',
-          'leave_types.code as leave_type_code',
-          'leave_types.name as leave_type_name',
-          'leave_types.name_zh as leave_type_name_zh',
           'stores.id as store_id',
           'stores.store_code as store_code',
           'stores.store_short_name_ as store_short_name'
         );
       
-      // 如果指定了日期範圍，使用 whereBetween 進行過濾
-      if (filters.start_date && filters.end_date) {
-        schedulesQuery = schedulesQuery.whereBetween('schedules.schedule_date', [filters.start_date, filters.end_date]);
-      } else if (filters.start_date) {
-        schedulesQuery = schedulesQuery.where('schedules.schedule_date', '>=', filters.start_date);
-      } else if (filters.end_date) {
-        schedulesQuery = schedulesQuery.where('schedules.schedule_date', '<=', filters.end_date);
+      // 如果指定了日期範圍，進行篩選
+      if (start_date && end_date) {
+        query = query.whereBetween('schedules.schedule_date', [start_date, end_date]);
+        console.log(`📅 日期範圍篩選: ${start_date} 至 ${end_date}`);
+      } else if (start_date) {
+        query = query.where('schedules.schedule_date', '>=', start_date);
+        console.log(`📅 開始日期篩選: >= ${start_date}`);
+      } else if (end_date) {
+        query = query.where('schedules.schedule_date', '<=', end_date);
+        console.log(`📅 結束日期篩選: <= ${end_date}`);
       }
       
-      // 如果指定了 store_id，添加店舖篩選
-      if (filters.store_id) {
-        schedulesQuery = schedulesQuery.where('schedules.store_id', filters.store_id);
-      }
-      
-      schedulesQuery = schedulesQuery.orderBy('schedules.schedule_date', 'asc');
-      
-      // 顯示 SQL 查詢語句（用於調試）
-      const sqlQuery = schedulesQuery.toString();
-      console.log('📝 SQL 查詢語句:', sqlQuery);
-      
-      const schedulesRaw = await schedulesQuery;
+      const schedules = await query;
       
       console.log('=== 📊 查詢結果 ===');
-      console.log(`✅ 找到 ${schedulesRaw.length} 條排班記錄`);
-      console.log('🔍 查詢條件:', {
-        department_group_id: filters.department_group_id,
-        store_id: filters.store_id,
-        start_date: filters.start_date,
-        end_date: filters.end_date,
-        user_id: filters.user_id
-      });
-      
-      if (schedulesRaw.length > 0) {
-        console.log('📋 原始查詢結果樣本 (前3條):', schedulesRaw.slice(0, 3).map(s => ({
-          id: s.id,
-          user_id: s.user_id,
-          schedule_date: s.schedule_date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          store_id: s.store_id
-        })));
-      } else {
-        console.warn('⚠️ 沒有找到任何排班記錄');
-      }
-      
-      // 格式化所有字段，確保格式一致，使用 UTC+8 時區
-      const formattedSchedules = schedulesRaw
-        .map(schedule => {
-          // 格式化日期為 YYYY-MM-DD（UTC+8 時區）
-          if (schedule.schedule_date) {
-            schedule.schedule_date = this.formatDateToUTC8(schedule.schedule_date);
-          }
-          
-          return schedule;
-        })
-        .map(schedule => {
-          // 繼續格式化其他字段
-          // 格式化 start_time
-        if (schedule.start_time) {
-          if (schedule.start_time instanceof Date) {
-            const hours = String(schedule.start_time.getHours()).padStart(2, '0');
-            const minutes = String(schedule.start_time.getMinutes()).padStart(2, '0');
-            schedule.start_time = `${hours}:${minutes}:00`;
-          } else if (typeof schedule.start_time === 'string') {
-            // 確保格式為 HH:mm:ss
-            schedule.start_time = schedule.start_time.substring(0, 8);
-          }
-        }
-        
-        // end_time 保持原樣（可能是跨日格式如 26:00）
-        if (schedule.end_time && typeof schedule.end_time !== 'string') {
-          schedule.end_time = String(schedule.end_time);
-        }
-        
-        // 確保 user_id 是數字
-        if (schedule.user_id) {
-          schedule.user_id = Number(schedule.user_id);
-        }
-        
-        return schedule;
-      });
-      
-      console.log('=== ✅ 格式化後的結果 ===');
-      console.log(`📊 格式化後排班數量: ${formattedSchedules.length}`);
-      
-      if (formattedSchedules.length > 0) {
-        console.log('📋 格式化後排班樣本 (前3條):', formattedSchedules.slice(0, 3).map(s => ({
-          id: s.id,
-          user_id: s.user_id,
-          schedule_date: s.schedule_date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          store_id: s.store_id,
-          store_code: s.store_code,
-          leave_type: s.leave_type_name_zh || s.leave_type_name
-        })));
-        
-        // 統計信息
-        const withTime = formattedSchedules.filter(s => s.start_time || s.end_time).length;
-        const withLeave = formattedSchedules.filter(s => s.leave_type_name_zh || s.leave_type_name).length;
-        console.log('📈 統計信息:', {
-          總數: formattedSchedules.length,
-          有時間的: withTime,
-          有假期的: withLeave,
-          只有日期的: formattedSchedules.length - withTime - withLeave
-        });
-      } else {
-        console.warn('⚠️ 格式化後沒有排班記錄');
-      }
-      
-      console.log('=== 📤 發送響應 ===');
-      console.log(`✅ 返回 ${formattedSchedules.length} 條排班記錄給前端`);
-      console.log('=== ✅ 請求處理完成 ===\n');
+      console.log(`✅ 找到 ${schedules.length} 條排班記錄`);
+      console.log('📋 完整資料陣列:', schedules);
       
       res.json({ 
-        schedules: formattedSchedules
+        schedules: schedules
       });
     } catch (error) {
       console.error('Get schedules error:', error);
-      console.error('Error stack:', error.stack);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        detail: error.detail,
-        hint: error.hint
-      });
       res.status(500).json({ 
         message: '取得排班表失敗', 
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-        hint: error.detail || error.hint || '請確認資料庫 migration 是否已執行'
+        error: error.message
       });
     }
   }
@@ -419,6 +138,7 @@ class ScheduleController {
       }
 
       // 查詢其他群組中選擇了指定店舖的排班記錄
+      // PostgreSQL DATE 類型不包含時區信息，直接用字符串比較即可
       const helperSchedulesQuery = await knex('schedules')
         .leftJoin('users', 'schedules.user_id', 'users.id')
         .leftJoin('positions', 'users.position_id', 'positions.id')

@@ -71,8 +71,9 @@ const Attendance = ({ noLayout = false }) => {
   const [departmentGroups, setDepartmentGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
+  // 默認設定為當天到當月最後一天
   const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong'));
-  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').add(6, 'day'));
+  const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('month'));
   const [loading, setLoading] = useState(false);
   const [comparisonData, setComparisonData] = useState([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -129,6 +130,39 @@ const Attendance = ({ noLayout = false }) => {
       checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate]);
+
+  // 處理開始日期變更，自動將結束日期設定為該月的最後一天
+  const handleStartDateChange = (newValue) => {
+    if (!newValue || !newValue.isValid()) return;
+    
+    setStartDate(newValue);
+    
+    // 自動將結束日期設定為該月的最後一天
+    const lastDayOfMonth = newValue.endOf('month');
+    setEndDate(lastDayOfMonth);
+  };
+
+  // 處理結束日期變更，確保在同一個月內
+  const handleEndDateChange = (newValue) => {
+    if (!newValue || !newValue.isValid()) return;
+    
+    // 如果開始日期存在，確保結束日期在同一個月
+    if (startDate && startDate.isValid()) {
+      const startMonth = startDate.month();
+      const startYear = startDate.year();
+      const endMonth = newValue.month();
+      const endYear = newValue.year();
+      
+      // 如果不在同一個月，調整為該月的最後一天
+      if (startMonth !== endMonth || startYear !== endYear) {
+        const lastDayOfMonth = startDate.endOf('month');
+        setEndDate(lastDayOfMonth);
+        return;
+      }
+    }
+    
+    setEndDate(newValue);
+  };
 
   const fetchDepartmentGroups = async () => {
     try {
@@ -926,7 +960,7 @@ const Attendance = ({ noLayout = false }) => {
                 <DatePicker
                   label={t('attendance.startDate')}
                   value={startDate}
-                  onChange={(newValue) => setStartDate(newValue)}
+                  onChange={handleStartDateChange}
                   format="DD/MM/YYYY"
                   slotProps={{ 
                     textField: { 
@@ -943,8 +977,10 @@ const Attendance = ({ noLayout = false }) => {
                 <DatePicker
                   label={t('attendance.endDate')}
                   value={endDate}
-                  onChange={(newValue) => setEndDate(newValue)}
+                  onChange={handleEndDateChange}
                   format="DD/MM/YYYY"
+                  minDate={startDate?.startOf('month')}
+                  maxDate={startDate?.endOf('month')}
                   slotProps={{ 
                     textField: { 
                       fullWidth: true,
