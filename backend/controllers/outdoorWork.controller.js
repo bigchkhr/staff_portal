@@ -1,4 +1,5 @@
 const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
+const OutdoorWorkDocument = require('../database/models/OutdoorWorkDocument');
 const User = require('../database/models/User');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
@@ -91,6 +92,42 @@ class OutdoorWorkController {
 
       const application = await OutdoorWorkApplication.create(applicationData);
 
+      // 處理上傳的檔案（如果有的話）
+      const uploadedDocuments = [];
+      if (req.files && req.files.length > 0) {
+        const fs = require('fs');
+        const path = require('path');
+        const uploadDir = process.env.UPLOAD_DIR || './uploads';
+        const targetFolder = path.join(uploadDir, 'outdoor-work-documents', application.id.toString());
+        
+        // 如果目標文件夾不存在，創建它
+        if (!fs.existsSync(targetFolder)) {
+          fs.mkdirSync(targetFolder, { recursive: true });
+        }
+        
+        for (const file of req.files) {
+          // 如果文件在 temp 文件夾中，移動到正確的文件夾
+          let finalFilePath = file.path;
+          if (file.path.includes('temp')) {
+            const fileName = path.basename(file.path);
+            const newPath = path.join(targetFolder, fileName);
+            fs.renameSync(file.path, newPath);
+            finalFilePath = newPath;
+          }
+          
+          const documentData = {
+            outdoor_work_application_id: application.id,
+            file_name: file.originalname,
+            file_path: finalFilePath,
+            file_type: file.mimetype,
+            file_size: file.size,
+            uploaded_by_id: req.user.id
+          };
+          const document = await OutdoorWorkDocument.create(documentData);
+          uploadedDocuments.push(document);
+        }
+      }
+
       // 如果是 e-flow 申請，發送通知給當前批核階段的批核群組成員
       if (actualFlowType === 'e-flow' && application.status === 'pending') {
         try {
@@ -117,7 +154,8 @@ class OutdoorWorkController {
 
       res.status(201).json({
         message: '外勤工作申請已提交',
-        application
+        application,
+        documents: uploadedDocuments
       });
     } catch (error) {
       console.error('Create application error:', error);

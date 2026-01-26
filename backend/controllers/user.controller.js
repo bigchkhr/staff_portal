@@ -91,6 +91,48 @@ class UserController {
       res.status(500).json({ message: '檢查查看權限時發生錯誤' });
     }
   }
+
+  // 獲取用戶列表（允許批核者訪問，用於月結表等場景）
+  async getUsersForApprovers(req, res) {
+    try {
+      const userId = req.user.id;
+      
+      // 檢查權限：HR 成員、系統管理員或批核者
+      const isHRMember = await User.isHRMember(userId);
+      const user = await User.findById(userId);
+      const isSystemAdmin = user && user.is_system_admin;
+      const isApprovalMember = await User.isApprovalMember(userId);
+      
+      if (!isHRMember && !isSystemAdmin && !isApprovalMember) {
+        return res.status(403).json({ message: '無權限存取用戶列表' });
+      }
+
+      const { department_id, search, page, limit } = req.query;
+      const options = {};
+
+      if (department_id) options.department_id = department_id;
+      if (search) options.search = search;
+      
+      // 分頁參數
+      if (page) options.page = parseInt(page);
+      if (limit) options.limit = parseInt(limit);
+
+      const result = await User.findAll(options);
+
+      res.json({
+        users: result.users,
+        pagination: {
+          total: result.total,
+          page: result.page,
+          limit: result.limit,
+          totalPages: result.totalPages
+        }
+      });
+    } catch (error) {
+      console.error('Get users for approvers error:', error);
+      res.status(500).json({ message: '獲取用戶列表時發生錯誤' });
+    }
+  }
 }
 
 module.exports = new UserController();

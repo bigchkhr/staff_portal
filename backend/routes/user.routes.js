@@ -7,5 +7,6 @@ router.get('/profile', authenticate, userController.getProfile);
 router.get('/department', authenticate, isDeptHead, userController.getDepartmentUsers);
 router.get('/can-approve/:id', authenticate, userController.checkCanApprove);
 router.get('/can-view/:id', authenticate, userController.checkCanView);
+router.get('/list', authenticate, userController.getUsersForApprovers);
 
 module.exports = router;

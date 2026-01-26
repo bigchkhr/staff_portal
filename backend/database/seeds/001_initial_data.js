@@ -77,6 +77,8 @@ exports.seed = async function (knex) {
   await knex('form_library').del();
   await knex('employee_documents').del();
   await knex('external_links').del();
+  // 先清空排班表（在清空 users 和 department_groups 之前，避免 CASCADE 刪除時的潛在問題）
+  await knex('schedules').del();
   await knex('users').del();
   await knex('stores').del();
   await knex('department_groups').del();
@@ -202,7 +204,7 @@ exports.seed = async function (knex) {
   const delegationGroups = await knex('delegation_groups').insert([
     { name: 'HR Group', name_zh: 'HR群組', description: '', user_ids: [1, 29, 31], closed: false },
     { name: 'Accounting', name_zh: '會計部授權群組', description: '', user_ids: [3], closed: false },
-    { name: 'B2B', name_zh: '商務部授權群組', description: '', user_ids: [451], closed: false },
+    { name: 'B2B (Retailer)', name_zh: '商務部授權群組', description: '', user_ids: [451], closed: false },
     { name: 'Business Development', name_zh: '業務拓展部授權群組', description: '', user_ids: [], closed: false },
     { name: 'Category', name_zh: '品類部授權群組', description: '', user_ids: [], closed: false },
     { name: 'General Administration', name_zh: '行政部授權群組', description: '', user_ids: [26], closed: false },
@@ -244,7 +246,7 @@ exports.seed = async function (knex) {
   // 取得各授權群組的 ID
   const hrGroupId = delegationGroups.find(g => g.name === 'HR Group').id;
   const accountingDelegId = delegationGroups.find(g => g.name === 'Accounting').id;
-  const b2bDelegId = delegationGroups.find(g => g.name === 'B2B').id;
+  // 注意：B2B 沒有單一的授權群組，而是分為 'B2B (Retailer)' 和 'B2B (HoReca)'
   const bdDelegId = delegationGroups.find(g => g.name === 'Business Development').id;
   const categoryDelegId = delegationGroups.find(g => g.name === 'Category').id;
   const gaDelegId = delegationGroups.find(g => g.name === 'General Administration').id;
@@ -272,12 +274,12 @@ exports.seed = async function (knex) {
       closed: false
     },
     {
-      name: 'B2B (General)',
-      name_zh: '商務部群組 (General)',
+      name: 'B2B (Retailer)',
+      name_zh: '商務部群組 (Retailer)',
       description: '',
-      user_ids: [205, 478, 489 ,490],
+      user_ids: [205, 478, 489],
       checker_id: null,
-      approver_1_id: b2bDelegId,
+      approver_1_id: 3,
       approver_2_id: null,
       approver_3_id: hrGroupId,
       closed: false

@@ -301,15 +301,81 @@ class MonthlyAttendanceSummaryController {
     return time2Minutes - time1Minutes;
   }
 
+  // 檢查用戶是否有權限存取月結表
+  // 允許：HR 成員、系統管理員、申請人本人、以及任何作為 checker/approver1/approver2/approver3 的用戶
+  async checkAccessPermission(userId, targetUserId = null) {
+    try {
+      // 檢查是否為 HR 成員或系統管理員
+      const isHRMember = await User.isHRMember(userId);
+      const user = await User.findById(userId);
+      if (isHRMember || (user && user.is_system_admin)) {
+        console.log(`[checkAccessPermission] 用戶 ${userId} 是 HR 成員或系統管理員，允許存取`);
+        return true;
+      }
+
+      // 如果指定了目標用戶 ID，檢查是否為本人
+      if (targetUserId && Number(userId) === Number(targetUserId)) {
+        console.log(`[checkAccessPermission] 用戶 ${userId} 查看自己的月結表，允許存取`);
+        return true;
+      }
+
+      // 檢查用戶是否是任何假期申請的批核者（checker、approver1、approver2、approver3）
+      const userIdNum = Number(userId);
+      
+      // 方法1：檢查是否直接設置為批核者（在 leave_applications 表中）
+      const hasDirectApproverRole = await knex('leave_applications')
+        .where(function() {
+          this.where('checker_id', userIdNum)
+            .orWhere('approver_1_id', userIdNum)
+            .orWhere('approver_2_id', userIdNum)
+            .orWhere('approver_3_id', userIdNum);
+        })
+        .first();
+
+      if (hasDirectApproverRole) {
+        console.log(`[checkAccessPermission] 用戶 ${userId} 是直接批核者，允許存取`);
+        return true;
+      }
+
+      // 方法2：檢查是否通過授權群組屬於批核者（使用 User.isApprovalMember）
+      const isApprovalMember = await User.isApprovalMember(userId);
+      if (isApprovalMember) {
+        console.log(`[checkAccessPermission] 用戶 ${userId} 通過授權群組屬於批核者，允許存取`);
+        return true;
+      }
+
+      console.log(`[checkAccessPermission] 用戶 ${userId} 沒有權限存取月結表`);
+      return false;
+    } catch (error) {
+      console.error('[checkAccessPermission] 檢查權限時發生錯誤:', error);
+      return false;
+    }
+  }
+
   // 取得月結記錄列表
   async getMonthlySummaries(req, res) {
     try {
       const { user_id, year, month } = req.query;
+      const userId = req.user.id;
       const filters = {};
       
       if (user_id) filters.user_id = parseInt(user_id, 10);
       if (year) filters.year = parseInt(year, 10);
       if (month) filters.month = parseInt(month, 10);
+
+      // 檢查權限：如果指定了 user_id，檢查是否有權限查看該用戶的月結表
+      // 如果沒有指定 user_id，檢查用戶是否有權限存取月結表（允許查看所有記錄）
+      const hasPermission = filters.user_id 
+        ? await this.checkAccessPermission(userId, filters.user_id)
+        : await this.checkAccessPermission(userId);
+      
+      if (!hasPermission) {
+        return res.status(403).json({ 
+          message: filters.user_id 
+            ? '無權限存取此月結記錄' 
+            : '無權限存取月結表' 
+        });
+      }
 
       const summaries = await MonthlyAttendanceSummary.findAll(filters);
       
@@ -476,10 +542,17 @@ class MonthlyAttendanceSummaryController {
   async getMonthlySummary(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
       const summary = await MonthlyAttendanceSummary.findById(id);
       
       if (!summary) {
         return res.status(404).json({ message: '月結記錄不存在' });
+      }
+
+      // 檢查權限：檢查是否有權限查看該用戶的月結表
+      const hasPermission = await this.checkAccessPermission(userId, summary.user_id);
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
 
       // 填充缺失的分店資料
@@ -557,6 +630,12 @@ class MonthlyAttendanceSummaryController {
 
       if (!user_id || !year || !month || !attendance_date) {
         return res.status(400).json({ message: '請提供用戶ID、年份、月份和日期' });
+      }
+
+      // 檢查權限：檢查是否有權限存取該用戶的月結表
+      const hasPermission = await this.checkAccessPermission(userId, parseInt(user_id, 10));
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
 
       // 獲取該用戶該月的考勤數據（使用 UTC+8 時區）
@@ -812,9 +891,16 @@ class MonthlyAttendanceSummaryController {
   async calculateDay(req, res) {
     try {
       const { user_id, date, attendance_data, schedule_data } = req.body;
+      const userId = req.user.id;
 
       if (!user_id || !date) {
         return res.status(400).json({ message: '請提供用戶ID和日期' });
+      }
+
+      // 檢查權限：檢查是否有權限存取該用戶的月結表
+      const hasPermission = await this.checkAccessPermission(userId, parseInt(user_id, 10));
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
 
       // 如果沒有傳入 schedule_data，嘗試從數據庫獲取
@@ -898,6 +984,12 @@ class MonthlyAttendanceSummaryController {
         return res.status(404).json({ message: '月結記錄不存在' });
       }
 
+      // 檢查權限：檢查是否有權限存取該用戶的月結表
+      const hasPermission = await this.checkAccessPermission(userId, summary.user_id);
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此月結記錄' });
+      }
+
       const updated = await MonthlyAttendanceSummary.update(id, {
         daily_data: daily_data || summary.daily_data,
         updated_by_id: userId
@@ -914,10 +1006,17 @@ class MonthlyAttendanceSummaryController {
   async deleteMonthlySummary(req, res) {
     try {
       const { id } = req.params;
+      const userId = req.user.id;
       const summary = await MonthlyAttendanceSummary.findById(id);
       
       if (!summary) {
         return res.status(404).json({ message: '月結記錄不存在' });
+      }
+
+      // 檢查權限：檢查是否有權限存取該用戶的月結表
+      const hasPermission = await this.checkAccessPermission(userId, summary.user_id);
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
 
       await MonthlyAttendanceSummary.delete(id);

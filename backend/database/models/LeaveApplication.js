@@ -185,6 +185,18 @@ class LeaveApplication {
                      });
       } else {
         query = query.where('leave_applications.status', options.status);
+        // 對於已批准的假期，排除已銷假的假期（is_reversed = true）
+        // 同時也排除銷假交易本身（is_reversal_transaction = true）
+        if (options.status === 'approved') {
+          query = query.where(function() {
+            this.where('leave_applications.is_reversed', false)
+                .orWhereNull('leave_applications.is_reversed');
+          })
+          .where(function() {
+            this.where('leave_applications.is_reversal_transaction', false)
+                .orWhereNull('leave_applications.is_reversal_transaction');
+          });
+        }
       }
     }
 
@@ -247,6 +259,18 @@ class LeaveApplication {
                      });
       } else {
         countQuery = countQuery.where('leave_applications.status', options.status);
+        // 對於已批准的假期，排除已銷假的假期（is_reversed = true）
+        // 同時也排除銷假交易本身（is_reversal_transaction = true）
+        if (options.status === 'approved') {
+          countQuery = countQuery.where(function() {
+            this.where('leave_applications.is_reversed', false)
+                .orWhereNull('leave_applications.is_reversed');
+          })
+          .where(function() {
+            this.where('leave_applications.is_reversal_transaction', false)
+                .orWhereNull('leave_applications.is_reversal_transaction');
+          });
+        }
       }
     }
     if (options.leave_type_id) {
@@ -740,18 +764,42 @@ class LeaveApplication {
 
   static async finalizeReversal(application) {
     if (!application || !application.is_reversal_transaction) {
+      console.log('[finalizeReversal] 跳過：不是銷假交易', {
+        applicationId: application?.id,
+        isReversalTransaction: application?.is_reversal_transaction
+      });
       return application;
     }
 
     const effectiveDays = Math.abs(Number(application.total_days || 0));
 
     if (application.reversal_of_application_id) {
-      await knex('leave_applications')
+      console.log('[finalizeReversal] 開始更新原始申請的 is_reversed 標記', {
+        reversalApplicationId: application.id,
+        originalApplicationId: application.reversal_of_application_id
+      });
+      
+      const updateResult = await knex('leave_applications')
         .where('id', application.reversal_of_application_id)
         .update({
           is_reversed: true,
           reversal_completed_at: knex.fn.now()
         });
+      
+      console.log('[finalizeReversal] 更新原始申請結果', {
+        originalApplicationId: application.reversal_of_application_id,
+        rowsUpdated: updateResult
+      });
+      
+      if (updateResult === 0) {
+        console.warn('[finalizeReversal] 警告：未找到或未更新原始申請', {
+          originalApplicationId: application.reversal_of_application_id
+        });
+      }
+    } else {
+      console.warn('[finalizeReversal] 警告：銷假交易缺少 reversal_of_application_id', {
+        reversalApplicationId: application.id
+      });
     }
 
     if (effectiveDays > 0) {

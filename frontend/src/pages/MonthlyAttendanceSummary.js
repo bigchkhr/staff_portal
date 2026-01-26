@@ -102,7 +102,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('/api/admin/users');
+      // 使用新的 API 端點，允許批核者訪問
+      const response = await axios.get('/api/users/list');
       const usersList = response.data.users || [];
       // 按 employee_number 排序
       usersList.sort((a, b) => {

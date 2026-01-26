@@ -14,7 +14,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { Search as SearchIcon } from '@mui/icons-material';
+import { Search as SearchIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,6 +39,7 @@ const AdminExtraWorkingHoursPaperFlow = () => {
   const [loading, setLoading] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [files, setFiles] = useState([]);
 
   useEffect(() => {
     fetchUsers();
@@ -93,6 +94,61 @@ const AdminExtraWorkingHoursPaperFlow = () => {
     }
   };
 
+  const handleFileChange = async (e) => {
+    const selectedFiles = Array.from(e.target.files);
+    
+    // 驗證文件類型和大小
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp', 'image/tiff', 'image/tif', 'application/pdf'];
+    const allowedExtensions = ['.pdf', '.jpeg', '.jpg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    
+    const validFiles = [];
+    const errors = [];
+    
+    selectedFiles.forEach((file) => {
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      const isValidType = allowedTypes.includes(file.type) || allowedExtensions.includes(fileExt);
+      const isValidSize = file.size <= maxSize;
+      
+      if (!isValidType) {
+        errors.push(`${file.name}: 不支援的檔案類型。允許的類型：${allowedExtensions.join(', ')}`);
+      } else if (!isValidSize) {
+        errors.push(`${file.name}: 檔案大小不能超過 5MB`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+    
+    if (errors.length > 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: '檔案上傳錯誤',
+        html: errors.join('<br>'),
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#d33'
+      });
+    }
+    
+    if (validFiles.length > 0) {
+      setFiles(prev => [...prev, ...validFiles]);
+    }
+    
+    // 重置文件輸入
+    e.target.value = '';
+  };
+
+  const handleRemoveFile = (index) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -111,19 +167,27 @@ const AdminExtraWorkingHoursPaperFlow = () => {
     }
 
     try {
-      const payload = {
-        user_id: formData.user_id,
-        start_date: formData.start_date.format('YYYY-MM-DD'),
-        start_time: formData.start_time.format('HH:mm:ss'),
-        end_date: formData.end_date.format('YYYY-MM-DD'),
-        end_time: formData.end_time.format('HH:mm:ss'),
-        total_hours: parseFloat(formData.total_hours),
-        reason: formData.reason || null,
-        description: formData.description || null,
-        flow_type: 'paper-flow'
-      };
+      const formDataToSend = new FormData();
+      formDataToSend.append('user_id', formData.user_id);
+      formDataToSend.append('start_date', formData.start_date.format('YYYY-MM-DD'));
+      formDataToSend.append('start_time', formData.start_time.format('HH:mm:ss'));
+      formDataToSend.append('end_date', formData.end_date.format('YYYY-MM-DD'));
+      formDataToSend.append('end_time', formData.end_time.format('HH:mm:ss'));
+      formDataToSend.append('total_hours', parseFloat(formData.total_hours));
+      formDataToSend.append('reason', formData.reason || '');
+      formDataToSend.append('description', formData.description || '');
+      formDataToSend.append('flow_type', 'paper-flow');
 
-      const response = await axios.post('/api/extra-working-hours', payload);
+      // 添加文件
+      files.forEach((file) => {
+        formDataToSend.append('files', file);
+      });
+
+      const response = await axios.post('/api/extra-working-hours', formDataToSend, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       
       // 使用 Sweet Alert 顯示成功訊息
       await Swal.fire({
@@ -145,6 +209,7 @@ const AdminExtraWorkingHoursPaperFlow = () => {
         description: ''
       });
       setSelectedUser(null);
+      setFiles([]);
     } catch (error) {
       // 使用 Sweet Alert 顯示錯誤訊息
       await Swal.fire({
@@ -241,6 +306,7 @@ const AdminExtraWorkingHoursPaperFlow = () => {
             value={formData.total_hours}
             onChange={(e) => setFormData(prev => ({ ...prev, total_hours: e.target.value }))}
             required
+            disabled
             sx={{ mb: 2 }}
             inputProps={{ min: 0, step: 0.01 }}
             helperText={t('adminExtraWorkingHoursPaperFlow.totalHoursHelper')}
@@ -265,6 +331,70 @@ const AdminExtraWorkingHoursPaperFlow = () => {
             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
             sx={{ mb: 2 }}
           />
+
+          <Box sx={{ mb: 2 }}>
+            <InputLabel sx={{ mb: 1 }}>上載文件（不多於 5MB）</InputLabel>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+              <Button
+                variant="outlined"
+                component="label"
+                sx={{ flex: 1 }}
+              >
+                選擇文件
+                <input
+                  hidden
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpeg,.jpg,.png,.gif,.bmp,.webp,.tiff,.tif"
+                  onChange={handleFileChange}
+                />
+              </Button>
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<CameraIcon />}
+                sx={{ flex: 1 }}
+              >
+                拍照
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileChange}
+                />
+              </Button>
+            </Box>
+            {files.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                {files.map((file, index) => (
+                  <Box
+                    key={`${file.name}-${index}`}
+                    sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      mb: 0.5,
+                      p: 1,
+                      bgcolor: 'background.default',
+                      borderRadius: 1
+                    }}
+                  >
+                    <Typography variant="body2" noWrap sx={{ maxWidth: '70%' }}>
+                      {file.name} ({formatFileSize(file.size)})
+                    </Typography>
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => handleRemoveFile(index)}
+                    >
+                      移除
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </Box>
 
           <Button
             type="submit"

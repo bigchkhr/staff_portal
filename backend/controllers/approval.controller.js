@@ -350,10 +350,13 @@ class ApprovalController {
             const applicationYear = updatedApplication.year || new Date(updatedApplication.start_date).getFullYear();
             const daysToProcess = parseFloat(updatedApplication.total_days || 0);
             
-            // 處理銷假申請：發還餘額（銷假交易的 total_days 是負數，需要特殊處理）
-            if (updatedApplication.is_reversal_transaction && leaveType && leaveType.requires_balance) {
+            // 處理銷假申請：更新原始申請的 is_reversed 標記並發還餘額（如果需要的話）
+            // 注意：無論假期類型是否需要餘額，都需要調用 finalizeReversal 來更新原始申請的 is_reversed 標記
+            if (updatedApplication.is_reversal_transaction) {
               await LeaveApplication.finalizeReversal(updatedApplication);
-              // finalizeReversal 內部會處理餘額發還
+              // finalizeReversal 內部會處理：
+              // 1. 更新原始申請的 is_reversed = true
+              // 2. 如果假期類型需要餘額，則發還餘額
             }
             // 處理其他類型的申請（取消申請或正常假期申請）
             else if (leaveType && leaveType.requires_balance && daysToProcess > 0) {

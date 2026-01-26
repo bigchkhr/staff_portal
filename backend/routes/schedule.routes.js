@@ -15,8 +15,11 @@ router.put('/group/:department_group_id/checker-edit-permission', scheduleContro
 // 批量更新所有群組的 checker 編輯權限設置（必須放在 /:id 之前）
 router.put('/groups/batch-checker-edit-permission', scheduleController.batchUpdateCheckerEditPermission.bind(scheduleController));
 
-// 取得排班列表
+// 取得原本群組的排班列表（原舖）
 router.get('/', scheduleController.getSchedules.bind(scheduleController));
+
+// 取得幫舖排班列表（helper schedules）
+router.get('/helpers', scheduleController.getHelperSchedules.bind(scheduleController));
 
 // 取得單一排班記錄
 router.get('/:id', scheduleController.getSchedule.bind(scheduleController));

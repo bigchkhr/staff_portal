@@ -232,11 +232,13 @@ const GroupLeaveCalendar = () => {
               })));
             }
             
-            // 過濾掉已取消或已銷假的申請
+            // 過濾掉已取消或已銷假的申請，並排除銷假交易本身
+            // 確保包含紙本批核的假期（paper-flow 和 e-flow 都要顯示）
             const validApplications = applications.filter(app => 
               app.status === 'approved' && 
               !app.is_cancellation_request && 
-              !app.is_reversed
+              !app.is_reversed &&
+              !app.is_reversal_transaction
             );
             
             // 將申請轉換為日期範圍內的每日記錄
