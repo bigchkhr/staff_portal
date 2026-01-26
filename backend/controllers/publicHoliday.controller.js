@@ -165,7 +165,19 @@ class PublicHolidayController {
         return res.status(400).json({ message: '請提供開始日期和結束日期' });
       }
 
-      const holidays = await PublicHoliday.getHolidaysInRange(start_date, end_date);
+      // 驗證日期格式
+      const startDate = new Date(start_date);
+      const endDate = new Date(end_date);
+      
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ message: '日期格式無效' });
+      }
+
+      // 確保日期格式為 YYYY-MM-DD
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
+      const holidays = await PublicHoliday.getHolidaysInRange(startDateStr, endDateStr);
       
       res.json({ publicHolidays: holidays });
     } catch (error) {

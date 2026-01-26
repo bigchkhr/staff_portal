@@ -61,6 +61,7 @@ class LeaveController {
       }
 
       let balanceRecord = null;
+      let balanceWarning = null;
 
       // 檢查假期餘額和有效期
       if (leaveType.requires_balance) {
@@ -69,30 +70,51 @@ class LeaveController {
         // 使用申請的年份來檢查對應年份的餘額
         balanceRecord = await LeaveBalance.findByUserAndType(applicantId, leave_type_id, applicationYear);
         
-        if (!balanceRecord || parseFloat(balanceRecord.balance) < parseFloat(total_days)) {
-          return res.status(400).json({ message: '假期餘額不足' });
-        }
-        
-        // 檢查申請日期是否在選擇年份的有效餘額期間內
-        // 使用 applicationYear 確保檢查的是選擇年份的餘額有效期，而不是申請日期所在年份
-        const validBalance = await LeaveBalanceTransaction.getValidBalanceForPeriod(
-          applicantId,
-          leave_type_id,
-          start_date,
-          end_date,
-          applicationYear  // 傳入選擇的年份，而不是從日期推斷的年份
-        );
-        
-        if (validBalance < parseFloat(total_days)) {
-          return res.status(400).json({ 
-            message: `申請日期不在${applicationYear}年假期餘額有效期範圍內，或該期間可用餘額不足。請檢查您的假期餘額有效期限。` 
-          });
+        // 對於 paper-flow，只記錄警告，不阻止申請
+        if (actualFlowType === 'paper-flow') {
+          if (!balanceRecord || parseFloat(balanceRecord.balance) < parseFloat(total_days)) {
+            balanceWarning = `注意：假期餘額不足（餘額：${balanceRecord ? parseFloat(balanceRecord.balance).toFixed(2) : 0} 天，申請：${parseFloat(total_days).toFixed(2)} 天）`;
+          }
+          
+          // 檢查申請日期是否在選擇年份的有效餘額期間內
+          const validBalance = await LeaveBalanceTransaction.getValidBalanceForPeriod(
+            applicantId,
+            leave_type_id,
+            start_date,
+            end_date,
+            applicationYear
+          );
+          
+          if (validBalance < parseFloat(total_days)) {
+            const warningMsg = `申請日期不在${applicationYear}年假期餘額有效期範圍內，或該期間可用餘額不足（可用餘額：${validBalance.toFixed(2)} 天，申請：${parseFloat(total_days).toFixed(2)} 天）`;
+            balanceWarning = balanceWarning ? `${balanceWarning}；${warningMsg}` : warningMsg;
+          }
+        } else {
+          // 對於 e-flow，保持原有的嚴格驗證
+          if (!balanceRecord || parseFloat(balanceRecord.balance) < parseFloat(total_days)) {
+            return res.status(400).json({ message: '假期餘額不足' });
+          }
+          
+          // 檢查申請日期是否在選擇年份的有效餘額期間內
+          const validBalance = await LeaveBalanceTransaction.getValidBalanceForPeriod(
+            applicantId,
+            leave_type_id,
+            start_date,
+            end_date,
+            applicationYear
+          );
+          
+          if (validBalance < parseFloat(total_days)) {
+            return res.status(400).json({ 
+              message: `申請日期不在${applicationYear}年假期餘額有效期範圍內，或該期間可用餘額不足。請檢查您的假期餘額有效期限。` 
+            });
+          }
         }
       }
 
       // 檢查日期範圍重疊：查詢該用戶在該日期範圍內是否有已批核或正在申請的假期
       const knex = require('../config/database');
-      const overlappingApplications = await knex('leave_applications')
+      const potentialOverlappingApplications = await knex('leave_applications')
         .where('user_id', applicantId)
         .where(function() {
           // 日期範圍重疊的條件：申請的開始日期 <= 新申請的結束日期 且 申請的結束日期 >= 新申請的開始日期
@@ -114,8 +136,87 @@ class LeaveController {
           this.where('is_reversal_transaction', false)
               .orWhereNull('is_reversal_transaction');
         })
-        .select('id', 'start_date', 'end_date', 'status', 'leave_type_id')
+        .select('id', 'start_date', 'end_date', 'start_session', 'end_session', 'status', 'leave_type_id')
         .orderBy('created_at', 'desc');
+
+      // 過濾掉時段不衝突的申請（考慮 0.5 天的情況）
+      const overlappingApplications = potentialOverlappingApplications.filter(app => {
+        // 如果新申請和現有申請在同一天
+        if (start_date === app.start_date && end_date === app.end_date) {
+          // 同一天的情況：檢查時段是否衝突
+          // 如果新申請是整天（AM-PM）或現有申請是整天，則重疊
+          if ((start_session === 'AM' && end_session === 'PM') || 
+              (app.start_session === 'AM' && app.end_session === 'PM')) {
+            return true; // 整天申請與任何申請都重疊
+          }
+          // 如果兩個都是 0.5 天，檢查時段是否相同
+          if (start_session === end_session && app.start_session === app.end_session) {
+            return start_session === app.start_session; // 相同時段才重疊
+          }
+          // 如果新申請是 AM-AM，現有申請是 PM-PM，不重疊
+          if (start_session === 'AM' && end_session === 'AM' && 
+              app.start_session === 'PM' && app.end_session === 'PM') {
+            return false;
+          }
+          // 如果新申請是 PM-PM，現有申請是 AM-AM，不重疊
+          if (start_session === 'PM' && end_session === 'PM' && 
+              app.start_session === 'AM' && app.end_session === 'AM') {
+            return false;
+          }
+          // 其他情況視為重疊
+          return true;
+        }
+        
+        // 跨天的情況：檢查是否有日期重疊
+        // 如果新申請的開始日期在現有申請範圍內，或新申請的結束日期在現有申請範圍內
+        if (start_date >= app.start_date && start_date <= app.end_date) {
+          // 新申請開始日期在現有申請範圍內
+          // 如果新申請開始日期等於現有申請結束日期，需要檢查時段
+          if (start_date === app.end_date) {
+            // 如果新申請開始是 AM，現有申請結束是 PM，不重疊（新申請在現有申請之後）
+            if (start_session === 'AM' && app.end_session === 'PM') {
+              return false;
+            }
+            // 如果新申請開始是 PM，現有申請結束是 AM，不重疊（新申請在現有申請之後）
+            if (start_session === 'PM' && app.end_session === 'AM') {
+              return false;
+            }
+            // 其他情況視為重疊
+            return true;
+          }
+          return true; // 日期重疊
+        }
+        
+        if (end_date >= app.start_date && end_date <= app.end_date) {
+          // 新申請結束日期在現有申請範圍內
+          // 如果新申請結束日期等於現有申請開始日期，需要檢查時段
+          if (end_date === app.start_date) {
+            // 如果新申請結束是 PM，現有申請開始是 AM，不重疊（新申請在現有申請之前）
+            if (end_session === 'PM' && app.start_session === 'AM') {
+              return false;
+            }
+            // 如果新申請結束是 AM，現有申請開始是 PM，不重疊（新申請在現有申請之前）
+            if (end_session === 'AM' && app.start_session === 'PM') {
+              return false;
+            }
+            // 其他情況視為重疊
+            return true;
+          }
+          return true; // 日期重疊
+        }
+        
+        // 如果新申請完全包含現有申請
+        if (start_date <= app.start_date && end_date >= app.end_date) {
+          return true;
+        }
+        
+        // 如果現有申請完全包含新申請
+        if (app.start_date <= start_date && app.end_date >= end_date) {
+          return true;
+        }
+        
+        return false;
+      });
 
       if (overlappingApplications && overlappingApplications.length > 0) {
         // 格式化重疊的申請信息
@@ -123,7 +224,7 @@ class LeaveController {
           overlappingApplications.map(async (app) => {
             const type = await LeaveType.findById(app.leave_type_id);
             return {
-              transaction_id: app.transaction_id || `LA-${String(app.id).padStart(6, '0')}`,
+              transaction_id: `LA-${String(app.id).padStart(6, '0')}`,
               start_date: app.start_date,
               end_date: app.end_date,
               status: app.status === 'approved' ? '已批核' : '待批核',
@@ -243,31 +344,30 @@ class LeaveController {
         }
       }
 
-      // 如果是 paper-flow 已批准的申請，立即更新假期餘額
+      // 如果是 paper-flow 已批准的申請，不實際扣除餘額（餘額會從 leave_applications 表自動計算）
+      // 對於 paper-flow，允許負數餘額，只記錄警告
       if (application.status === 'approved' && actualFlowType === 'paper-flow' && leaveType.requires_balance) {
+        // 餘額會從 leave_applications 表自動計算，所以這裡不需要實際扣除
+        // 只檢查並記錄警告信息
         if (!balanceRecord) {
-          throw new Error('找不到假期餘額紀錄');
+          balanceWarning = balanceWarning || '注意：找不到假期餘額紀錄';
         }
-
-        // 使用申請的year字段來扣除對應年份的quota
-        await LeaveBalance.decrementBalance(
-          applicantId,
-          leave_type_id,
-          applicationYear,
-          parseFloat(total_days),
-          '假期申請已批准，扣除餘額',
-          start_date,
-          end_date
-        );
       }
       
       // e-flow 申請會在批核完成後才扣除餘額
 
-      res.status(201).json({
+      const responseData = {
         message: '假期申請已提交',
         application,
         documents: uploadedDocuments
-      });
+      };
+
+      // 如果有警告信息，添加到響應中
+      if (balanceWarning) {
+        responseData.warning = balanceWarning;
+      }
+
+      res.status(201).json(responseData);
     } catch (error) {
       console.error('Create application error:', error);
       res.status(500).json({ message: '建立申請時發生錯誤', error: error.message });

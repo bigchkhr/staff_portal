@@ -65,12 +65,16 @@ class ScheduleController {
       // 根據 department_group_id 查詢，並 JOIN stores 表獲取店舖信息
       let query = knex('schedules')
         .leftJoin('stores', 'schedules.store_id', 'stores.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
         .where('schedules.department_group_id', groupId)
         .select(
           'schedules.*',
           'stores.id as store_id',
           'stores.store_code as store_code',
-          'stores.store_short_name_ as store_short_name'
+          'stores.store_short_name_ as store_short_name',
+          'leave_types.code as leave_type_code',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh'
         );
       
       // 如果指定了日期範圍，進行篩選
@@ -89,10 +93,77 @@ class ScheduleController {
       
       console.log('=== 📊 查詢結果 ===');
       console.log(`✅ 找到 ${schedules.length} 條排班記錄`);
-      console.log('📋 完整資料陣列:', schedules);
+      
+      // 獲取已批核的假期申請
+      let leaveApplications = [];
+      if (start_date && end_date) {
+        try {
+          leaveApplications = await this.getLeaveApplicationsForGroup(groupId, start_date, end_date);
+          console.log(`✅ 找到 ${leaveApplications.length} 條已批核假期申請`);
+        } catch (error) {
+          console.error('獲取假期申請時發生錯誤:', error);
+          // 如果獲取假期失敗，不影響排班記錄的返回
+        }
+      }
+      
+      // 將假期合併到排班記錄中
+      const schedulesWithLeaves = schedules.map(schedule => {
+        const scheduleDateStr = this.formatDateString(schedule.schedule_date);
+        return this.mergeLeaveForSchedule(schedule, scheduleDateStr, leaveApplications);
+      });
+      
+      // 獲取群組成員，以便為沒有排班記錄但有假期的日期創建記錄
+      let groupMembers = [];
+      try {
+        groupMembers = await DepartmentGroup.getMembers(groupId);
+      } catch (error) {
+        console.error('獲取群組成員時發生錯誤:', error);
+      }
+      
+      // 為沒有排班記錄但有假期的日期創建記錄
+      const leaveOnlySchedules = [];
+      if (start_date && end_date && groupMembers.length > 0) {
+        // 創建一個以 user_id + schedule_date 為鍵的 Set，用於快速查找已有排班記錄
+        const existingScheduleKeys = new Set();
+        schedulesWithLeaves.forEach(s => {
+          const userId = Number(s.user_id);
+          const dateStr = this.formatDateString(s.schedule_date);
+          existingScheduleKeys.add(`${userId}_${dateStr}`);
+        });
+        
+        // 為每個成員和每個日期檢查是否有假期但沒有排班記錄
+        const start = new Date(start_date);
+        const end = new Date(end_date);
+        const current = new Date(start);
+        
+        while (current <= end) {
+          const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+          
+          for (const member of groupMembers) {
+            const userId = Number(member.id);
+            const key = `${userId}_${dateStr}`;
+            
+            // 如果該日期沒有排班記錄
+            if (!existingScheduleKeys.has(key)) {
+              // 檢查是否有假期
+              const leaveSchedule = this.createScheduleFromLeave(member, dateStr, groupId, leaveApplications);
+              if (leaveSchedule) {
+                leaveOnlySchedules.push(leaveSchedule);
+              }
+            }
+          }
+          
+          current.setDate(current.getDate() + 1);
+        }
+      }
+      
+      // 合併排班記錄和只有假期的記錄
+      const allSchedules = [...schedulesWithLeaves, ...leaveOnlySchedules];
+      
+      console.log(`✅ 合併後總共 ${allSchedules.length} 條記錄（${schedulesWithLeaves.length} 條排班記錄 + ${leaveOnlySchedules.length} 條假期記錄）`);
       
       res.json({ 
-        schedules: schedules
+        schedules: allSchedules
       });
     } catch (error) {
       console.error('Get schedules error:', error);
@@ -318,6 +389,12 @@ class ScheduleController {
   // 輔助方法：為現有排班記錄合併假期資料
   mergeLeaveForSchedule(schedule, scheduleDateStr, leaveApplications) {
     const userId = schedule.user_id;
+    
+    // 如果排班記錄已經有手動輸入的假期類型，優先保留排班表中的假期
+    // 只有在排班記錄沒有假期類型時，才用已批核的假期申請覆蓋
+    if (schedule.leave_type_id) {
+      return schedule;
+    }
     
     // 找到該用戶在該日期的假期申請
     const leaveForDate = this.findLeaveForUserAndDate(userId, scheduleDateStr, leaveApplications);

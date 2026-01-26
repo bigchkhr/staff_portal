@@ -500,6 +500,13 @@ class MonthlyAttendanceReportController {
         if (!hasPermission) {
           return res.status(403).json({ message: '無權限存取此月報記錄' });
         }
+      } else {
+        // 如果沒有指定 user_id，檢查用戶是否有權限查看所有報告
+        // 允許：HR 成員、系統管理員、批核者（approver1、approver2、approver3）
+        const hasPermission = await this.checkAccessPermission(userId);
+        if (!hasPermission) {
+          return res.status(403).json({ message: '無權限存取月報列表' });
+        }
       }
 
       const reports = await MonthlyAttendanceReport.findAll(filters);

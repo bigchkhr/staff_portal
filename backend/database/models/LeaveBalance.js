@@ -250,6 +250,19 @@ class LeaveBalance {
     return await this.findByUserAndType(userId, leaveTypeId, year);
   }
 
+  // 扣除餘額（paper-flow 專用）：允許負數餘額，只記錄警告
+  static async decrementBalanceForPaperFlow(userId, leaveTypeId, year, days, remarks = '假期申請已批准，扣除餘額', applicationStartDate = null, applicationEndDate = null) {
+    const balanceInfo = await this.findByUserAndType(userId, leaveTypeId, year);
+    const daysToDeduct = parseFloat(days);
+    
+    // 對於 paper-flow，不檢查餘額是否足夠，允許負數
+    // 餘額會從 leave_applications 表自動計算，所以這裡不需要實際扣除
+    // 這個方法主要用於驗證，實際餘額會從已批准的申請中計算
+
+    // 返回當前餘額信息（可能為負數）
+    return await this.findByUserAndType(userId, leaveTypeId, year);
+  }
+
   // 增加餘額：不創建交易記錄（因為銷假是通過 leave_applications 表記錄的）
   static async incrementBalance(userId, leaveTypeId, year, days, remarks = '假期申請被拒絕或取消，退回餘額', startDate = null, endDate = null) {
     // 不創建交易記錄，因為銷假是通過 leave_applications 表記錄的

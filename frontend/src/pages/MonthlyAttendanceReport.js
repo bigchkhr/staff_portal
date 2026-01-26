@@ -36,7 +36,8 @@ import {
   ArrowBack as ArrowBackIcon,
   Search as SearchIcon,
   Visibility as VisibilityIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -44,6 +45,8 @@ import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import Layout from '../components/Layout';
 import dayjs from 'dayjs';
+import { jsPDF } from 'jspdf';
+import { autoTable } from 'jspdf-autotable';
 
 const MonthlyAttendanceReport = () => {
   const { t, i18n } = useTranslation();
@@ -198,9 +201,218 @@ const MonthlyAttendanceReport = () => {
     }
   };
 
+  const handleExportPDF = async () => {
+    if (!report) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.error') || '錯誤',
+        text: t('attendance.noReportData') || '沒有報告數據'
+      });
+      return;
+    }
+
+    try {
+      const userName = report.user 
+        ? `${report.user.employee_number || ''} - ${report.user.display_name || report.user.name_zh || report.user.name || ''}`
+        : '';
+
+      // PDF 使用英文月份名稱（因為默認字體不支持中文）
+      const pdfMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+      // 創建 PDF - 縱向（portrait）
+      const doc = new jsPDF('portrait', 'mm', 'a4');
+      
+      // 使用默認字體（helvetica）避免字體相關錯誤
+      doc.setFont('helvetica', 'normal');
+      
+      // 標題
+      doc.setFontSize(16);
+      doc.text('Monthly Attendance Report', 14, 15);
+      
+      // 員工信息
+      doc.setFontSize(12);
+      doc.text(`Employee: ${userName}`, 14, 22);
+      doc.text(`Year: ${report.year}`, 14, 28);
+      doc.text(`Month: ${pdfMonthNames[report.month - 1] || report.month}`, 14, 34);
+
+      let currentY = 45;
+
+      // 假期統計表格
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Leave Statistics', 14, currentY);
+      currentY += 8;
+
+      const leaveData = [
+        ['Annual Leave', report.annual_leave_days || 0, 'days'],
+        ['Birthday Leave', report.birthday_leave_days || 0, 'days'],
+        ['Compensatory Leave', report.compensatory_leave_days || 0, 'days'],
+        ['Full Paid Sick Leave', report.full_paid_sick_leave_days || 0, 'days'],
+        ['Sick Leave (with Allowance)', report.sick_leave_with_allowance_days || 0, 'days'],
+        ['No Pay Sick Leave', report.no_pay_sick_leave_days || 0, 'days'],
+        ['Work Injury Leave', report.work_injury_leave_days || 0, 'days'],
+        ['Marriage Leave', report.marriage_leave_days || 0, 'days'],
+        ['Maternity Leave', report.maternity_leave_days || 0, 'days'],
+        ['Paternity Leave', report.paternity_leave_days || 0, 'days'],
+        ['Jury Service Leave', report.jury_service_leave_days || 0, 'days'],
+        ['Compassionate Leave', report.compassionate_leave_days || 0, 'days'],
+        ['No Pay Personal Leave', report.no_pay_personal_leave_days || 0, 'days'],
+        ['Special Leave', report.special_leave_days || 0, 'days'],
+        ['Current Rest Days', report.current_rest_days_days || 0, 'days'],
+        ['Accumulated Rest Days', report.accumulated_rest_days_days || 0, 'days'],
+        ['Statutory Holiday', report.statutory_holiday_days || 0, 'days'],
+        ['Absent', report.absent_days || 0, 'days']
+      ];
+
+      autoTable(doc, {
+        head: [['Leave Type', 'Days', 'Unit']],
+        body: leaveData,
+        startY: currentY,
+        styles: { 
+          fontSize: 9,
+          overflow: 'linebreak',
+          cellPadding: 2
+        },
+        headStyles: { 
+          fillColor: [25, 118, 210], 
+          textColor: 255, 
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { top: 14, left: 14, right: 14 },
+        columnStyles: {
+          0: { cellWidth: 120 },
+          1: { cellWidth: 30, halign: 'right' },
+          2: { cellWidth: 20 }
+        }
+      });
+
+      currentY = doc.lastAutoTable.finalY + 10;
+
+      // 工作統計表格
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Work Statistics', 14, currentY);
+      currentY += 8;
+
+      const workData = [
+        ['Work Days', report.work_days || 0, 'days'],
+        ['Late Count', report.late_count || 0, 'times'],
+        ['Late Total Minutes', Math.round(report.late_total_minutes || 0), 'minutes']
+      ];
+
+      // 根據就業模式添加 FT/PT 相關數據
+      const employmentMode = (report.user?.position_employment_mode || '').toString().trim().toUpperCase();
+      if (employmentMode === 'FT') {
+        workData.push(['FT Overtime Hours', report.ft_overtime_hours || 0, 'hours']);
+      } else if (employmentMode === 'PT') {
+        workData.push(['PT Work Hours', report.pt_work_hours || 0, 'hours']);
+      }
+
+      autoTable(doc, {
+        head: [['Item', 'Value', 'Unit']],
+        body: workData,
+        startY: currentY,
+        styles: { 
+          fontSize: 9,
+          overflow: 'linebreak',
+          cellPadding: 2
+        },
+        headStyles: { 
+          fillColor: [25, 118, 210], 
+          textColor: 255, 
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { top: 14, left: 14, right: 14 },
+        columnStyles: {
+          0: { cellWidth: 120 },
+          1: { cellWidth: 30, halign: 'right' },
+          2: { cellWidth: 20 }
+        }
+      });
+
+      currentY = doc.lastAutoTable.finalY + 10;
+
+      // 津貼表格
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Allowances', 14, currentY);
+      currentY += 8;
+
+      const allowanceData = [
+        ['Store Manager Allowance', (report.store_manager_allowance || 0).toFixed(2)],
+        ['Attendance Bonus', (report.attendance_bonus || 0).toFixed(2)],
+        ['Location Allowance', (report.location_allowance || 0).toFixed(2)],
+        ['Incentive', (report.incentive || 0).toFixed(2)],
+        ['Special Allowance', (report.special_allowance || 0).toFixed(2)]
+      ];
+
+      autoTable(doc, {
+        head: [['Allowance Type', 'Amount (HKD)']],
+        body: allowanceData,
+        startY: currentY,
+        styles: { 
+          fontSize: 9,
+          overflow: 'linebreak',
+          cellPadding: 2
+        },
+        headStyles: { 
+          fillColor: [25, 118, 210], 
+          textColor: 255, 
+          fontStyle: 'bold',
+          fontSize: 9
+        },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        margin: { top: 14, left: 14, right: 14 },
+        columnStyles: {
+          0: { cellWidth: 120 },
+          1: { cellWidth: 50, halign: 'right' }
+        }
+      });
+
+      currentY = doc.lastAutoTable.finalY + 10;
+
+      // 備註
+      if (report.remarks) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Remarks', 14, currentY);
+        currentY += 8;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        const remarksLines = doc.splitTextToSize(report.remarks || '', 180);
+        doc.text(remarksLines, 14, currentY);
+        currentY += remarksLines.length * 5 + 5;
+      }
+
+      // 生成文件名
+      const fileName = `MonthlyReport_${report.user?.employee_number || 'User'}_${report.year}_${report.month}.pdf`;
+      
+      // 保存 PDF
+      doc.save(fileName);
+      
+      Swal.fire({
+        icon: 'success',
+        title: t('attendance.success') || '成功',
+        text: t('attendance.exportPDFSuccess') || 'PDF 導出成功'
+      });
+    } catch (error) {
+      console.error('Export PDF error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error') || '錯誤',
+        text: error.message || t('attendance.exportPDFFailed') || 'PDF 導出失敗'
+      });
+    }
+  };
+
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('/api/admin/users');
+      const response = await axios.get('/api/users/list');
       const usersList = response.data.users || [];
       // 按 ID 降序排序（最新用戶排在最前），與 UserSearchDialog 保持一致
       usersList.sort((a, b) => b.id - a.id);
@@ -549,6 +761,14 @@ const MonthlyAttendanceReport = () => {
                 onClick={() => navigate('/monthly-attendance-report')}
               >
                 {t('common.back')}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<DownloadIcon />}
+                onClick={handleExportPDF}
+                color="primary"
+              >
+                {t('attendance.exportPDF') || '導出 PDF'}
               </Button>
               <Button
                 variant="contained"

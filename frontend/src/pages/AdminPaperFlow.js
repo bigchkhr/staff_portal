@@ -89,11 +89,29 @@ const AdminPaperFlow = () => {
   const getPublicHolidaysCount = async (startDate, endDate, startSession, endSession) => {
     if (!startDate || !endDate) return 0;
     
+    // 確保日期是有效的 dayjs 對象
+    if (!dayjs.isDayjs(startDate) || !dayjs.isDayjs(endDate)) {
+      return 0;
+    }
+    
+    // 檢查日期是否有效
+    if (!startDate.isValid() || !endDate.isValid()) {
+      return 0;
+    }
+    
     try {
+      const startDateStr = startDate.format('YYYY-MM-DD');
+      const endDateStr = endDate.format('YYYY-MM-DD');
+      
+      // 再次驗證格式化後的日期字符串
+      if (!startDateStr || startDateStr === 'Invalid Date' || !endDateStr || endDateStr === 'Invalid Date') {
+        return 0;
+      }
+      
       const response = await axios.get('/api/public-holidays/range', {
         params: {
-          start_date: startDate.format('YYYY-MM-DD'),
-          end_date: endDate.format('YYYY-MM-DD')
+          start_date: startDateStr,
+          end_date: endDateStr
         }
       });
       const holidays = response.data.publicHolidays || [];
@@ -318,6 +336,47 @@ const AdminPaperFlow = () => {
       return;
     }
 
+    // 檢查是否有警告（例如餘額不足）
+    let warningMessage = null;
+    const selectedLeaveType = leaveTypes.find(lt => lt.id === parseInt(formData.leave_type_id));
+    
+    if (selectedLeaveType?.requires_balance && balance) {
+      const appliedDays = parseFloat(formData.days || 0);
+      const availableBalance = parseFloat(balance.balance || 0);
+      
+      if (appliedDays > availableBalance) {
+        warningMessage = `假期餘額不足（餘額：${availableBalance.toFixed(2)} 天，申請：${appliedDays.toFixed(2)} 天）`;
+      }
+    } else if (selectedLeaveType?.requires_balance && !balance) {
+      warningMessage = '找不到假期餘額紀錄';
+    }
+
+    // 如果有警告，顯示確認對話框讓用戶決定是否繼續
+    if (warningMessage) {
+      const result = await Swal.fire({
+        icon: 'warning',
+        title: '警告',
+        html: `
+          <div style="text-align: left;">
+            <p style="color: #d32f2f; font-weight: bold; margin-bottom: 15px;">⚠️ ${warningMessage}</p>
+            <p>是否依然繼續提交申請？</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '繼續提交',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        reverseButtons: true
+      });
+
+      // 如果用戶取消，不提交申請
+      if (!result.isConfirmed) {
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const submitData = new FormData();
       submitData.append('user_id', formData.user_id);
@@ -348,12 +407,21 @@ const AdminPaperFlow = () => {
       });
       
       // 使用 Sweet Alert 顯示成功訊息
+      // 如果後端也有警告，合併顯示
+      const finalWarning = response.data.warning 
+        ? (warningMessage ? `${warningMessage}\n${response.data.warning}` : response.data.warning)
+        : warningMessage;
+      
+      const successMessage = finalWarning
+        ? `${t('adminPaperFlow.applicationSubmitted', { transactionId: response.data.application.transaction_id })}\n\n⚠️ ${finalWarning}`
+        : t('adminPaperFlow.applicationSubmitted', { transactionId: response.data.application.transaction_id });
+      
       await Swal.fire({
-        icon: 'success',
+        icon: finalWarning ? 'warning' : 'success',
         title: t('adminPaperFlow.applicationSuccess'),
-        text: t('adminPaperFlow.applicationSubmitted', { transactionId: response.data.application.transaction_id }),
+        text: successMessage,
         confirmButtonText: t('common.confirm'),
-        confirmButtonColor: '#3085d6'
+        confirmButtonColor: finalWarning ? '#ff9800' : '#3085d6'
       });
       
       setFormData({

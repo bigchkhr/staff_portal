@@ -103,7 +103,24 @@ class UserController {
       const isSystemAdmin = user && user.is_system_admin;
       const isApprovalMember = await User.isApprovalMember(userId);
       
+      // 檢查是否直接設置為批核者（在 leave_applications 表中）
+      let hasDirectApproverRole = false;
       if (!isHRMember && !isSystemAdmin && !isApprovalMember) {
+        const knex = require('../config/database');
+        const userIdNum = Number(userId);
+        const directApprover = await knex('leave_applications')
+          .where(function() {
+            this.where('checker_id', userIdNum)
+              .orWhere('approver_1_id', userIdNum)
+              .orWhere('approver_2_id', userIdNum)
+              .orWhere('approver_3_id', userIdNum);
+          })
+          .first();
+        
+        hasDirectApproverRole = !!directApprover;
+      }
+      
+      if (!isHRMember && !isSystemAdmin && !isApprovalMember && !hasDirectApproverRole) {
         return res.status(403).json({ message: '無權限存取用戶列表' });
       }
 
