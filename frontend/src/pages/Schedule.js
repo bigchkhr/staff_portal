@@ -45,6 +45,7 @@ import {
   Upload as UploadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -1049,18 +1050,42 @@ const Schedule = ({ noLayout = false }) => {
                     }}
                   >
                     <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <Typography
-                        variant="body2"
-                        fontWeight="bold"
-                        sx={{
-                          fontSize: '0.75rem',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {member.employee_number}
-                      </Typography>
+                      {canEdit ? (
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          component={Link}
+                          to={`/monthly-attendance-summary?employee_number=${member.employee_number}`}
+                          sx={{
+                            fontSize: '0.75rem',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: 'primary.main',
+                            textDecoration: 'none',
+                            '&:hover': {
+                              textDecoration: 'underline',
+                              color: 'primary.dark',
+                            },
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {member.employee_number}
+                        </Typography>
+                      ) : (
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          sx={{
+                            fontSize: '0.75rem',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {member.employee_number}
+                        </Typography>
+                      )}
                       <Typography
                         variant="caption"
                         color="text.secondary"
@@ -2208,9 +2233,30 @@ const Schedule = ({ noLayout = false }) => {
                         }}
                       >
                         <Box>
-                          <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
-                            {member.employee_number}
-                          </Typography>
+                          {canEdit ? (
+                            <Typography 
+                              variant="body2" 
+                              fontWeight="bold" 
+                              component={Link}
+                              to={`/monthly-attendance-summary?employee_number=${member.employee_number}`}
+                              sx={{ 
+                                color: 'primary.main', 
+                                mb: 0.5,
+                                textDecoration: 'none',
+                                '&:hover': {
+                                  textDecoration: 'underline',
+                                  color: 'primary.dark',
+                                },
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {member.employee_number}
+                            </Typography>
+                          ) : (
+                            <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
+                              {member.employee_number}
+                            </Typography>
+                          )}
                           <Typography variant="body2" color="text.primary" sx={{ fontWeight: 500 }}>
                             {member.display_name || member.name_zh || member.name}
                           </Typography>
@@ -2461,9 +2507,30 @@ const Schedule = ({ noLayout = false }) => {
                           }}
                         >
                           <Box>
-                            <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
-                              {helperUser.employee_number}
-                            </Typography>
+                            {canEdit ? (
+                              <Typography 
+                                variant="body2" 
+                                fontWeight="bold" 
+                                component={Link}
+                                to={`/monthly-attendance-summary?employee_number=${helperUser.employee_number}`}
+                                sx={{ 
+                                  color: 'primary.main', 
+                                  mb: 0.5,
+                                  textDecoration: 'none',
+                                  '&:hover': {
+                                    textDecoration: 'underline',
+                                    color: 'primary.dark',
+                                  },
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {helperUser.employee_number}
+                              </Typography>
+                            ) : (
+                              <Typography variant="body2" fontWeight="bold" sx={{ color: 'primary.main', mb: 0.5 }}>
+                                {helperUser.employee_number}
+                              </Typography>
+                            )}
                             <Typography variant="body2" color="text.primary" sx={{ fontWeight: 500 }}>
                               {helperUser.display_name}
                             </Typography>
