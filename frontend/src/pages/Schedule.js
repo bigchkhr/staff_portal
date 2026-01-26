@@ -108,6 +108,7 @@ const Schedule = ({ noLayout = false }) => {
   const [pendingError, setPendingError] = useState(null); // 待顯示的錯誤訊息
   const [allowCheckerEdit, setAllowCheckerEdit] = useState(true); // checker 是否可以編輯排班表
   const [canControlCheckerEdit, setCanControlCheckerEdit] = useState(false); // 當前用戶是否可以控制 checker 編輯權限
+  const [isApprover, setIsApprover] = useState(false); // 當前用戶是否為 approver（不包括 checker）
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -338,6 +339,7 @@ const Schedule = ({ noLayout = false }) => {
         setCanEdit(false);
         setCanControlCheckerEdit(false);
         setAllowCheckerEdit(true);
+        setIsApprover(false);
         return;
       }
 
@@ -348,6 +350,7 @@ const Schedule = ({ noLayout = false }) => {
       if (user.is_system_admin) {
         setCanEdit(true);
         setCanControlCheckerEdit(true);
+        setIsApprover(true); // 系統管理員視為 approver
         return;
       }
 
@@ -362,6 +365,9 @@ const Schedule = ({ noLayout = false }) => {
 
       // 只有 approver1, approver2, approver3 可以控制 checker 編輯權限
       setCanControlCheckerEdit(isApprover1 || isApprover2 || isApprover3);
+      
+      // 設置用戶是否為 approver（不包括 checker）
+      setIsApprover(isApprover1 || isApprover2 || isApprover3);
 
       // 如果用戶是 checker，需要檢查 allow_checker_edit 設置
       if (isChecker) {
@@ -373,6 +379,7 @@ const Schedule = ({ noLayout = false }) => {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
       setCanControlCheckerEdit(false);
+      setIsApprover(false);
     }
   };
 
@@ -1050,7 +1057,7 @@ const Schedule = ({ noLayout = false }) => {
                     }}
                   >
                     <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {canEdit ? (
+                      {isApprover ? (
                         <Typography
                           variant="body2"
                           fontWeight="bold"
@@ -2233,7 +2240,7 @@ const Schedule = ({ noLayout = false }) => {
                         }}
                       >
                         <Box>
-                          {canEdit ? (
+                          {isApprover ? (
                             <Typography 
                               variant="body2" 
                               fontWeight="bold" 
@@ -2507,7 +2514,7 @@ const Schedule = ({ noLayout = false }) => {
                           }}
                         >
                           <Box>
-                            {canEdit ? (
+                            {isApprover ? (
                               <Typography 
                                 variant="body2" 
                                 fontWeight="bold" 

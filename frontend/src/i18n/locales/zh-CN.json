@@ -596,6 +596,7 @@
     "startDateTime": "开始日期/时间",
     "endDateTime": "结束日期/时间",
     "daysHours": "天数/时数",
+    "cost": "费用",
     "timeRange": "时间范围",
     "totalHours": "总时数",
     "hours": "小时",

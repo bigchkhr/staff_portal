@@ -77,7 +77,7 @@ const checkApprovalMembership = async (userId) => {
 
 // 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 與批核角色（checker/approver1/2/3）不受限制）
 const apiLimiter = rateLimit({
-  windowMs: 15* 60 * 1000, // 15 分鐘
+  windowMs: 10* 60 * 1000, // 10 分鐘
   max: 150, // 限制 150 個請求
   message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,

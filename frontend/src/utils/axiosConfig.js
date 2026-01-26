@@ -1,7 +1,12 @@
 import axios from 'axios';
+import Swal from 'sweetalert2';
 
 // 配置 axios 默認值
 // baseURL 會在 App.js 中設定
+
+// 用於防止重複顯示 rate limit 通知
+let rateLimitAlertShown = false;
+let rateLimitAlertTimer = null;
 
 // 設置請求攔截器（如果需要）
 axios.interceptors.request.use(
@@ -58,6 +63,32 @@ axios.interceptors.response.use(
       }
       
       console.warn('Rate limit exceeded:', errorMessage);
+      
+      // 顯示 sweet alert 通知（防止重複顯示）
+      // 檢查是否已經有 alert 正在顯示
+      if (!Swal.isVisible() && !rateLimitAlertShown) {
+        rateLimitAlertShown = true;
+        
+        // 清除之前的計時器（如果存在）
+        if (rateLimitAlertTimer) {
+          clearTimeout(rateLimitAlertTimer);
+        }
+        
+        Swal.fire({
+          icon: 'warning',
+          title: '請求過於頻繁',
+          text: errorMessage,
+          confirmButtonText: '確定',
+          allowOutsideClick: false,
+          allowEscapeKey: true,
+          timer: null // 不自動關閉
+        }).then(() => {
+          // 2 秒後允許再次顯示通知
+          rateLimitAlertTimer = setTimeout(() => {
+            rateLimitAlertShown = false;
+          }, 2000);
+        });
+      }
     }
     
     // 如果 token 過期或無效，清除本地存儲

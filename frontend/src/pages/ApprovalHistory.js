@@ -146,6 +146,16 @@ const MobileCard = memo(({ app, isReversal, onViewDetails, onManageFiles, onReve
                   {app.total_hours || 0} {t('approvalHistory.hours')}
                 </Typography>
               </Grid>
+              {app.application_type === 'outdoor_work' && (
+                <Grid item xs={6}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {t('approvalHistory.cost') || '費用'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                    {app.expense ? `$${parseFloat(app.expense).toFixed(2)}` : '-'}
+                  </Typography>
+                </Grid>
+              )}
             </>
           ) : (
             <>
@@ -1161,6 +1171,7 @@ const ApprovalHistory = () => {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.startDateTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.endDateTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.daysHours')}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.cost') || '費用'}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.status')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.actions')}</TableCell>
@@ -1169,7 +1180,7 @@ const ApprovalHistory = () => {
               <TableBody>
                 {filteredApplications.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} align="center">{t('approvalHistory.noRecords')}</TableCell>
+                    <TableCell colSpan={11} align="center">{t('approvalHistory.noRecords')}</TableCell>
                   </TableRow>
                 ) : (
                   filteredApplications.map((app) => (
@@ -1228,6 +1239,11 @@ const ApprovalHistory = () => {
                             : formatDate(app.end_date)}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{getApplicationDisplayValue(app)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {app.application_type === 'outdoor_work' && app.expense
+                            ? `$${parseFloat(app.expense).toFixed(2)}`
+                            : '-'}
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip
                             label={getApprovalStage(app)}
@@ -1337,6 +1353,7 @@ const ApprovalHistory = () => {
                                 -{Math.abs(reversal.days)}
                               </Typography>
                             </TableCell>
+                            <TableCell sx={{ whiteSpace: 'nowrap' }}>-</TableCell>
                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
                               <Chip
                                 label={t('approvalHistory.hrReversal')}
