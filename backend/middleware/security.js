@@ -151,7 +151,7 @@ const apiLimiter = rateLimit({
   }
 });
 
-// 登入 API 的嚴格 Rate Limiting（防暴力破解）
+// 登入 API 的嚴格 Rate Limiting（防暴力破解，基於用戶）
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分鐘
   max: 3, // 只允許 3 次嘗試
@@ -159,7 +159,21 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true, // 成功的請求不計入
   standardHeaders: true,
   legacyHeaders: false,
+  // 基於用戶（employee_number）進行限制（而不是 IP）
+  keyGenerator: (req) => {
+    // 嘗試從請求體獲取 employee_number
+    const employeeNumber = req.body?.employee_number;
+    if (employeeNumber) {
+      // 使用員工編號作為 key
+      return `login_${employeeNumber}`;
+    }
+    // 如果沒有 employee_number，回退到使用 IP（用 ipKeyGenerator 正確處理 IPv6）
+    return ipKeyGenerator(req);
+  },
   handler: (req, res) => {
+    const employeeNumber = req.body?.employee_number || 'unknown';
+    console.log(`🚫 [LOGIN RATE LIMIT] 429 錯誤 - 員工編號: ${employeeNumber}, IP: ${req.ip || req.connection.remoteAddress || 'unknown'}, 時間: ${new Date().toISOString()}`);
+    
     res.status(429).json({ 
       message: 'Too many login attempts. Please try again in 15 minutes. 登入嘗試次數過多，請 15 分鐘後再試',
       error: 'TOO_MANY_LOGIN_ATTEMPTS'
