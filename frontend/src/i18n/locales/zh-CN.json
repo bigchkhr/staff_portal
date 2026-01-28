@@ -282,7 +282,8 @@
     "applicationSubmitted": "申请已提交，交易编号：{{transactionId}}",
     "submitError": "提交申请时发生错误",
     "submitButton": "提交申请",
-    "submitting": "提交中..."
+    "submitting": "提交中...",
+    "documentRequirementNotice": "凡病假、陪审团假、婚假、产假、侍产假、工伤病假及恩恤假，均需提交证明文件。若你无法于申请时递交，公司可酌情暂时批核相关假期，待你补回有关证明文件后该假期方予以正式生效。公司有权对无有效证明文件的假期进行撤回。"
   },
   "leaveHistory": {
     "title": "申请历史",

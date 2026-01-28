@@ -357,144 +357,50 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
     setLoading(true);
     try {
-      // 獲取該月的日期範圍
-      const startDate = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      const lastDay = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`).tz('Asia/Hong_Kong').endOf('month').date();
-      const endDate = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      // 先嘗試從後端月結表 API 取得資料（已整合排班、例假、已批核假期等）
+      const listResponse = await axios.get('/api/monthly-attendance-summaries', {
+        params: {
+          user_id: selectedUserId,
+          year: selectedYear,
+          month: selectedMonth
+        }
+      });
 
-      // 先嘗試使用 /api/attendances/my-clock-records（如果查看的是當前用戶）
-      // 這個 API 會返回包含 schedule 和 clock_records 的完整數據
-      let attendanceData = [];
-      
-      if (Number(selectedUserId) === Number(user?.id)) {
-        // 當前用戶，使用 my-clock-records API
-        const myClockRecordsResponse = await axios.get('/api/attendances/my-clock-records', {
-          params: {
-            start_date: startDate,
-            end_date: endDate
-          }
+      let summaries = listResponse.data?.summaries || [];
+      let summaryData = summaries.length > 0 ? summaries[0] : null;
+
+      // 如果尚未產生該月份的月結表，則自動從考勤資料複製並計算
+      if (!summaryData) {
+        const firstDayOfMonth = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`)
+          .tz('Asia/Hong_Kong')
+          .format('YYYY-MM-DD');
+
+        const copyResponse = await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
+          user_id: selectedUserId,
+          year: selectedYear,
+          month: selectedMonth,
+          // 後端目前要求 body 內要有 attendance_date，實際計算會按整個月份處理
+          attendance_date: firstDayOfMonth
         });
-        attendanceData = myClockRecordsResponse.data.attendance || [];
-      } else {
-        // 其他用戶，需要獲取部門群組 ID，然後使用 comparison API
-        // 獲取用戶的部門群組（通過嘗試所有可訪問的群組）
-        const accessibleGroupsResponse = await axios.get('/api/attendances/accessible-groups');
-        const accessibleGroups = accessibleGroupsResponse.data.groups || [];
-        
-        let foundData = false;
-        for (const group of accessibleGroups) {
-          try {
-            const comparisonResponse = await axios.get('/api/attendances/comparison', {
-              params: {
-                department_group_id: group.id,
-                start_date: startDate,
-                end_date: endDate
-              }
-            });
-            
-            const comparisonData = comparisonResponse.data.comparison || [];
-            const userData = comparisonData.find(item => 
-              Number(item.user_id) === Number(selectedUserId)
-            );
-            
-            if (userData) {
-              // 轉換為與 my-clock-records 相同的格式
-              const dateMap = new Map();
-              const start = dayjs(startDate).tz('Asia/Hong_Kong');
-              const end = dayjs(endDate).tz('Asia/Hong_Kong');
-              let current = start;
-              
-              while (current.isBefore(end) || current.isSame(end, 'day')) {
-                const dateStr = current.format('YYYY-MM-DD');
-                const item = comparisonData.find(i => 
-                  i.attendance_date === dateStr && 
-                  Number(i.user_id) === Number(selectedUserId)
-                );
-                
-                if (item) {
-                  dateMap.set(dateStr, {
-                    attendance_date: dateStr,
-                    schedule: item.schedule || null,
-                    clock_records: item.clock_records || []
-                  });
-                }
-                current = current.add(1, 'day');
-              }
-              
-              attendanceData = Array.from(dateMap.values());
-              foundData = true;
-              break;
-            }
-          } catch (error) {
-            console.error(`Error fetching comparison for group ${group.id}:`, error);
-            continue;
-          }
-        }
-        
-        if (!foundData) {
-          // 如果找不到數據，生成空的月結表
-          attendanceData = [];
-        }
+
+        summaryData = copyResponse.data?.summary || null;
       }
 
-      // attendanceData 已經是按日期組織的數據，包含 schedule 和 clock_records
-
-      // 獲取所有店舖資料（用於查找 store_short_name）
-      const storesResponse = await axios.get('/api/stores');
-      const stores = storesResponse.data.stores || [];
-      const storesMap = {};
-      stores.forEach(store => {
-        // 後端返回的字段是 store_short_name_（帶下劃線）
-        const storeShortName = store.store_short_name_ || store.store_short_name;
-        if (store.store_code && storeShortName) {
-          storesMap[store.store_code] = storeShortName;
-        }
-      });
-      
-      console.log('Stores map built:', {
-        totalStores: stores.length,
-        mappedStores: Object.keys(storesMap).length,
-        sampleEntries: Object.entries(storesMap).slice(0, 5)
-      });
-
-      // 生成該月的所有日期
-      const dailyData = [];
-      const start = dayjs(startDate).tz('Asia/Hong_Kong');
-      const end = dayjs(endDate).tz('Asia/Hong_Kong');
-      let current = start;
-
-      const selectedUser = users.find(u => Number(u.id) === Number(selectedUserId));
-      const employmentMode = selectedUser?.position_employment_mode || null;
-
-      while (current.isBefore(end) || current.isSame(end, 'day')) {
-        const dateStr = current.format('YYYY-MM-DD');
-        const attendanceItem = attendanceData.find(item => item.attendance_date === dateStr);
-        
-        const dayData = calculateDailyAttendance(
-          attendanceItem || { 
-            attendance_date: dateStr, 
-            clock_records: [],
-            schedule: null
-          },
-          storesMap,
-          employmentMode
-        );
-        
-        dailyData.push(dayData);
-        current = current.add(1, 'day');
+      if (!summaryData) {
+        setSummary({
+          id: null,
+          user_id: selectedUserId,
+          year: selectedYear,
+          month: selectedMonth,
+          daily_data: [],
+          created_at: null,
+          updated_at: null
+        });
+        return;
       }
 
-      // 構建 summary 對象
-      const summaryData = {
-        id: null,
-        user_id: selectedUserId,
-        year: selectedYear,
-        month: selectedMonth,
-        daily_data: dailyData,
-        created_at: null,
-        updated_at: null
-      };
-
+      // 後端已把每日的 schedule（包含例假、已批核假期、leave_session、is_approved_leave 等）
+      // 和 valid_clock_records / attendance_data 統一計算好，前端直接使用即可
       setSummary(summaryData);
     } catch (error) {
       console.error('Fetch summary error:', error);

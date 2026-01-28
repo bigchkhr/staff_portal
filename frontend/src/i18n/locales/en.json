@@ -282,7 +282,8 @@
     "applicationSubmitted": "Application submitted, Transaction ID: {{transactionId}}",
     "submitError": "Error submitting application",
     "submitButton": "Submit Application",
-    "submitting": "Submitting..."
+    "submitting": "Submitting...",
+    "documentRequirementNotice": "For any sick leave, jury service leave, marriage leave, maternity leave, paternity leave, work injury sick leave and compassionate leave, supporting documents are required. If you are unable to submit the documents at the time of application, the Company may, at its discretion, grant the leave on a provisional basis, which will only become effective upon receipt of the relevant supporting documents. The Company reserves the right to revoke any leave without valid supporting documents."
   },
   "leaveHistory": {
     "title": "Leave History",

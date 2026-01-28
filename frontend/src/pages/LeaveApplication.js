@@ -630,8 +630,22 @@ const LeaveApplication = () => {
             rows={4}
             value={formData.reason}
             onChange={(e) => setFormData(prev => ({ ...prev, reason: e.target.value }))}
-            sx={{ mb: 2 }}
+            sx={{ mb: 1 }}
           />
+          <Typography
+            variant="body2"
+            sx={{
+              mb: 2,
+              color: 'error.main',
+              fontWeight: 500,
+              whiteSpace: 'pre-line'
+            }}
+          >
+            {t(
+              'leaveApplication.documentRequirementNotice',
+              '但凡病假、陪審團假、婚假、產假、侍產假、工傷病假及恩恤假，均需提交證明文件。若你無法於申請時遞交，公司可酌情暫時批核相關假期，待你補回有關證明文件後該假期予以正式生效。公司有權對無有效證明文件的假期進行撤回。'
+            )}
+          </Typography>
 
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" gutterBottom>
