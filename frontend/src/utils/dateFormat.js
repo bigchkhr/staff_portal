@@ -29,6 +29,28 @@ export const formatDateTime = (date) => {
 };
 
 /**
+ * 將日期以 UTC+8 顯示為 YYYY-MM-DD
+ * @param {string|Date} date - ISO 日期字符串或 Date 對象
+ * @returns {string} 格式化後的日期字符串，格式：YYYY-MM-DD（UTC+8）
+ */
+export const formatDateUTC8 = (date) => {
+  if (!date) return '-';
+  try {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(dateObj.getTime())) return '-';
+    const utcMs = dateObj.getTime();
+    const utc8 = new Date(utcMs + 8 * 60 * 60 * 1000);
+    const y = utc8.getUTCFullYear();
+    const m = String(utc8.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(utc8.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  } catch (error) {
+    console.error('日期格式化錯誤:', error);
+    return '-';
+  }
+};
+
+/**
  * 格式化日期為 YYYY-MM-DD 格式（不包含時間）
  * @param {string|Date} date - ISO 日期字符串或 Date 對象
  * @returns {string} 格式化後的日期字符串，格式：YYYY-MM-DD

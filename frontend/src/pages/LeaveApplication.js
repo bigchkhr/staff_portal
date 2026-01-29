@@ -18,7 +18,9 @@ import {
   IconButton,
   LinearProgress,
   FormControlLabel,
-  Switch
+  Switch,
+  Alert,
+  Collapse
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -30,6 +32,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import YearSelector from '../components/YearSelector';
+import { formatDateUTC8 } from '../utils/dateFormat';
 
 const LeaveApplication = () => {
   const { t, i18n } = useTranslation();
@@ -49,6 +52,8 @@ const LeaveApplication = () => {
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState(null);
   const [files, setFiles] = useState([]);
+  const [overlappingApplications, setOverlappingApplications] = useState([]);
+  const [checkingOverlap, setCheckingOverlap] = useState(false);
   // 根據用戶的 stream 設置默認值：Store 開啟週末計算、關閉排除法定假期；Head Office 關閉週末計算、開啟排除法定假期
   const [includeWeekends, setIncludeWeekends] = useState(false); // 初始值，將根據 stream 在 useEffect 中設置
   const [yearManuallySet, setYearManuallySet] = useState(false); // 標記年份是否被手動設置
@@ -263,6 +268,42 @@ const LeaveApplication = () => {
     updateDays();
   }, [formData.start_date, formData.end_date, formData.start_session, formData.end_session, includeWeekends, formData.exclude_public_holidays]);
 
+  // 當開始/結束日期改變時，檢查該日期範圍內是否已有待批核或已批準的假期申請
+  useEffect(() => {
+    const checkOverlappingApplications = async () => {
+      if (!formData.start_date || !formData.end_date || !user?.id) {
+        setOverlappingApplications([]);
+        return;
+      }
+      setCheckingOverlap(true);
+      try {
+        const startStr = formData.start_date.format('YYYY-MM-DD');
+        const endStr = formData.end_date.format('YYYY-MM-DD');
+        const response = await axios.get('/api/leaves', {
+          params: {
+            start_date_from: startStr,
+            end_date_to: endStr,
+            limit: 100
+          }
+        });
+        const applications = response.data.applications || [];
+        const overlapping = applications.filter(
+          (app) =>
+            (app.status === 'pending' || app.status === 'approved') &&
+            !app.is_reversed &&
+            !app.is_reversal_transaction
+        );
+        setOverlappingApplications(overlapping);
+      } catch (err) {
+        console.error('Check overlapping applications error:', err);
+        setOverlappingApplications([]);
+      } finally {
+        setCheckingOverlap(false);
+      }
+    };
+    checkOverlappingApplications();
+  }, [formData.start_date, formData.end_date, user?.id]);
+
   const fetchLeaveTypes = async () => {
     try {
       const response = await axios.get('/api/leave-types/available-in-flow');
@@ -420,22 +461,18 @@ const LeaveApplication = () => {
       });
       setFiles([]);
       setBalance(null);
+      setOverlappingApplications([]);
       setIncludeWeekends(isStore); // Store: true, Head Office: false
       setYearManuallySet(false); // 重置年份手動設置標記
     } catch (error) {
       // 檢查是否為日期範圍重疊錯誤
       if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {
         const overlappingApps = error.response.data.overlapping_applications;
-        const formatDate = (dateStr) => {
-          const date = new Date(dateStr);
-          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        };
-        
         const overlappingList = overlappingApps.map(app => 
           `<div style="text-align: left; margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
             <strong>交易編號：</strong>${app.transaction_id}<br/>
-            <strong>假期類型：</strong>${app.leave_type_name}<br/>
-            <strong>日期範圍：</strong>${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}<br/>
+            <strong>假期類型：</strong>${i18n.language === 'en' ? (app.leave_type_name || app.leave_type_name_zh || '') : (app.leave_type_name_zh || app.leave_type_name || '')}<br/>
+            <strong>日期範圍：</strong>${formatDateUTC8(app.start_date)} ~ ${formatDateUTC8(app.end_date)}<br/>
             <strong>狀態：</strong>${app.status}
           </div>`
         ).join('');
@@ -699,6 +736,35 @@ const LeaveApplication = () => {
             )}
           </Box>
 
+          <Collapse in={overlappingApplications.length > 0}>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                {t('leaveApplication.overlapWarningTitle', '該日期範圍內已有以下待批核或已批準的假期申請')}
+              </Typography>
+              <List dense disablePadding>
+                {overlappingApplications.map((app) => (
+                  <ListItem key={app.id} disablePadding sx={{ py: 0.25 }}>
+                    <ListItemText
+                      primary={`${app.transaction_id || `LA-${String(app.id).padStart(6, '0')}`} · ${i18n.language === 'en' ? (app.leave_type_name || app.leave_type_name_zh || '') : (app.leave_type_name_zh || app.leave_type_name || '')} · ${formatDateUTC8(app.start_date)} ~ ${formatDateUTC8(app.end_date)}`}
+                      secondary={app.status === 'approved' ? t('leaveApplication.statusApproved', '已批準') : t('leaveApplication.statusPending', '待批核')}
+                      primaryTypographyProps={{ variant: 'body2' }}
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                {t('leaveApplication.overlapWarningMessage', '無法提交。請修改日期或時段，待無重疊後再提交。')}
+              </Typography>
+            </Alert>
+          </Collapse>
+
+          {checkingOverlap && overlappingApplications.length === 0 && formData.start_date && formData.end_date && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              {t('leaveApplication.checkingOverlap', '正在檢查是否有重疊假期…')}
+            </Typography>
+          )}
+
           {loading && (
             <LinearProgress sx={{ mb: 2 }} />
           )}
@@ -707,7 +773,7 @@ const LeaveApplication = () => {
             type="submit"
             variant="contained"
             fullWidth
-            disabled={loading}
+            disabled={loading || overlappingApplications.length > 0}
           >
             {loading ? t('leaveApplication.submitting') : t('leaveApplication.submitButton')}
           </Button>

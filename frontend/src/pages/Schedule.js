@@ -1641,7 +1641,7 @@ const Schedule = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.batchUpdateSuccess')
+        text: t('schedule.batchScheduleUpdateSuccess', { count: schedulesData.length })
       });
     } catch (error) {
       console.error('Batch save error:', error);
@@ -1923,7 +1923,7 @@ const Schedule = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.batchUpdateSuccess', { count: response.data.updated_count }),
+        text: t('schedule.batchUpdateSuccess', { count: response.data?.updated_count ?? 0 }),
         timer: 3000,
         showConfirmButton: false
       });
@@ -2768,6 +2768,35 @@ const Schedule = ({ noLayout = false }) => {
             {editingSchedule?.id ? t('schedule.editSchedule') : t('schedule.createSchedule')}
           </DialogTitle>
           <DialogContent sx={{ p: 3, mt: 2 }}>
+            {/* 被編班員工資訊：員工編號、顯示名稱、排班日期 */}
+            {editingSchedule && (() => {
+              const member = groupMembers.find(m => Number(m.id) === Number(editingSchedule.user_id));
+              // 若為幫舖員工則從 helperSchedules 取得
+              const helperSchedule = !member && editingSchedule.schedule_date
+                ? helperSchedules.find(s => {
+                    const sDate = typeof s.schedule_date === 'string' ? s.schedule_date.split('T')[0] : dayjs(s.schedule_date).format('YYYY-MM-DD');
+                    return Number(s.user_id) === Number(editingSchedule.user_id) && sDate === editingSchedule.schedule_date;
+                  })
+                : null;
+              const employeeNumber = member?.employee_number ?? helperSchedule?.employee_number ?? '—';
+              const displayName = member ? (member.display_name || member.name_zh || member.name) : (helperSchedule ? (helperSchedule.user_name || helperSchedule.user_name_zh || '') : '—');
+              const scheduleDateDisplay = editingSchedule.schedule_date
+                ? formatDateDisplay(dayjs(editingSchedule.schedule_date).tz('Asia/Hong_Kong'))
+                : '';
+              return (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    {t('schedule.scheduledEmployee')}
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {employeeNumber} · {displayName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    {t('schedule.scheduleDate')}: {scheduleDateDisplay || '—'}
+                  </Typography>
+                </Box>
+              );
+            })()}
             <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Grid container spacing={2}>
                 <Grid item xs={6}>

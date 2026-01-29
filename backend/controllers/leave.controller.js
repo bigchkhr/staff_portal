@@ -37,11 +37,6 @@ class LeaveController {
         }
       }
 
-      const leaveType = await LeaveType.findById(leave_type_id);
-      if (!leaveType) {
-        return res.status(404).json({ message: '假期類型不存在' });
-      }
-
       const applicantId = user_id || req.user.id;
       const applicant = await User.findById(applicantId);
       if (!applicant) {
@@ -50,6 +45,24 @@ class LeaveController {
 
       // 決定流程類型：明確指定 paper-flow 才使用，否則一律走 e-flow
       const actualFlowType = flow_type === 'paper-flow' ? 'paper-flow' : 'e-flow';
+
+      const leaveType = await LeaveType.findById(leave_type_id);
+      if (!leaveType) {
+        return res.status(404).json({ message: '假期類型不存在' });
+      }
+
+      // 人手批核（paper-flow）：僅在該段期間內有待批核或已批准（未銷假）的假期時攔截；已批核並已銷假的假期准許通過
+      if (actualFlowType === 'paper-flow') {
+        const leaveCheck = await LeaveApplication.userHasPendingOrApprovedLeaveInPeriod(applicantId, start_date, end_date);
+        if (leaveCheck.hasBlocking) {
+          const parts = [];
+          if (leaveCheck.pendingCount > 0) parts.push(`待批核 ${leaveCheck.pendingCount} 筆`);
+          if (leaveCheck.approvedCount > 0) parts.push(`已批准 ${leaveCheck.approvedCount} 筆`);
+          return res.status(400).json({
+            message: `該段期間內申請人尚有假期申請未處理，無法提交人手批核申請（${parts.join('、')}）。請先處理或銷假後再申請。`
+          });
+        }
+      }
 
       // 優先使用前端發送的year參數，如果沒有則從start_date計算
       const applicationYear = year ? parseInt(year) : new Date(start_date).getFullYear();
@@ -228,7 +241,8 @@ class LeaveController {
               start_date: app.start_date,
               end_date: app.end_date,
               status: app.status === 'approved' ? '已批核' : '待批核',
-              leave_type_name: type ? (type.name_zh || type.name) : '未知類型'
+              leave_type_name: type ? type.name : null,
+              leave_type_name_zh: type ? type.name_zh : null
             };
           })
         );

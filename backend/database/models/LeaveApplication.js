@@ -72,6 +72,85 @@ const formatApplication = (application) => {
 };
 
 class LeaveApplication {
+  /**
+   * 檢查用戶是否有待批核或已批准（未銷假）的假期申請。
+   * 用於人手批核（manual-approval / paper-flow）攔截：若有則不允許提交該申請。
+   * @param {number} userId - 申請人 user id
+   * @returns {{ hasBlocking: boolean, pendingCount: number, approvedCount: number }}
+   */
+  static async userHasPendingOrApprovedLeave(userId) {
+    const baseQuery = knex('leave_applications')
+      .where('user_id', userId)
+      .where(function () {
+        this.where('is_reversal_transaction', false).orWhereNull('is_reversal_transaction');
+      })
+      .where(function () {
+        this.where('is_cancellation_request', false).orWhereNull('is_cancellation_request');
+      });
+
+    const [pendingCount] = await baseQuery
+      .clone()
+      .where('status', 'pending')
+      .count('* as count');
+    const [approvedCount] = await baseQuery
+      .clone()
+      .where('status', 'approved')
+      .where(function () {
+        this.where('is_reversed', false).orWhereNull('is_reversed');
+      })
+      .count('* as count');
+
+    const p = parseInt(pendingCount?.count ?? 0, 10);
+    const a = parseInt(approvedCount?.count ?? 0, 10);
+    return {
+      hasBlocking: p > 0 || a > 0,
+      pendingCount: p,
+      approvedCount: a
+    };
+  }
+
+  /**
+   * 檢查該段期間內是否有待批核或已批准（未銷假）的假期申請。
+   * 已批核並已銷假的假期不計入，應准許申請人通過。
+   * @param {number} userId - 申請人 user id
+   * @param {string} startDate - 期間開始日期 YYYY-MM-DD
+   * @param {string} endDate - 期間結束日期 YYYY-MM-DD
+   * @returns {{ hasBlocking: boolean, pendingCount: number, approvedCount: number }}
+   */
+  static async userHasPendingOrApprovedLeaveInPeriod(userId, startDate, endDate) {
+    const baseQuery = knex('leave_applications')
+      .where('user_id', userId)
+      .where(function () {
+        this.where('start_date', '<=', endDate).andWhere('end_date', '>=', startDate);
+      })
+      .where(function () {
+        this.where('is_reversal_transaction', false).orWhereNull('is_reversal_transaction');
+      })
+      .where(function () {
+        this.where('is_cancellation_request', false).orWhereNull('is_cancellation_request');
+      });
+
+    const [pendingCount] = await baseQuery
+      .clone()
+      .where('status', 'pending')
+      .count('* as count');
+    const [approvedCount] = await baseQuery
+      .clone()
+      .where('status', 'approved')
+      .where(function () {
+        this.where('is_reversed', false).orWhereNull('is_reversed');
+      })
+      .count('* as count');
+
+    const p = parseInt(pendingCount?.count ?? 0, 10);
+    const a = parseInt(approvedCount?.count ?? 0, 10);
+    return {
+      hasBlocking: p > 0 || a > 0,
+      pendingCount: p,
+      approvedCount: a
+    };
+  }
+
   static async create(applicationData) {
     const payload = {
       ...applicationData,

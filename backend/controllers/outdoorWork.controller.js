@@ -1,6 +1,7 @@
 const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
 const OutdoorWorkDocument = require('../database/models/OutdoorWorkDocument');
 const User = require('../database/models/User');
+const LeaveApplication = require('../database/models/LeaveApplication');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
@@ -34,6 +35,19 @@ class OutdoorWorkController {
 
       // 決定流程類型
       const actualFlowType = flow_type === 'paper-flow' ? 'paper-flow' : 'e-flow';
+
+      // 人手批核（paper-flow）：僅在該段期間內有待批核或已批准（未銷假）的假期時攔截；已批核並已銷假的假期准許通過
+      if (actualFlowType === 'paper-flow') {
+        const leaveCheck = await LeaveApplication.userHasPendingOrApprovedLeaveInPeriod(applicantId, start_date, end_date);
+        if (leaveCheck.hasBlocking) {
+          const parts = [];
+          if (leaveCheck.pendingCount > 0) parts.push(`待批核 ${leaveCheck.pendingCount} 筆`);
+          if (leaveCheck.approvedCount > 0) parts.push(`已批准 ${leaveCheck.approvedCount} 筆`);
+          return res.status(400).json({
+            message: `該段期間內申請人尚有假期申請未處理，無法提交人手批核申請（${parts.join('、')}）。請先處理或銷假後再申請。`
+          });
+        }
+      }
 
       // 對於 e-flow 申請，如果沒有提供申請日期，自動設置為當前日期
       let finalApplicationDate = application_date;

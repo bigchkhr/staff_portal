@@ -283,6 +283,11 @@
     "submitError": "Error submitting application",
     "submitButton": "Submit Application",
     "submitting": "Submitting...",
+    "overlapWarningTitle": "You have the following pending or approved leave in this date range",
+    "overlapWarningMessage": "Submission is blocked. Please change the dates or sessions so there is no overlap, then try again.",
+    "statusApproved": "Approved",
+    "statusPending": "Pending",
+    "checkingOverlap": "Checking for overlapping leave…",
     "documentRequirementNotice": "For any sick leave, jury service leave, marriage leave, maternity leave, paternity leave, work injury sick leave and compassionate leave, supporting documents are required. If you are unable to submit the documents at the time of application, the Company may, at its discretion, grant the leave on a provisional basis, which will only become effective upon receipt of the relevant supporting documents. The Company reserves the right to revoke any leave without valid supporting documents."
   },
   "leaveHistory": {
@@ -1320,12 +1325,15 @@
     "enableAll": "Enable All",
     "disableAll": "Disable All",
     "batchUpdateSuccess": "Successfully updated settings for {{count}} groups",
+    "batchScheduleUpdateSuccess": "Successfully updated {{count}} schedule record(s)",
     "helpersFromOtherGroups": "Helpers from Other Groups",
     "helpersDescription": "The following are members from other groups who have selected this group's stores for the day",
     "group": "Group",
     "helper": "Helper",
     "summary": "Summary",
-    "selectStoreForHelper": "Select Store (View Helper Staff)"
+    "selectStoreForHelper": "Select Store (View Helper Staff)",
+    "scheduledEmployee": "Scheduled Employee",
+    "scheduleDate": "Schedule Date"
   },
   "attendance": {
     "title": "Attendance Management",

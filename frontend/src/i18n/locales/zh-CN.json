@@ -283,6 +283,11 @@
     "submitError": "提交申请时发生错误",
     "submitButton": "提交申请",
     "submitting": "提交中...",
+    "overlapWarningTitle": "该日期范围内已有以下待批核或已批准的假期申请",
+    "overlapWarningMessage": "无法提交。请修改日期或时段，待无重叠后再提交。",
+    "statusApproved": "已批准",
+    "statusPending": "待批核",
+    "checkingOverlap": "正在检查是否有重叠假期…",
     "documentRequirementNotice": "凡病假、陪审团假、婚假、产假、侍产假、工伤病假及恩恤假，均需提交证明文件。若你无法于申请时递交，公司可酌情暂时批核相关假期，待你补回有关证明文件后该假期方予以正式生效。公司有权对无有效证明文件的假期进行撤回。"
   },
   "leaveHistory": {
@@ -1260,12 +1265,15 @@
     "enableAll": "开启所有",
     "disableAll": "关闭所有",
     "batchUpdateSuccess": "成功更新{{count}}个群组的设置",
+    "batchScheduleUpdateSuccess": "成功更新 {{count}} 笔排班",
     "helpersFromOtherGroups": "来自其他群组的帮手",
     "helpersDescription": "以下为其他群组成员，当日选择了本群组的店铺",
     "group": "群组",
     "helper": "幫舖",
     "summary": "统计",
-    "selectStoreForHelper": "选择店铺（查看幫舖员工）"
+    "selectStoreForHelper": "选择店铺（查看幫舖员工）",
+    "scheduledEmployee": "被编班员工",
+    "scheduleDate": "排班日期"
   },
   "attendance": {
     "title": "考勤管理",

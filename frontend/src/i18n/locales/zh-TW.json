@@ -283,6 +283,11 @@
     "submitError": "提交申請時發生錯誤",
     "submitButton": "提交申請",
     "submitting": "提交中...",
+    "overlapWarningTitle": "該日期範圍內已有以下待批核或已批準的假期申請",
+    "overlapWarningMessage": "無法提交。請修改日期或時段，待無重疊後再提交。",
+    "statusApproved": "已批準",
+    "statusPending": "待批核",
+    "checkingOverlap": "正在檢查是否有重疊假期…",
     "documentRequirementNotice": "但凡病假、陪審團假、婚假、產假、侍產假、工傷病假及恩恤假，均需提交證明文件。若你無法於申請時遞交，公司可酌情暫時批核相關假期，待你補回有關證明文件後該假期予以正式生效。公司有權對無有效證明文件的假期進行撤回。"
   },
   "leaveHistory": {
@@ -1253,7 +1258,7 @@
     "selectLanguage": "選擇語言"
   },
   "schedule": {
-    "title": "排班表",
+    "title": "編更表",
     "selectGroup": "選擇群組",
     "startDate": "開始日期",
     "endDate": "結束日期",
@@ -1320,6 +1325,7 @@
     "enableAll": "開啟所有",
     "disableAll": "關閉所有",
     "batchUpdateSuccess": "成功更新{{count}}個群組的設置",
+    "batchScheduleUpdateSuccess": "成功更新 {{count}} 筆排班",
     "selectCSVFile": "選擇CSV文件",
     "import": "匯入",
     "importing": "匯入中...",
@@ -1336,7 +1342,9 @@
     "group": "群組",
     "helper": "幫舖",
     "summary": "統計",
-    "selectStoreForHelper": "選擇店舖（查看幫舖員工）"
+    "selectStoreForHelper": "選擇店舖（查看幫舖員工）",
+    "scheduledEmployee": "被編班員工",
+    "scheduleDate": "排班日期"
   },
   "attendance": {
     "title": "考勤管理",
