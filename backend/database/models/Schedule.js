@@ -270,8 +270,25 @@ class Schedule {
     return Array.isArray(userIds) && userIds.includes(Number(userId));
   }
 
+  // 將日期正規化為 YYYY-MM-DD（日期比較用；DB 存 date 時用 UTC 解讀避免伺服器時區影響）
+  static _normalizeDateStr(val) {
+    if (!val) return null;
+    if (typeof val === 'string') {
+      const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+    }
+    if (val instanceof Date) {
+      const y = val.getUTCFullYear();
+      const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(val.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return null;
+  }
+
   // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
-  static async canEditSchedule(userId, departmentGroupId) {
+  // scheduleDate: 可選，YYYY-MM-DD 或 Date；若為 checker 且群組設有可編輯範圍，會檢查該日期是否在範圍內（UTC+8）
+  static async canEditSchedule(userId, departmentGroupId, scheduleDate = null) {
     const group = await knex('department_groups')
       .where('id', departmentGroupId)
       .first();
@@ -293,10 +310,19 @@ class Schedule {
     const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
 
-    // 如果用戶是 checker，需要檢查 allow_checker_edit 設置
+    // 如果用戶是 checker，需要檢查 allow_checker_edit 及可編輯日期範圍（UTC+8）
     if (isChecker) {
-      // allow_checker_edit 默認為 true，如果為 false 則不允許 checker 編輯
-      return group.allow_checker_edit !== false;
+      if (group.allow_checker_edit === false) return false;
+      const startDate = this._normalizeDateStr(group.checker_editable_start_date);
+      const endDate = this._normalizeDateStr(group.checker_editable_end_date);
+      // 僅在有傳入 scheduleDate 且群組有設範圍時，才檢查該日期是否在範圍內
+      if (scheduleDate != null && (startDate != null || endDate != null)) {
+        const dateStr = this._normalizeDateStr(scheduleDate);
+        if (!dateStr) return false;
+        if (startDate != null && dateStr < startDate) return false;
+        if (endDate != null && dateStr > endDate) return false;
+      }
+      return true;
     }
 
     // approver1, approver2, approver3 可以直接編輯

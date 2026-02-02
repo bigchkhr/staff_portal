@@ -57,18 +57,18 @@ const MyApplications = () => {
       path: '/extra-working-hours/history',
       translationKey: 'extraWorkingHoursHistory'
     },
-    {
-      key: 'applyOutdoorWork',
-      icon: <WorkIcon sx={{ fontSize: 48 }} />,
-      path: '/outdoor-work/apply',
-      translationKey: 'applyOutdoorWork'
-    },
-    {
-      key: 'outdoorWorkHistory',
-      icon: <HistoryIcon sx={{ fontSize: 48 }} />,
-      path: '/outdoor-work/history',
-      translationKey: 'outdoorWorkHistory'
-    }
+    // {
+    //   key: 'applyOutdoorWork',
+    //   icon: <WorkIcon sx={{ fontSize: 48 }} />,
+    //   path: '/outdoor-work/apply',
+    //   translationKey: 'applyOutdoorWork'
+    // },
+    // {
+    //   key: 'outdoorWorkHistory',
+    //   icon: <HistoryIcon sx={{ fontSize: 48 }} />,
+    //   path: '/outdoor-work/history',
+    //   translationKey: 'outdoorWorkHistory'
+    // }
   ];
 
   const handleItemClick = (path) => {

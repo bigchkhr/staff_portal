@@ -666,10 +666,10 @@ class ScheduleController {
         return res.status(400).json({ message: '缺少必填欄位' });
       }
 
-      // 檢查編輯權限
-      const canEdit = await Schedule.canEditSchedule(userId, department_group_id);
+      // 檢查編輯權限（checker 時會檢查 schedule_date 是否在可編輯範圍內，UTC+8）
+      const canEdit = await Schedule.canEditSchedule(userId, department_group_id, schedule_date);
       if (!canEdit) {
-        return res.status(403).json({ message: '您沒有權限編輯此群組的排班表' });
+        return res.status(403).json({ message: '您沒有權限編輯此群組的排班表，或該日期不在 Checker 可編輯範圍內' });
       }
 
       // 檢查用戶是否屬於該群組
@@ -747,13 +747,15 @@ class ScheduleController {
       }
 
       const departmentGroupId = departmentGroupIds[0];
-      const canEdit = await Schedule.canEditSchedule(userId, departmentGroupId);
-      if (!canEdit) {
-        return res.status(403).json({ message: '您沒有權限編輯此群組的排班表' });
-      }
 
-      // 驗證所有用戶是否屬於該群組
+      // 驗證所有用戶是否屬於該群組，且每筆排班日期在 checker 可編輯範圍內（UTC+8）
       for (const schedule of schedules) {
+        const canEditThis = await Schedule.canEditSchedule(userId, departmentGroupId, schedule.schedule_date);
+        if (!canEditThis) {
+          return res.status(403).json({
+            message: `您沒有權限編輯此群組的排班表，或日期 ${schedule.schedule_date} 不在 Checker 可編輯範圍內（UTC+8）`
+          });
+        }
         if (!schedule.user_id || !schedule.schedule_date) {
           return res.status(400).json({ message: '每筆排班記錄必須包含 user_id 和 schedule_date' });
         }
@@ -833,10 +835,10 @@ class ScheduleController {
         return res.status(404).json({ message: '排班記錄不存在' });
       }
 
-      // 檢查編輯權限
-      const canEdit = await Schedule.canEditSchedule(userId, schedule.department_group_id);
+      // 檢查編輯權限（checker 時會檢查 schedule_date 是否在可編輯範圍內，UTC+8）
+      const canEdit = await Schedule.canEditSchedule(userId, schedule.department_group_id, schedule.schedule_date);
       if (!canEdit) {
-        return res.status(403).json({ message: '您沒有權限編輯此排班記錄' });
+        return res.status(403).json({ message: '您沒有權限編輯此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
       // 如果提供了leave_type_id，驗證該假期類型是否允許在排班表中輸入
@@ -916,10 +918,10 @@ class ScheduleController {
         return res.status(404).json({ message: '排班記錄不存在' });
       }
 
-      // 檢查編輯權限
-      const canEdit = await Schedule.canEditSchedule(userId, schedule.department_group_id);
+      // 檢查編輯權限（checker 時會檢查 schedule_date 是否在可編輯範圍內，UTC+8）
+      const canEdit = await Schedule.canEditSchedule(userId, schedule.department_group_id, schedule.schedule_date);
       if (!canEdit) {
-        return res.status(403).json({ message: '您沒有權限刪除此排班記錄' });
+        return res.status(403).json({ message: '您沒有權限刪除此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
       await Schedule.delete(id);
@@ -940,10 +942,10 @@ class ScheduleController {
         return res.status(400).json({ message: '必須指定群組ID' });
       }
 
-      // 檢查編輯權限
-      const canEdit = await Schedule.canEditSchedule(userId, department_group_id);
+      // 檢查編輯權限（若為單一 schedule_date 則檢查 checker 可編輯範圍 UTC+8）
+      const canEdit = await Schedule.canEditSchedule(userId, department_group_id, schedule_date || null);
       if (!canEdit) {
-        return res.status(403).json({ message: '您沒有權限刪除此群組的排班記錄' });
+        return res.status(403).json({ message: '您沒有權限刪除此群組的排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
       const filters = { department_group_id };
@@ -1086,6 +1088,35 @@ class ScheduleController {
     return false;
   }
 
+  // 將 DB 的 DATE 欄位格式為 YYYY-MM-DD 再回傳。node-pg 在 UTC+8 會回傳當地午夜（即 UTC 前一日），
+  // 所以用「當地」年月日 (getFullYear/getMonth/getDate) 還原日曆日，唔好用 getUTC*
+  _formatDateForResponse(val) {
+    if (val === undefined || val === null || val === '') return null;
+    if (typeof val === 'string') {
+      const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+    }
+    if (val && typeof val.getFullYear === 'function') {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return null;
+  }
+
+  _formatGroupDateFields(group) {
+    if (!group) return group;
+    const out = { ...group };
+    if (out.checker_editable_start_date != null) {
+      out.checker_editable_start_date = this._formatDateForResponse(out.checker_editable_start_date);
+    }
+    if (out.checker_editable_end_date != null) {
+      out.checker_editable_end_date = this._formatDateForResponse(out.checker_editable_end_date);
+    }
+    return out;
+  }
+
   // 獲取用戶有權限查看的排班群組列表（包括直接所屬和通過授權群組關聯的）
   async getAccessibleScheduleGroups(req, res) {
     try {
@@ -1097,7 +1128,8 @@ class ScheduleController {
       // 系統管理員可以查看所有群組
       if (isSystemAdmin) {
         const allGroups = await DepartmentGroup.findAll({ closed: false });
-        return res.json({ groups: allGroups });
+        const groupsWithDateStr = allGroups.map(g => this._formatGroupDateFields(g));
+        return res.json({ groups: groupsWithDateStr });
       }
 
       // 獲取用戶直接所屬的部門群組（群組成員可以查看）
@@ -1123,13 +1155,13 @@ class ScheduleController {
                userDelegationGroupIds.includes(approver3Id);
       });
       
-      // 合併並去重（使用 id 作為唯一標識）
+      // 合併並去重（使用 id 作為唯一標識），並將 DATE 欄位格式為 YYYY-MM-DD 再回傳
       const directGroupIds = directDepartmentGroups.map(g => g.id);
-      const allAccessibleGroups = [...directDepartmentGroups.filter(g => !g.closed)];
+      const allAccessibleGroups = [...directDepartmentGroups.filter(g => !g.closed)].map(g => this._formatGroupDateFields(g));
       
       accessibleViaDelegation.forEach(group => {
         if (!directGroupIds.includes(group.id)) {
-          allAccessibleGroups.push(group);
+          allAccessibleGroups.push(this._formatGroupDateFields(group));
         }
       });
       
@@ -1140,11 +1172,28 @@ class ScheduleController {
     }
   }
 
+  // 將前端傳入的日期正規化為 YYYY-MM-DD（純日期，用 UTC 解讀避免伺服器時區影響；前端以 UTC+8 送來）
+  _normalizeCheckerDate(val) {
+    if (val === undefined || val === null || val === '') return null;
+    if (typeof val === 'string') {
+      const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+    }
+    if (val && typeof val.toISOString === 'function') {
+      const d = new Date(val);
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    return null;
+  }
+
   // 更新群組的 checker 編輯權限設置（只有 approver1, approver2, approver3 可以操作）
   async updateCheckerEditPermission(req, res) {
     try {
       const { department_group_id } = req.params;
-      const { allow_checker_edit } = req.body;
+      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date } = req.body;
       const userId = req.user.id;
 
       if (allow_checker_edit === undefined) {
@@ -1171,10 +1220,16 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限修改此設置' });
       }
 
+      const updatePayload = { allow_checker_edit: Boolean(allow_checker_edit) };
+      if (checker_editable_start_date !== undefined) {
+        updatePayload.checker_editable_start_date = this._normalizeCheckerDate(checker_editable_start_date);
+      }
+      if (checker_editable_end_date !== undefined) {
+        updatePayload.checker_editable_end_date = this._normalizeCheckerDate(checker_editable_end_date);
+      }
+
       // 更新設置
-      const updatedGroup = await DepartmentGroup.update(department_group_id, {
-        allow_checker_edit: Boolean(allow_checker_edit)
-      });
+      const updatedGroup = await DepartmentGroup.update(department_group_id, updatePayload);
 
       res.json({ 
         message: '設置更新成功',
@@ -1187,16 +1242,20 @@ class ScheduleController {
   }
 
   // 批量更新所有群組的 checker 編輯權限設置（只有 approver1, approver2, approver3 可以操作）
+  // allow_checker_edit 可選；若只傳 checker_editable_start_date / checker_editable_end_date，則只更新「可編輯範圍」並套用到所有群組
   async batchUpdateCheckerEditPermission(req, res) {
     try {
-      const { allow_checker_edit } = req.body;
+      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date } = req.body;
       const userId = req.user.id;
 
-      if (allow_checker_edit === undefined) {
-        return res.status(400).json({ message: '缺少必填欄位 allow_checker_edit' });
-      }
+      const updatePayload = {};
+      if (allow_checker_edit !== undefined) updatePayload.allow_checker_edit = Boolean(allow_checker_edit);
+      if (checker_editable_start_date !== undefined) updatePayload.checker_editable_start_date = (checker_editable_start_date === null || checker_editable_start_date === '') ? null : this._normalizeCheckerDate(checker_editable_start_date);
+      if (checker_editable_end_date !== undefined) updatePayload.checker_editable_end_date = (checker_editable_end_date === null || checker_editable_end_date === '') ? null : this._normalizeCheckerDate(checker_editable_end_date);
 
-      const newValue = Boolean(allow_checker_edit);
+      if (Object.keys(updatePayload).length === 0) {
+        return res.status(400).json({ message: '請提供 allow_checker_edit 或 checker_editable_start_date / checker_editable_end_date' });
+      }
 
       // 獲取用戶所屬的授權群組
       const User = require('../database/models/User');
@@ -1227,12 +1286,12 @@ class ScheduleController {
       const groupIds = groupsToUpdate.map(g => g.id);
       await knex('department_groups')
         .whereIn('id', groupIds)
-        .update({ allow_checker_edit: newValue });
+        .update(updatePayload);
 
       res.json({ 
         message: `成功更新 ${groupsToUpdate.length} 個群組的設置`,
         updated_count: groupsToUpdate.length,
-        allow_checker_edit: newValue
+        ...(updatePayload.allow_checker_edit !== undefined && { allow_checker_edit: updatePayload.allow_checker_edit })
       });
     } catch (error) {
       console.error('Batch update checker edit permission error:', error);

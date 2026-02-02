@@ -109,6 +109,8 @@ const Schedule = ({ noLayout = false }) => {
   const [allowCheckerEdit, setAllowCheckerEdit] = useState(true); // checker 是否可以編輯排班表
   const [canControlCheckerEdit, setCanControlCheckerEdit] = useState(false); // 當前用戶是否可以控制 checker 編輯權限
   const [isApprover, setIsApprover] = useState(false); // 當前用戶是否為 approver（不包括 checker）
+  const [checkerEditableStartDate, setCheckerEditableStartDate] = useState(null); // Checker 可編輯範圍開始（UTC+8）
+  const [checkerEditableEndDate, setCheckerEditableEndDate] = useState(null); // Checker 可編輯範圍結束（UTC+8）
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -157,12 +159,18 @@ const Schedule = ({ noLayout = false }) => {
     setEndDate(newValue);
   };
 
-  // 當群組改變時，更新 allow_checker_edit 狀態
+  // 當群組改變時，更新 allow_checker_edit 及 checker 可編輯日期範圍（一律以 UTC+8 香港日曆解讀）
   useEffect(() => {
     if (selectedGroupId) {
       const group = departmentGroups.find(g => g.id === selectedGroupId);
       if (group) {
         setAllowCheckerEdit(group.allow_checker_edit !== false);
+        const start = group.checker_editable_start_date;
+        const end = group.checker_editable_end_date;
+        const startStr = start != null && start !== '' ? dayjs(start).tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+        const endStr = end != null && end !== '' ? dayjs(end).tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+        setCheckerEditableStartDate(startStr ? dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong') : null);
+        setCheckerEditableEndDate(endStr ? dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong') : null);
       }
     }
   }, [selectedGroupId, departmentGroups]);
@@ -406,6 +414,28 @@ const Schedule = ({ noLayout = false }) => {
     return isChecker || isApprover1 || isApprover2 || isApprover3;
   };
 
+  // 將 API 回傳的日期（可能為 YYYY-MM-DD 或 ISO）統一解讀為 UTC+8 香港日曆的 YYYY-MM-DD
+  const toHKDateStr = (val) => {
+    if (val == null || val === '') return null;
+    const d = dayjs(val);
+    if (!d.isValid()) return null;
+    return d.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+  };
+
+  // 檢查該日期是否在 checker 可編輯範圍內（UTC+8）；approver / 系統管理員不受限
+  const canEditDate = (date) => {
+    if (isApprover || user?.is_system_admin) return true;
+    const group = departmentGroups.find(g => g.id === selectedGroupId);
+    if (!group || !allowCheckerEdit) return false;
+    const startStr = toHKDateStr(group.checker_editable_start_date);
+    const endStr = toHKDateStr(group.checker_editable_end_date);
+    if (startStr == null && endStr == null) return true;
+    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    if (startStr != null && dateStr < startStr) return false;
+    if (endStr != null && dateStr > endStr) return false;
+    return true;
+  };
+
   // 獲取應該顯示的假期類別文字
   const getLeaveTypeDisplayText = (schedule) => {
     if (!schedule || (!schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code)) {
@@ -543,7 +573,15 @@ const Schedule = ({ noLayout = false }) => {
 
   const handleOpenEditDialog = (userId, date) => {
     if (!editMode || !canEdit) return;
-    
+    if (!canEditDate(date)) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.error'),
+        text: t('schedule.checkerDateOutOfRange')
+      });
+      return;
+    }
+
     // 確保日期有效
     if (!date) {
       console.warn('Invalid date in handleOpenEditDialog');
@@ -843,6 +881,15 @@ const Schedule = ({ noLayout = false }) => {
 
   const handleSaveSchedule = async () => {
     if (!editingSchedule) return;
+    const scheduleDate = editingSchedule.schedule_date ? dayjs(editingSchedule.schedule_date).tz('Asia/Hong_Kong') : null;
+    if (scheduleDate && !canEditDate(scheduleDate)) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.error'),
+        text: t('schedule.checkerDateOutOfRange')
+      });
+      return;
+    }
 
     try {
       // 處理開始時間，支援0-32小時格式
@@ -1141,25 +1188,35 @@ const Schedule = ({ noLayout = false }) => {
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
                           {editMode && canEdit ? (
                             <>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => handleOpenEditDialog(member.id, date)}
-                                sx={{ 
-                                  minWidth: 'auto', 
-                                  p: 0.5,
-                                  borderRadius: 1.5,
-                                  borderColor: 'primary.main',
-                                  '&:hover': {
-                                    bgcolor: 'primary.main',
-                                    color: 'white',
-                                    transform: 'scale(1.05)',
-                                    transition: 'all 0.2s',
-                                  },
-                                }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </Button>
+                              {canEditDate(date) ? (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => handleOpenEditDialog(member.id, date)}
+                                  sx={{ 
+                                    minWidth: 'auto', 
+                                    p: 0.5,
+                                    borderRadius: 1.5,
+                                    borderColor: 'primary.main',
+                                    '&:hover': {
+                                      bgcolor: 'primary.main',
+                                      color: 'white',
+                                      transform: 'scale(1.05)',
+                                      transition: 'all 0.2s',
+                                    },
+                                  }}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </Button>
+                              ) : (
+                                <Tooltip title={t('schedule.checkerDateOutOfRange')}>
+                                  <span>
+                                    <Button size="small" variant="outlined" disabled sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1.5 }}>
+                                      <EditIcon fontSize="small" />
+                                    </Button>
+                                  </span>
+                                </Tooltip>
+                              )}
                               {schedule && (
                                 <>
                                   {(schedule.start_time || schedule.end_time) && (
@@ -1190,22 +1247,32 @@ const Schedule = ({ noLayout = false }) => {
                                       }}
                                     />
                                   )}
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => handleDeleteSchedule(schedule.id)}
-                                    color="error"
-                                    sx={{ 
-                                      p: 0.3,
-                                      '&:hover': {
-                                        bgcolor: 'error.main',
-                                        color: 'error.contrastText',
-                                        transform: 'scale(1.1)',
-                                        transition: 'all 0.2s',
-                                      },
-                                    }}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
+                                  {canEditDate(date) ? (
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleDeleteSchedule(schedule)}
+                                      color="error"
+                                      sx={{ 
+                                        p: 0.3,
+                                        '&:hover': {
+                                          bgcolor: 'error.main',
+                                          color: 'error.contrastText',
+                                          transform: 'scale(1.1)',
+                                          transition: 'all 0.2s',
+                                        },
+                                      }}
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  ) : (
+                                    <Tooltip title={t('schedule.checkerDateOutOfRange')}>
+                                      <span>
+                                        <IconButton size="small" color="error" disabled sx={{ p: 0.3 }}>
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      </span>
+                                    </Tooltip>
+                                  )}
                                 </>
                               )}
                             </>
@@ -1782,7 +1849,17 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
-  const handleDeleteSchedule = async (scheduleId) => {
+  const handleDeleteSchedule = async (schedule) => {
+    const scheduleDate = schedule?.schedule_date ? dayjs(schedule.schedule_date).tz('Asia/Hong_Kong') : null;
+    if (scheduleDate && !canEditDate(scheduleDate)) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.error'),
+        text: t('schedule.checkerDateOutOfRange')
+      });
+      return;
+    }
+
     const result = await Swal.fire({
       icon: 'warning',
       title: t('schedule.confirmDelete'),
@@ -1794,7 +1871,7 @@ const Schedule = ({ noLayout = false }) => {
 
     if (result.isConfirmed) {
       try {
-        await axios.delete(`/api/schedules/${scheduleId}`);
+        await axios.delete(`/api/schedules/${schedule.id}`);
         
         // 等待數據刷新完成
         await fetchSchedules();
@@ -1840,15 +1917,18 @@ const Schedule = ({ noLayout = false }) => {
     return dates;
   };
 
-  // 更新 checker 編輯權限設置
+  // 更新 checker 編輯權限設置（含可編輯日期範圍 UTC+8）
   const handleToggleCheckerEdit = async (event) => {
     const newValue = event.target.checked;
     if (!selectedGroupId) return;
 
     try {
-      await axios.put(`/api/schedules/group/${selectedGroupId}/checker-edit-permission`, {
-        allow_checker_edit: newValue
-      });
+      const payload = {
+        allow_checker_edit: newValue,
+        checker_editable_start_date: checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null,
+        checker_editable_end_date: checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null
+      };
+      await axios.put(`/api/schedules/group/${selectedGroupId}/checker-edit-permission`, payload);
       
       setAllowCheckerEdit(newValue);
       
@@ -1905,18 +1985,23 @@ const Schedule = ({ noLayout = false }) => {
     }
 
     try {
-      const response = await axios.put('/api/schedules/groups/batch-checker-edit-permission', {
-        allow_checker_edit: enable
-      });
+      const payload = {
+        allow_checker_edit: enable,
+        checker_editable_start_date: checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null,
+        checker_editable_end_date: checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null
+      };
+      const response = await axios.put('/api/schedules/groups/batch-checker-edit-permission', payload);
 
-      // 更新本地所有群組數據
+      const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+      const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
       setDepartmentGroups(prevGroups => 
-        prevGroups.map(g => ({ ...g, allow_checker_edit: enable }))
+        prevGroups.map(g => ({ ...g, allow_checker_edit: enable, checker_editable_start_date: startStr, checker_editable_end_date: endStr }))
       );
 
-      // 如果當前選中的群組也在更新列表中，更新當前群組的狀態
       if (selectedGroupId) {
         setAllowCheckerEdit(enable);
+        setCheckerEditableStartDate(checkerEditableStartDate);
+        setCheckerEditableEndDate(checkerEditableEndDate);
         await checkEditPermission();
       }
 
@@ -1968,53 +2053,6 @@ const Schedule = ({ noLayout = false }) => {
             </Typography>
             <Divider sx={{ mt: 2 }} />
           </Box>
-
-          {/* 批量控制區塊 - 放在控制面板上方 */}
-          {canControlCheckerEdit && (
-            <Card 
-              elevation={1}
-              sx={{ 
-                mb: 3,
-                p: 2,
-                borderRadius: 2,
-                bgcolor: 'background.paper',
-                border: '1px solid',
-                borderColor: 'divider'
-              }}
-            >
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                  {t('schedule.batchControl')}
-                </Typography>
-                <Button
-                  variant="outlined"
-                  color="success"
-                  size="small"
-                  onClick={() => handleBatchUpdateCheckerEdit(true)}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                  }}
-                >
-                  {t('schedule.enableAll')}
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  size="small"
-                  onClick={() => handleBatchUpdateCheckerEdit(false)}
-                  sx={{
-                    borderRadius: 2,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                  }}
-                >
-                  {t('schedule.disableAll')}
-                </Button>
-              </Box>
-            </Card>
-          )}
 
           <Card 
             elevation={2}
@@ -2170,6 +2208,94 @@ const Schedule = ({ noLayout = false }) => {
                   )}
                 </Box>
               </Grid>
+              {/* 批量修改 checker 權限 與 Checker 可編輯日期範圍（同一 Div，UTC+8） */}
+              {canControlCheckerEdit && (
+                <>
+                  <Grid item xs={12}>
+                    <Divider sx={{ my: 1 }} />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {t('schedule.batchControl')}
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        color="success"
+                        size="small"
+                        onClick={() => handleBatchUpdateCheckerEdit(true)}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        {t('schedule.enableAll')}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={() => handleBatchUpdateCheckerEdit(false)}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        {t('schedule.disableAll')}
+                      </Button>
+                      <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
+                        {t('schedule.checkerEditableRange')}
+                      </Typography>
+                      <DatePicker
+                        label={t('schedule.checkerEditableRangeStart')}
+                        value={checkerEditableStartDate}
+                        onChange={(newVal) => {
+                          if (!newVal || !newVal.isValid()) {
+                            setCheckerEditableStartDate(null);
+                            const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                            axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: null, checker_editable_end_date: endStr }).then(() => {
+                              setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: null, checker_editable_end_date: endStr })));
+                            }).catch(() => {});
+                            return;
+                          }
+                          const startStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                          const normalizedStart = dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
+                          setCheckerEditableStartDate(normalizedStart);
+                          const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                          axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+                            checker_editable_start_date: startStr,
+                            checker_editable_end_date: endStr
+                          }).then(() => {
+                            setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
+                          }).catch(() => {});
+                        }}
+                        format="DD/MM/YYYY"
+                        slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
+                      />
+                      <DatePicker
+                        label={t('schedule.checkerEditableRangeEnd')}
+                        value={checkerEditableEndDate}
+                        onChange={(newVal) => {
+                          if (!newVal || !newVal.isValid()) {
+                            setCheckerEditableEndDate(null);
+                            const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                            axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: startStr, checker_editable_end_date: null }).then(() => {
+                              setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: null })));
+                            }).catch(() => {});
+                            return;
+                          }
+                          const endStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                          const normalizedEnd = dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
+                          setCheckerEditableEndDate(normalizedEnd);
+                          const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                          axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+                            checker_editable_start_date: startStr,
+                            checker_editable_end_date: endStr
+                          }).then(() => {
+                            setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
+                          }).catch(() => {});
+                        }}
+                        format="DD/MM/YYYY"
+                        slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
+                      />
+                    </Box>
+                  </Grid>
+                </>
+              )}
             </Grid>
           </Card>
 
@@ -2305,25 +2431,35 @@ const Schedule = ({ noLayout = false }) => {
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
                               {editMode && canEdit ? (
                                 <>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    onClick={() => handleOpenEditDialog(member.id, date)}
-                                    sx={{ 
-                                      minWidth: 'auto', 
-                                      p: 0.75,
-                                      borderRadius: 1.5,
-                                      borderColor: 'primary.main',
-                                      '&:hover': {
-                                        bgcolor: 'primary.main',
-                                        color: 'white',
-                                        transform: 'scale(1.05)',
-                                        transition: 'all 0.2s',
-                                      },
-                                    }}
-                                  >
-                                    <EditIcon fontSize="small" />
-                                  </Button>
+                                  {canEditDate(date) ? (
+                                    <Button
+                                      size="small"
+                                      variant="outlined"
+                                      onClick={() => handleOpenEditDialog(member.id, date)}
+                                      sx={{ 
+                                        minWidth: 'auto', 
+                                        p: 0.75,
+                                        borderRadius: 1.5,
+                                        borderColor: 'primary.main',
+                                        '&:hover': {
+                                          bgcolor: 'primary.main',
+                                          color: 'white',
+                                          transform: 'scale(1.05)',
+                                          transition: 'all 0.2s',
+                                        },
+                                      }}
+                                    >
+                                      <EditIcon fontSize="small" />
+                                    </Button>
+                                  ) : (
+                                    <Tooltip title={t('schedule.checkerDateOutOfRange')}>
+                                      <span>
+                                        <Button size="small" variant="outlined" disabled sx={{ minWidth: 'auto', p: 0.75, borderRadius: 1.5 }}>
+                                          <EditIcon fontSize="small" />
+                                        </Button>
+                                      </span>
+                                    </Tooltip>
+                                  )}
                                   {schedule && (
                                     <>
                                       {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
@@ -2372,10 +2508,10 @@ const Schedule = ({ noLayout = false }) => {
                                           }}
                                         />
                                       )}
-                                      {schedule.id && (
+                                      {schedule.id && (canEditDate(date) ? (
                                         <IconButton
                                           size="small"
-                                          onClick={() => handleDeleteSchedule(schedule.id)}
+                                          onClick={() => handleDeleteSchedule(schedule)}
                                           color="error"
                                           sx={{
                                             '&:hover': {
@@ -2388,7 +2524,15 @@ const Schedule = ({ noLayout = false }) => {
                                         >
                                           <DeleteIcon fontSize="small" />
                                         </IconButton>
-                                      )}
+                                      ) : (
+                                        <Tooltip title={t('schedule.checkerDateOutOfRange')}>
+                                          <span>
+                                            <IconButton size="small" color="error" disabled>
+                                              <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                          </span>
+                                        </Tooltip>
+                                      ))}
                                     </>
                                   )}
                                 </>
@@ -2969,102 +3113,107 @@ const Schedule = ({ noLayout = false }) => {
             {t('schedule.batchEdit')}
           </DialogTitle>
           <DialogContent sx={{ p: 3, mt: 2 }}>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 2 }}>
-                {t('schedule.selectUsers')}
-              </Typography>
-              <Box sx={{ 
-                maxHeight: 200, 
-                overflow: 'auto', 
-                border: 2, 
-                borderColor: 'primary.light', 
-                borderRadius: 2, 
-                p: 2,
-                bgcolor: 'grey.50',
-                boxShadow: 1,
-              }}>
-                {groupMembers.map(member => (
-                  <Box key={member.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Checkbox
-                      checked={selectedUsers.includes(member.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedUsers([...selectedUsers, member.id]);
-                        } else {
-                          setSelectedUsers(selectedUsers.filter(id => id !== member.id));
-                        }
-                      }}
-                    />
-                    <Typography variant="body2">
-                      {member.employee_number} - {member.display_name || member.name_zh || member.name}
-                      {member.position_code || member.position_name || member.position_name_zh ? (
-                        <span style={{ color: '#666', fontSize: '0.85em' }}>
-                          {' '}({member.position_code || (i18n.language === 'en'
-                            ? (member.position_name || member.position_name_zh)
-                            : (member.position_name_zh || member.position_name))})
-                        </span>
-                      ) : null}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
+            <Grid container spacing={3} sx={{ mt: 1 }}>
+              {/* Desktop：選擇員工與選擇日期並排；Mobile：上下堆疊 */}
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 2 }}>
+                  {t('schedule.selectUsers')}
+                </Typography>
+                <Box sx={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  border: 2, 
+                  borderColor: 'primary.light', 
+                  borderRadius: 2, 
+                  p: 2,
+                  bgcolor: 'grey.50',
+                  boxShadow: 1,
+                }}>
+                  {groupMembers.map(member => (
+                    <Box key={member.id} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <Checkbox
+                        checked={selectedUsers.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedUsers([...selectedUsers, member.id]);
+                          } else {
+                            setSelectedUsers(selectedUsers.filter(id => id !== member.id));
+                          }
+                        }}
+                      />
+                      <Typography variant="body2">
+                        {member.employee_number} - {member.display_name || member.name_zh || member.name}
+                        {member.position_code || member.position_name || member.position_name_zh ? (
+                          <span style={{ color: '#666', fontSize: '0.85em' }}>
+                            {' '}({member.position_code || (i18n.language === 'en'
+                              ? (member.position_name || member.position_name_zh)
+                              : (member.position_name_zh || member.position_name))})
+                          </span>
+                        ) : null}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 2 }}>
+                  {t('schedule.selectDates')}
+                </Typography>
+                <Box sx={{ 
+                  maxHeight: 200, 
+                  overflow: 'auto', 
+                  border: 2, 
+                  borderColor: 'primary.light', 
+                  borderRadius: 2, 
+                  p: 2,
+                  bgcolor: 'grey.50',
+                  boxShadow: 1,
+                }}>
+                  {dates.map(date => (
+                    <Box key={date.format('YYYY-MM-DD')} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <Checkbox
+                        checked={selectedDates.some(d => {
+                          if (!d || !date) return false;
+                          try {
+                            const dDate = dayjs(d);
+                            const checkDate = dayjs(date);
+                            if (!dDate.isValid() || !checkDate.isValid()) return false;
+                            return dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
+                          } catch (error) {
+                            return false;
+                          }
+                        })}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDates([...selectedDates, date]);
+                          } else {
+                            setSelectedDates(selectedDates.filter(d => {
+                              if (!d || !date) return true;
+                              try {
+                                const dDate = dayjs(d);
+                                const checkDate = dayjs(date);
+                                if (!dDate.isValid() || !checkDate.isValid()) return true;
+                                return !dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
+                              } catch (error) {
+                                return true;
+                              }
+                            }));
+                          }
+                        }}
+                      />
+                      <Typography variant="body2">
+                        {formatDateDisplay(date)} ({date.format('ddd')})
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Grid>
 
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 4, fontWeight: 600, color: 'primary.main', mb: 2 }}>
-                {t('schedule.selectDates')}
-              </Typography>
-              <Box sx={{ 
-                maxHeight: 200, 
-                overflow: 'auto', 
-                border: 2, 
-                borderColor: 'primary.light', 
-                borderRadius: 2, 
-                p: 2,
-                bgcolor: 'grey.50',
-                boxShadow: 1,
-              }}>
-                {dates.map(date => (
-                  <Box key={date.format('YYYY-MM-DD')} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Checkbox
-                      checked={selectedDates.some(d => {
-                        if (!d || !date) return false;
-                        try {
-                          const dDate = dayjs(d);
-                          const checkDate = dayjs(date);
-                          if (!dDate.isValid() || !checkDate.isValid()) return false;
-                          return dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
-                        } catch (error) {
-                          return false;
-                        }
-                      })}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedDates([...selectedDates, date]);
-                        } else {
-                          setSelectedDates(selectedDates.filter(d => {
-                            if (!d || !date) return true;
-                            try {
-                              const dDate = dayjs(d);
-                              const checkDate = dayjs(date);
-                              if (!dDate.isValid() || !checkDate.isValid()) return true;
-                              return !dDate.tz('Asia/Hong_Kong').startOf('day').isSame(checkDate.tz('Asia/Hong_Kong').startOf('day'), 'day');
-                            } catch (error) {
-                              return true;
-                            }
-                          }));
-                        }
-                      }}
-                    />
-                    <Typography variant="body2">
-                      {formatDateDisplay(date)} ({date.format('ddd')})
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-
-              <Typography variant="subtitle1" gutterBottom sx={{ mt: 4, fontWeight: 600, color: 'primary.main', mb: 2 }}>
-                {t('schedule.timeAndLeave')}
-              </Typography>
-              <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 1, fontWeight: 600, color: 'primary.main', mb: 2 }}>
+                  {t('schedule.timeAndLeave')}
+                </Typography>
+                <Grid container spacing={2}>
                 <Grid item xs={6}>
                   <TextField
                     label={t('schedule.startTime')}
@@ -3154,9 +3303,9 @@ const Schedule = ({ noLayout = false }) => {
                     </Select>
                   </FormControl>
                 </Grid>
+                </Grid>
               </Grid>
-
-            </Box>
+            </Grid>
           </DialogContent>
           <DialogActions sx={{ p: 3, pt: 2, gap: 1 }}>
             <Button 
