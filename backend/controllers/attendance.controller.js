@@ -157,6 +157,8 @@ class AttendanceController {
         
         if (clockRecords.length > 0) {
           await ClockRecord.createBatch(clockRecords);
+          const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+          monthlySummaryController.syncAttendanceToMonthlySummary(user.id, finalAttendanceDate).catch(e => console.error('[createAttendance] sync monthly summary:', e));
         }
       }
       
@@ -331,6 +333,8 @@ class AttendanceController {
         
         if (clockRecords.length > 0) {
           await ClockRecord.createBatch(clockRecords);
+          const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+          monthlySummaryController.syncAttendanceToMonthlySummary(user.id, finalAttendanceDate).catch(e => console.error('[updateAttendance] sync monthly summary:', e));
         }
       }
       
@@ -385,6 +389,10 @@ class AttendanceController {
         .where('employee_number', user.employee_number)
         .where('attendance_date', attendance_date)
         .delete();
+
+      const finalDate = typeof attendance_date === 'string' ? attendance_date.split('T')[0] : attendance_date;
+      const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+      monthlySummaryController.syncAttendanceToMonthlySummary(user.id, finalDate).catch(e => console.error('[deleteAttendance] sync monthly summary:', e));
 
       res.json({ message: '考勤記錄刪除成功（已從 clock_records 表刪除）' });
     } catch (error) {
@@ -898,6 +906,24 @@ class AttendanceController {
       // 批量插入打卡記錄
       const insertedRecords = await ClockRecord.createBatch(clockRecords);
 
+      const toSync = [];
+      const seen = new Set();
+      for (const r of clockRecords) {
+        const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : r.attendance_date;
+        const key = `${r.employee_number}_${dateStr}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
+        }
+      }
+      const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+      for (const s of toSync) {
+        const u = await User.findByEmployeeNumber(s.employee_number);
+        if (u && u.id) {
+          monthlySummaryController.syncAttendanceToMonthlySummary(u.id, s.attendance_date).catch(e => console.error('[importClockRecordsFromCSV] sync monthly summary:', e));
+        }
+      }
+
       res.status(201).json({
         message: 'CSV導入成功',
         imported_count: insertedRecords.length,
@@ -937,7 +963,7 @@ class AttendanceController {
 
       const existingRecords = await knex('clock_records')
         .whereIn('id', recordIds)
-        .select('id', 'employee_number');
+        .select('id', 'employee_number', 'attendance_date');
 
       // 檢查權限：獲取所有涉及的員工編號，檢查用戶是否有權限
       if (!isSystemAdmin) {
@@ -1004,6 +1030,26 @@ class AttendanceController {
         });
       }
 
+      const updatedIds = new Set(updates.map(u => u.id));
+      const toSync = [];
+      for (const r of existingRecords) {
+        if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
+          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
+        }
+      }
+      const seen = new Set();
+      const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+      for (const s of toSync) {
+        const key = `${s.employee_number}_${s.attendance_date}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const u = await User.findByEmployeeNumber(s.employee_number);
+        if (u && u.id) {
+          monthlySummaryController.syncAttendanceToMonthlySummary(u.id, s.attendance_date).catch(e => console.error('[updateClockRecordsValidity] sync monthly summary:', e));
+        }
+      }
+
       res.json({ 
         message: '打卡記錄更新成功',
         updated_count: updates.length,
@@ -1044,7 +1090,7 @@ class AttendanceController {
 
       const existingRecords = await knex('clock_records')
         .whereIn('id', recordIds)
-        .select('id', 'employee_number');
+        .select('id', 'employee_number', 'attendance_date');
 
       // 檢查權限：獲取所有涉及的員工編號，檢查用戶是否有權限
       if (!isSystemAdmin) {
@@ -1120,6 +1166,26 @@ class AttendanceController {
         });
       }
 
+      const updatedIds = new Set(updates.map(u => u.id));
+      const toSync = [];
+      for (const r of existingRecords) {
+        if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
+          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
+        }
+      }
+      const seen = new Set();
+      const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+      for (const s of toSync) {
+        const key = `${s.employee_number}_${s.attendance_date}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const u = await User.findByEmployeeNumber(s.employee_number);
+        if (u && u.id) {
+          monthlySummaryController.syncAttendanceToMonthlySummary(u.id, s.attendance_date).catch(e => console.error('[updateClockRecordsTime] sync monthly summary:', e));
+        }
+      }
+
       res.json({ 
         message: '打卡記錄時間更新成功',
         updated_count: updates.length,
@@ -1160,7 +1226,7 @@ class AttendanceController {
 
       const existingRecords = await knex('clock_records')
         .whereIn('id', recordIds)
-        .select('id', 'employee_number');
+        .select('id', 'employee_number', 'attendance_date');
 
       // 檢查權限：獲取所有涉及的員工編號，檢查用戶是否有權限
       if (!isSystemAdmin) {
@@ -1257,6 +1323,26 @@ class AttendanceController {
           message: '沒有成功更新任何記錄',
           errors: errors.length > 0 ? errors : undefined
         });
+      }
+
+      const updatedIds = new Set(updates.map(u => u.id));
+      const toSync = [];
+      for (const r of existingRecords) {
+        if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
+          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
+        }
+      }
+      const seen = new Set();
+      const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
+      for (const s of toSync) {
+        const key = `${s.employee_number}_${s.attendance_date}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const u = await User.findByEmployeeNumber(s.employee_number);
+        if (u && u.id) {
+          monthlySummaryController.syncAttendanceToMonthlySummary(u.id, s.attendance_date).catch(e => console.error('[updateClockRecordsDetails] sync monthly summary:', e));
+        }
       }
 
       res.json({ 

@@ -1087,6 +1087,117 @@ class MonthlyAttendanceSummaryController {
    * - 儲存喺 DB 表 monthly_attendance_summaries 嘅 daily_data（JSON），每個 day 有 schedule、late_minutes、total_work_hours 等
    * - 當用戶喺 /schedule 改編更後，要同步更新並用新排班重算該日（遲到、Break、總工時、超時、應計超時），月結表先會顯示最新
    */
+  /**
+   * 喺 /attendance 新增或更新打卡時間後，同步月結表嘅該日數據
+   * 會重新計算：遲到(分)、Break時間(分鐘)、全日上班總時數、超時工作時間、應計工作時數
+   */
+  async syncAttendanceToMonthlySummary(user_id, attendance_date) {
+    if (!user_id || !attendance_date) return;
+    try {
+      const dateStr = this.formatDateToUTC8(attendance_date);
+      if (!dateStr) return;
+      const [year, month] = dateStr.split('-').map(Number);
+
+      const user = await User.findById(user_id);
+      if (!user || !user.employee_number) return;
+
+      const ClockRecord = require('../database/models/ClockRecord');
+      const clockRecords = await ClockRecord.findByEmployeeAndDate(user.employee_number, dateStr);
+      const attendanceData = {
+        attendance_date: dateStr,
+        clock_records: clockRecords.map(r => ({
+          id: r.id,
+          employee_number: r.employee_number,
+          name: r.name,
+          branch_code: r.branch_code,
+          attendance_date: typeof r.attendance_date === 'string' ? r.attendance_date : (r.attendance_date ? `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}` : null),
+          clock_time: r.clock_time,
+          in_out: r.in_out,
+          is_valid: r.is_valid,
+          remarks: r.remarks
+        }))
+      };
+
+      const Schedule = require('../database/models/Schedule');
+      const LeaveApplication = require('../database/models/LeaveApplication');
+      const userSchedules = await Schedule.findAll({
+        user_id: user_id,
+        start_date: dateStr,
+        end_date: dateStr
+      });
+      const scheduleRecord = userSchedules && userSchedules.length > 0 ? userSchedules[0] : null;
+
+      let approvedLeaves = [];
+      try {
+        const leaveResult = await LeaveApplication.findAll({
+          user_id: user_id,
+          status: 'approved',
+          start_date_from: dateStr,
+          end_date_to: dateStr
+        });
+        approvedLeaves = Array.isArray(leaveResult?.applications)
+          ? leaveResult.applications.filter(leave => !leave.is_reversed && !leave.is_reversal_transaction)
+          : [];
+      } catch (e) {
+        console.error('[syncAttendanceToMonthlySummary] Get approved leaves error:', e);
+      }
+
+      let scheduleData = null;
+      if (approvedLeaves.length > 0) {
+        const leave = approvedLeaves[0];
+        scheduleData = {
+          id: scheduleRecord?.id || null,
+          store_id: scheduleRecord?.store_id || null,
+          start_time: scheduleRecord?.start_time || null,
+          end_time: scheduleRecord?.end_time || null,
+          leave_type_name_zh: leave.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+          leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leave, dateStr) : scheduleRecord?.leave_session || null,
+          is_approved_leave: true
+        };
+      } else if (scheduleRecord) {
+        scheduleData = {
+          id: scheduleRecord.id || null,
+          store_id: scheduleRecord.store_id || null,
+          start_time: scheduleRecord.start_time || null,
+          end_time: scheduleRecord.end_time || null,
+          leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+          leave_session: scheduleRecord.leave_session || null,
+          is_approved_leave: false
+        };
+      }
+
+      const employmentMode = (user.position_employment_mode || user.employment_mode || '').toString().trim().toUpperCase();
+      const calculatedDay = await this.calculateDailyAttendance(attendanceData, scheduleData || {}, employmentMode);
+
+      let summary = await MonthlyAttendanceSummary.findByUserAndMonth(user_id, year, month);
+      let dailyData = summary ? (Array.isArray(summary.daily_data) ? summary.daily_data : (typeof summary.daily_data === 'string' ? JSON.parse(summary.daily_data || '[]') : [])) : [];
+
+      const dayIndex = dailyData.findIndex(d => d && d.date === dateStr);
+      if (dayIndex >= 0) {
+        dailyData[dayIndex] = calculatedDay;
+      } else {
+        dailyData.push(calculatedDay);
+        dailyData.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      }
+
+      if (summary) {
+        await MonthlyAttendanceSummary.update(summary.id, { daily_data: dailyData });
+      } else {
+        await MonthlyAttendanceSummary.create({
+          user_id: parseInt(user_id, 10),
+          year,
+          month,
+          daily_data: dailyData,
+          created_by_id: null,
+          updated_by_id: null
+        });
+      }
+      console.log(`[syncAttendanceToMonthlySummary] Synced ${dateStr} for user ${user_id}`);
+    } catch (error) {
+      console.error('[syncAttendanceToMonthlySummary] error:', error);
+    }
+  }
+
   async syncScheduleToMonthlySummary(user_id, schedule_date, schedulePayload) {
     if (!user_id || !schedule_date) return;
     try {
