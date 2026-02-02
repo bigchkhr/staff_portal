@@ -45,8 +45,8 @@ const MyAttendance = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  // 使用週視圖（從本週一開始）
-  const [currentWeek, setCurrentWeek] = useState(dayjs().startOf('isoWeek'));
+  // 使用週視圖（從本週一開始），以香港時區 UTC+8 計算
+  const [currentWeek, setCurrentWeek] = useState(() => dayjs().tz('Asia/Hong_Kong').startOf('isoWeek'));
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -61,10 +61,10 @@ const MyAttendance = () => {
     
     setLoading(true);
     try {
-      const weekStart = currentWeek.clone().startOf('isoWeek');
-      const weekEnd = currentWeek.clone().endOf('isoWeek');
-      const startDateStr = weekStart.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      const endDateStr = weekEnd.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      const weekStart = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
+      const weekEnd = weekStart.clone().add(6, 'day');
+      const startDateStr = weekStart.format('YYYY-MM-DD');
+      const endDateStr = weekEnd.format('YYYY-MM-DD');
       
       // 直接獲取當前用戶的打卡記錄
       const response = await axios.get('/api/attendances/my-clock-records', {
@@ -250,29 +250,15 @@ const MyAttendance = () => {
       
       let itemDateStr = item.attendance_date;
       
-      // 處理 Date 對象
+      // 處理 Date 對象：以 UTC+8 解析
       if (itemDateStr instanceof Date) {
         itemDateStr = dayjs(itemDateStr).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      } 
-      // 處理字符串
+      }
+      // 處理字符串：以香港時區解析，避免 "YYYY-MM-DD" 被當成 UTC 午夜
       else if (typeof itemDateStr === 'string') {
-        // 移除時間部分（如果有）
-        if (itemDateStr.includes('T')) {
-          itemDateStr = itemDateStr.split('T')[0];
-        }
-        // 移除空格後的時間部分（如果有）
-        if (itemDateStr.includes(' ')) {
-          itemDateStr = itemDateStr.split(' ')[0];
-        }
-        // 確保只取前10個字符（YYYY-MM-DD）
-        if (itemDateStr.length > 10) {
-          itemDateStr = itemDateStr.substring(0, 10);
-        }
-        // 使用 dayjs 標準化日期格式
-        const parsed = dayjs(itemDateStr);
-        if (parsed.isValid()) {
-          itemDateStr = parsed.format('YYYY-MM-DD');
-        }
+        const raw = itemDateStr.split('T')[0].split(' ')[0].substring(0, 10);
+        const parsed = dayjs.tz(raw, 'Asia/Hong_Kong');
+        itemDateStr = parsed.isValid() ? parsed.format('YYYY-MM-DD') : raw;
       }
       
       // 嚴格比較日期字符串
@@ -287,16 +273,19 @@ const MyAttendance = () => {
   };
 
   const handlePreviousWeek = () => {
-    setCurrentWeek(prev => prev.subtract(1, 'week').startOf('isoWeek'));
+    setCurrentWeek(prev => prev.tz('Asia/Hong_Kong').subtract(1, 'week').startOf('isoWeek'));
   };
 
   const handleNextWeek = () => {
-    setCurrentWeek(prev => prev.add(1, 'week').startOf('isoWeek'));
+    setCurrentWeek(prev => prev.tz('Asia/Hong_Kong').add(1, 'week').startOf('isoWeek'));
   };
 
   const handleToday = () => {
-    setCurrentWeek(dayjs().startOf('isoWeek'));
+    setCurrentWeek(dayjs().tz('Asia/Hong_Kong').startOf('isoWeek'));
   };
+
+  const weekStartHK = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
+  const weekEndHK = weekStartHK.clone().add(6, 'day');
 
   return (
     <Layout>
@@ -327,7 +316,7 @@ const MyAttendance = () => {
 
             <Box sx={{ mb: 2, textAlign: 'center' }}>
               <Typography variant="h6" color="text.secondary">
-                {currentWeek.startOf('isoWeek').format('YYYY-MM-DD')} ~ {currentWeek.endOf('isoWeek').format('YYYY-MM-DD')}
+                {weekStartHK.format('YYYY-MM-DD')} ~ {weekEndHK.format('YYYY-MM-DD')}
               </Typography>
             </Box>
 
@@ -339,7 +328,7 @@ const MyAttendance = () => {
               <Grid container spacing={2}>
                 {getWeekDates().map((date) => {
                   const item = getAttendanceForDate(date);
-                  const isToday = date.isSame(dayjs(), 'day');
+                  const isToday = date.tz('Asia/Hong_Kong').isSame(dayjs().tz('Asia/Hong_Kong'), 'day');
                   const dateStr = date.format('YYYY-MM-DD');
                   
                   return (
@@ -400,9 +389,9 @@ const MyAttendance = () => {
                                       sx={{ fontWeight: 600, mt: 0.5, display: 'block' }}
                                     />
                                   )}
-                                  {item.schedule.store_code && (
+                                  {(item.schedule.store_code || item.schedule.store_short_name) && (
                                     <Chip
-                                      label={item.schedule.store_code}
+                                      label={item.schedule.store_short_name || item.schedule.store_code}
                                       color="secondary"
                                       size="small"
                                       sx={{ fontWeight: 600, mt: 0.5 }}

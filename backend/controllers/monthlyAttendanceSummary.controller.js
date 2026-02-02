@@ -403,15 +403,28 @@ class MonthlyAttendanceSummaryController {
 
       const summaries = await MonthlyAttendanceSummary.findAll(filters);
       
-      // 為每個 summary 填充缺失的排班資料
+      // 為每個 summary 用「最新排班表」覆寫 daily_data 的排班顯示，令 /schedule 改動後月結表會及時顯示最新編更
       for (const summary of summaries) {
-        if (summary.daily_data && Array.isArray(summary.daily_data)) {
+        // 確保 daily_data 為可變陣列（DB 可能回傳 JSON 字串或已解析陣列）
+        let dailyData = summary.daily_data;
+        if (typeof dailyData === 'string') {
+          try {
+            dailyData = JSON.parse(dailyData);
+          } catch (e) {
+            console.error('[getMonthlySummaries] Failed to parse daily_data:', e);
+            dailyData = [];
+          }
+        }
+        if (!Array.isArray(dailyData)) dailyData = [];
+        summary.daily_data = dailyData;
+
+        if (dailyData.length > 0) {
           // 獲取該月的日期範圍
           const startDate = `${summary.year}-${String(summary.month).padStart(2, '0')}-01`;
           const lastDay = this.getLastDayOfMonthUTC8(summary.year, summary.month);
           const endDate = `${summary.year}-${String(summary.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
           
-          // 獲取該用戶該月的所有排班資料
+          // 獲取該用戶該月的所有排班資料（即時從 schedules 表讀取，包含 /schedule 最新改動）
           const userSchedules = await Schedule.findAll({
             user_id: summary.user_id,
             start_date: startDate,
@@ -464,15 +477,15 @@ class MonthlyAttendanceSummaryController {
             }
           });
           
-          // 為每個日期填充缺失的排班資料和分店資料
-          for (const day of summary.daily_data) {
-            if (!day.schedule && day.date) {
+          // 為每個日期用「最新排班表」覆寫 day.schedule，並同步到 attendance_data.schedule，確保前端顯示與詳情一致
+          for (const day of dailyData) {
+            if (day.date) {
               const scheduleRecord = scheduleByDate.get(day.date);
               const leaveRecord = leaveByDate.get(day.date);
+              let newSchedule = null;
               
               if (leaveRecord) {
-                // 如果有已批准的假期，使用假期信息
-                day.schedule = {
+                newSchedule = {
                   id: scheduleRecord?.id || null,
                   store_id: scheduleRecord?.store_id || null,
                   start_time: scheduleRecord?.start_time || null,
@@ -482,8 +495,7 @@ class MonthlyAttendanceSummaryController {
                   is_approved_leave: true
                 };
               } else if (scheduleRecord) {
-                // 如果沒有已批准的假期，但有排班記錄，使用排班記錄
-                day.schedule = {
+                newSchedule = {
                   id: scheduleRecord.id || null,
                   store_id: scheduleRecord.store_id || null,
                   start_time: scheduleRecord.start_time || null,
@@ -492,6 +504,10 @@ class MonthlyAttendanceSummaryController {
                   leave_session: scheduleRecord.leave_session || null,
                   is_approved_leave: false
                 };
+              }
+              day.schedule = newSchedule;
+              if (day.attendance_data && typeof day.attendance_data === 'object') {
+                day.attendance_data.schedule = newSchedule;
               }
             }
             
@@ -1063,6 +1079,60 @@ class MonthlyAttendanceSummaryController {
     } catch (error) {
       console.error('Delete monthly summary error:', error);
       res.status(500).json({ message: '刪除月結記錄失敗', error: error.message });
+    }
+  }
+
+  /**
+   * 月結表顯示嘅排班時間來源：
+   * - 儲存喺 DB 表 monthly_attendance_summaries 嘅 daily_data（JSON），每個 day 有 schedule、late_minutes、total_work_hours 等
+   * - 當用戶喺 /schedule 改編更後，要同步更新並用新排班重算該日（遲到、Break、總工時、超時、應計超時），月結表先會顯示最新
+   */
+  async syncScheduleToMonthlySummary(user_id, schedule_date, schedulePayload) {
+    if (!user_id || !schedule_date) return;
+    try {
+      const dateStr = this.formatDateToUTC8(schedule_date);
+      if (!dateStr) return;
+      const [year, month] = dateStr.split('-').map(Number);
+      const summary = await MonthlyAttendanceSummary.findByUserAndMonth(user_id, year, month);
+      if (!summary) return;
+      let dailyData = summary.daily_data;
+      if (typeof dailyData === 'string') {
+        try {
+          dailyData = JSON.parse(dailyData);
+        } catch (e) {
+          return;
+        }
+      }
+      if (!Array.isArray(dailyData)) return;
+      const dayIndex = dailyData.findIndex(d => d && d.date === dateStr);
+      if (dayIndex < 0) return;
+      const day = dailyData[dayIndex];
+
+      const newSchedule = {
+        id: schedulePayload.id ?? null,
+        store_id: schedulePayload.store_id ?? null,
+        start_time: schedulePayload.start_time ?? null,
+        end_time: schedulePayload.end_time ?? null,
+        leave_type_name_zh: schedulePayload.leave_type_name_zh ?? null,
+        leave_session: schedulePayload.leave_session ?? null,
+        is_approved_leave: schedulePayload.is_approved_leave ?? false
+      };
+
+      // 用新排班重算該日，令遲到(分鐘)、Break時間、全日上班總時數、超時工作時間、應計超時工作時數一齊更新
+      const user = await User.findById(user_id);
+      const employmentMode = user ? ((user.position_employment_mode || user.employment_mode || '').toString().trim().toUpperCase()) : null;
+      const attendanceData = {
+        attendance_date: dateStr,
+        clock_records: (day.attendance_data && Array.isArray(day.attendance_data.clock_records))
+          ? day.attendance_data.clock_records
+          : []
+      };
+      const calculatedDay = await this.calculateDailyAttendance(attendanceData, newSchedule, employmentMode);
+      dailyData[dayIndex] = calculatedDay;
+
+      await MonthlyAttendanceSummary.update(summary.id, { daily_data: dailyData });
+    } catch (error) {
+      console.error('[syncScheduleToMonthlySummary] error:', error);
     }
   }
 }

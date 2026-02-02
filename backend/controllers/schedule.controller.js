@@ -3,6 +3,7 @@ const DepartmentGroup = require('../database/models/DepartmentGroup');
 const User = require('../database/models/User');
 const LeaveApplication = require('../database/models/LeaveApplication');
 const knex = require('../config/database');
+const monthlyAttendanceSummaryController = require('./monthlyAttendanceSummary.controller');
 
 class ScheduleController {
   // 將日期轉換為 UTC+8 時區的 YYYY-MM-DD 格式
@@ -43,17 +44,34 @@ class ScheduleController {
     return `${year}-${month}-${day}`;
   }
 
-  // 取得原本群組的排班列表（原舖）
+  // 取得原本群組的排班列表（原舖），或員工自己嘅更表（/my-roster）
   async getSchedules(req, res) {
     try {
-      const { department_group_id, start_date, end_date } = req.query;
+      const { department_group_id, user_id, start_date, end_date } = req.query;
       
       console.log('=== 📥 收到排班查詢請求 ===');
       console.log('📋 前端請求參數:', {
         department_group_id,
+        user_id,
         start_date,
         end_date
       });
+      
+      // 「我的更表」模式：當傳入 user_id 時，只允許查自己嘅更表
+      if (user_id) {
+        const targetUserId = parseInt(user_id, 10);
+        const currentUserId = req.user?.id ? parseInt(req.user.id, 10) : null;
+        
+        if (currentUserId !== targetUserId) {
+          return res.status(403).json({ message: '只能查看自己的更表' });
+        }
+        
+        if (!start_date || !end_date) {
+          return res.status(400).json({ message: '查詢自己更表時必須指定 start_date 和 end_date' });
+        }
+        
+        return await this.getMyRosterSchedules(res, targetUserId, start_date, end_date);
+      }
       
       if (!department_group_id) {
         return res.status(400).json({ message: '必須指定群組ID' });
@@ -169,6 +187,119 @@ class ScheduleController {
       console.error('Get schedules error:', error);
       res.status(500).json({ 
         message: '取得排班表失敗', 
+        error: error.message
+      });
+    }
+  }
+
+  // 取得員工自己嘅更表（用於 /my-roster 頁面）
+  async getMyRosterSchedules(res, userId, startDate, endDate) {
+    try {
+      const db = require('../config/database');
+      
+      // 查詢該用戶嘅排班記錄（可能屬於多個群組，如原舖 + 幫舖）
+      let query = db('schedules')
+        .leftJoin('stores', 'schedules.store_id', 'stores.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+        .where('schedules.user_id', userId)
+        .whereBetween('schedules.schedule_date', [startDate, endDate])
+        .select(
+          'schedules.*',
+          'stores.id as store_id',
+          'stores.store_code as store_code',
+          'stores.store_short_name_ as store_short_name',
+          'leave_types.code as leave_type_code',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh'
+        )
+        .orderBy('schedules.schedule_date', 'asc');
+      
+      const schedules = await query;
+      
+      // 獲取該用戶所屬嘅部門群組（用於取得假期申請）
+      const userGroups = await DepartmentGroup.findByUserId(userId);
+      const groupIds = userGroups.map(g => g.id);
+      
+      // 獲取已批核嘅假期申請
+      let leaveApplications = [];
+      if (groupIds.length > 0) {
+        try {
+          leaveApplications = await this.getLeaveApplicationsForGroups(groupIds, startDate, endDate);
+        } catch (error) {
+          console.error('獲取我的更表假期申請時發生錯誤:', error);
+        }
+      }
+      
+      // 過濾出只係該用戶嘅假期
+      leaveApplications = leaveApplications.filter(leave => Number(leave.user_id) === Number(userId));
+      
+      // 將假期合併到排班記錄中
+      const schedulesWithLeaves = schedules.map(schedule => {
+        const scheduleDateStr = this.formatDateString(schedule.schedule_date);
+        return this.mergeLeaveForSchedule(schedule, scheduleDateStr, leaveApplications);
+      });
+      
+      // 為沒有排班記錄但有假期嘅日期創建記錄
+      const userMember = await User.findById(userId);
+      if (!userMember) {
+        return res.json({ schedules: schedulesWithLeaves });
+      }
+      
+      const member = {
+        id: userMember.id,
+        display_name: userMember.display_name,
+        name_zh: userMember.name_zh,
+        employee_number: userMember.employee_number
+      };
+      
+      const existingScheduleKeys = new Set();
+      schedulesWithLeaves.forEach(s => {
+        const dateStr = this.formatDateString(s.schedule_date);
+        existingScheduleKeys.add(dateStr);
+      });
+      
+      const leaveOnlySchedules = [];
+      // 純字符串疊代日期（YYYY-MM-DD），避免 Date 對象時區轉換導致星期日 miss
+      let [y, m, d] = startDate.split('-').map(Number);
+      const [endY, endM, endD] = endDate.split('-').map(Number);
+      
+      while (true) {
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (dateStr > endDate) break;
+        
+        if (!existingScheduleKeys.has(dateStr)) {
+          const primaryGroupId = groupIds[0] || null;
+          const leaveSchedule = this.createScheduleFromLeave(member, dateStr, primaryGroupId, leaveApplications);
+          if (leaveSchedule) {
+            leaveOnlySchedules.push(leaveSchedule);
+          }
+        }
+        
+        d++;
+        const daysInMonth = new Date(y, m, 0).getDate();
+        if (d > daysInMonth) {
+          d = 1;
+          m++;
+          if (m > 12) {
+            m = 1;
+            y++;
+          }
+        }
+      }
+      
+      const allSchedules = [...schedulesWithLeaves, ...leaveOnlySchedules];
+      
+      // 將 schedule_date 格式化為 YYYY-MM-DD 字串（UTC+8），確保前端不受伺服器時區影響
+      const formattedSchedules = allSchedules.map(s => ({
+        ...s,
+        schedule_date: this.formatDateToUTC8(s.schedule_date) || s.schedule_date
+      }));
+      
+      res.json({ schedules: formattedSchedules });
+    } catch (error) {
+      console.error('Get my roster schedules error:', error);
+      res.status(500).json({
+        message: '取得我的更表失敗',
         error: error.message
       });
     }
@@ -664,6 +795,22 @@ class ScheduleController {
       }));
 
       const createdSchedules = await Schedule.createBatch(schedulesData);
+      // 同步到月結表，令 /monthly-attendance-summary 顯示嘅排班時間與 schedules 表一致
+      for (const s of createdSchedules) {
+        await monthlyAttendanceSummaryController.syncScheduleToMonthlySummary(
+          s.user_id,
+          s.schedule_date,
+          {
+            id: s.id,
+            store_id: s.store_id,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            leave_type_name_zh: s.leave_type_name_zh,
+            leave_session: s.leave_session,
+            is_approved_leave: false
+          }
+        );
+      }
       res.status(201).json({ 
         schedules: createdSchedules, 
         message: `成功建立 ${createdSchedules.length} 筆排班記錄` 
@@ -737,6 +884,20 @@ class ScheduleController {
       if (store_id !== undefined) updateData.store_id = validStoreId;
 
       const updatedSchedule = await Schedule.update(id, updateData);
+      // 同步到月結表，令 /monthly-attendance-summary 顯示嘅排班時間與 schedules 表一致
+      await monthlyAttendanceSummaryController.syncScheduleToMonthlySummary(
+        updatedSchedule.user_id,
+        updatedSchedule.schedule_date,
+        {
+          id: updatedSchedule.id,
+          store_id: updatedSchedule.store_id,
+          start_time: updatedSchedule.start_time,
+          end_time: updatedSchedule.end_time,
+          leave_type_name_zh: updatedSchedule.leave_type_name_zh,
+          leave_session: updatedSchedule.leave_session,
+          is_approved_leave: false
+        }
+      );
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });
     } catch (error) {
       console.error('Update schedule error:', error);

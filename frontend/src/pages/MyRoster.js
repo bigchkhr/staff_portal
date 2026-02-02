@@ -43,7 +43,7 @@ const MyRoster = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [currentWeek, setCurrentWeek] = useState(dayjs().startOf('isoWeek'));
+  const [currentWeek, setCurrentWeek] = useState(() => dayjs().tz('Asia/Hong_Kong').startOf('isoWeek'));
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -58,10 +58,10 @@ const MyRoster = () => {
     
     setLoading(true);
     try {
-      const weekStart = currentWeek.clone().startOf('isoWeek');
-      const weekEnd = currentWeek.clone().endOf('isoWeek');
-      const startDateStr = weekStart.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      const endDateStr = weekEnd.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+      const weekStart = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
+      const weekEnd = weekStart.clone().add(6, 'day');
+      const startDateStr = weekStart.format('YYYY-MM-DD');
+      const endDateStr = weekEnd.format('YYYY-MM-DD');
       
       const response = await axios.get('/api/schedules', {
         params: {
@@ -80,47 +80,19 @@ const MyRoster = () => {
   };
 
   const getWeekDates = () => {
-    const dates = [];
     const weekStart = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
-    for (let i = 0; i < 7; i++) {
-      dates.push(weekStart.clone().add(i, 'day'));
-    }
-    return dates;
+    return Array.from({ length: 7 }, (_, i) =>
+      dayjs.tz(weekStart.format('YYYY-MM-DD'), 'Asia/Hong_Kong').add(i, 'day')
+    );
   };
 
   const getScheduleForDate = (date) => {
-    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = dayjs.tz(date, 'Asia/Hong_Kong').format('YYYY-MM-DD');
     return schedules.find(s => {
       if (!s || !s.schedule_date) return false;
-      
-      let sDateStr = s.schedule_date;
-      
-      // 處理 Date 對象
-      if (sDateStr instanceof Date) {
-        sDateStr = dayjs(sDateStr).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      } 
-      // 處理字符串
-      else if (typeof sDateStr === 'string') {
-        // 移除時間部分（如果有）
-        if (sDateStr.includes('T')) {
-          sDateStr = sDateStr.split('T')[0];
-        }
-        // 移除空格後的時間部分（如果有）
-        if (sDateStr.includes(' ')) {
-          sDateStr = sDateStr.split(' ')[0];
-        }
-        // 確保只取前10個字符（YYYY-MM-DD）
-        if (sDateStr.length > 10) {
-          sDateStr = sDateStr.substring(0, 10);
-        }
-        // 使用 dayjs 標準化日期格式
-        const parsed = dayjs(sDateStr);
-        if (parsed.isValid()) {
-          sDateStr = parsed.format('YYYY-MM-DD');
-        }
-      }
-      
-      // 嚴格比較日期字符串
+      const sDateStr = typeof s.schedule_date === 'string'
+        ? s.schedule_date.split('T')[0].substring(0, 10)
+        : dayjs(s.schedule_date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
       return sDateStr === dateStr;
     });
   };
@@ -168,20 +140,22 @@ const MyRoster = () => {
   };
 
   const handlePreviousWeek = () => {
-    setCurrentWeek(prev => prev.subtract(1, 'week').startOf('isoWeek'));
+    setCurrentWeek(prev => prev.tz('Asia/Hong_Kong').subtract(1, 'week').startOf('isoWeek'));
   };
 
   const handleNextWeek = () => {
-    setCurrentWeek(prev => prev.add(1, 'week').startOf('isoWeek'));
+    setCurrentWeek(prev => prev.tz('Asia/Hong_Kong').add(1, 'week').startOf('isoWeek'));
   };
 
   const handleToday = () => {
-    setCurrentWeek(dayjs().startOf('isoWeek'));
+    setCurrentWeek(dayjs().tz('Asia/Hong_Kong').startOf('isoWeek'));
   };
 
   const weekDates = getWeekDates();
-  const weekStartStr = currentWeek.startOf('isoWeek').format('YYYY-MM-DD');
-  const weekEndStr = currentWeek.endOf('isoWeek').format('YYYY-MM-DD');
+  const weekStartHK = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek');
+  const weekEndHK = weekStartHK.clone().add(6, 'day');
+  const weekStartStr = weekStartHK.format('YYYY-MM-DD');
+  const weekEndStr = weekEndHK.format('YYYY-MM-DD');
 
   return (
     <Layout>
@@ -224,7 +198,8 @@ const MyRoster = () => {
               <Grid container spacing={2}>
                 {weekDates.map((date) => {
                   const schedule = getScheduleForDate(date);
-                  const isToday = date.isSame(dayjs(), 'day');
+                  const todayHK = dayjs().tz('Asia/Hong_Kong');
+                  const isToday = dayjs.tz(date, 'Asia/Hong_Kong').isSame(todayHK, 'day');
                   const dateStr = date.format('YYYY-MM-DD');
                   
                   return (
@@ -289,13 +264,13 @@ const MyRoster = () => {
                                 </Box>
                               )}
 
-                              {schedule.store_code && (
+                              {(schedule.store_code || schedule.store_short_name) && (
                                 <Box>
                                   <Typography variant="caption" color="text.secondary" display="block">
                                     {t('schedule.store')}
                                   </Typography>
                                   <Chip
-                                    label={schedule.store_code}
+                                    label={schedule.store_short_name || schedule.store_code}
                                     color="secondary"
                                     size="small"
                                     sx={{ fontWeight: 600, mt: 0.5 }}
@@ -303,7 +278,7 @@ const MyRoster = () => {
                                 </Box>
                               )}
 
-                              {!schedule.start_time && !schedule.end_time && !getLeaveDisplayText(schedule) && !schedule.store_code && (
+                              {!schedule.start_time && !schedule.end_time && !getLeaveDisplayText(schedule) && !schedule.store_code && !schedule.store_short_name && (
                                 <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
                                   {t('myRoster.noSchedule')}
                                 </Typography>

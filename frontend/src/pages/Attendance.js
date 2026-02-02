@@ -1129,8 +1129,18 @@ const Attendance = ({ noLayout = false }) => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {Object.values(groupedData).map((userData) => (
-                      <TableRow key={userData.user_id}>
+                    {groupMembers.map((member) => {
+                      const userData = groupedData[member.id] || {
+                        user_id: member.id,
+                        employee_number: member.employee_number,
+                        display_name: member.display_name || member.name_zh || member.name,
+                        position_code: member.position_code || null,
+                        position_name: member.position_name || null,
+                        position_name_zh: member.position_name_zh || null,
+                        dates: {}
+                      };
+                      return (
+                      <TableRow key={member.id}>
                         <TableCell
                           sx={{
                             bgcolor: 'grey.50',
@@ -1367,7 +1377,67 @@ const Attendance = ({ noLayout = false }) => {
                           );
                         })}
                       </TableRow>
-                    ))}
+                    );})}
+                    {/* 統計行：顯示每日 FT 和 PT 數量（與 Schedule 一致） */}
+                    <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>
+                      <TableCell
+                        sx={{
+                          bgcolor: 'grey.100',
+                          borderRight: '2px solid',
+                          borderColor: 'divider',
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 2,
+                          fontWeight: 600,
+                          fontSize: '0.8rem',
+                          minWidth: 120,
+                          maxWidth: 120,
+                          boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+                        }}
+                      >
+                        {t('schedule.summary') || '統計'}
+                      </TableCell>
+                      {dates.map(date => {
+                        const dateStr = date.format('YYYY-MM-DD');
+                        let ftCount = 0;
+                        let ptCount = 0;
+                        groupMembers.forEach(member => {
+                          const item = groupedData[member.id]?.dates[dateStr];
+                          const hasScheduleTime = item?.schedule && (
+                            item.schedule.start_time || item.schedule.end_time
+                          );
+                          if (hasScheduleTime) {
+                            const employmentMode = member.position_employment_mode || member.employment_mode;
+                            if (employmentMode === 'FT') ftCount++;
+                            else if (employmentMode === 'PT') ptCount++;
+                          }
+                        });
+                        return (
+                          <TableCell
+                            key={dateStr}
+                            align="center"
+                            sx={{
+                              py: 1,
+                              borderRight: '1px solid',
+                              borderColor: 'divider',
+                              fontWeight: 600,
+                              fontSize: '0.75rem',
+                              bgcolor: 'grey.100',
+                              minWidth: 80,
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, alignItems: 'center' }}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main', fontSize: '0.7rem' }}>
+                                FT: {ftCount}
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: 'secondary.main', fontSize: '0.7rem' }}>
+                                PT: {ptCount}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>

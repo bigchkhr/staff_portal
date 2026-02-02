@@ -45,7 +45,7 @@ import {
   Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -67,6 +67,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => dayjs().tz('Asia/Hong_Kong').year());
@@ -97,10 +98,22 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     }
   }, [searchParams, users]);
 
+  // 當選了員工/年/月 或 進入本頁（pathname）時重新拉取，確保從 /schedule 改完編更回來會拿到最新 daily_data
   useEffect(() => {
     if (selectedUserId && selectedYear && selectedMonth) {
       fetchSummary();
     }
+  }, [selectedUserId, selectedYear, selectedMonth, location.pathname]);
+
+  // 當用戶從其他分頁返回本頁時重新拉取（例如在另一分頁改完編更後返回）
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && selectedUserId && selectedYear && selectedMonth) {
+        fetchSummary();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [selectedUserId, selectedYear, selectedMonth]);
 
   const fetchUsers = async () => {
@@ -841,6 +854,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
             >
               {t('attendance.monthlySummary') || '月結表'}
             </Typography>
+            {selectedUserId && selectedYear && selectedMonth && (
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={() => fetchSummary()}
+                disabled={loading}
+                sx={{ mb: 1, mr: 1 }}
+              >
+                {t('common.refresh') || '重新整理'}
+              </Button>
+            )}
             {summary && selectedUserId && (
               <Button
                 variant="contained"
