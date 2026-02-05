@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Paper,
@@ -80,11 +80,23 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedDayDetail, setSelectedDayDetail] = useState(null);
-  const [clockRecordsCache, setClockRecordsCache] = useState(new Map()); // 緩存已獲取的打卡記錄
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [stores, setStores] = useState([]);
 
   useEffect(() => {
     fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const fetchStores = async () => {
+      try {
+        const response = await axios.get('/api/stores');
+        setStores(response.data.stores || []);
+      } catch (error) {
+        console.error('Fetch stores error:', error);
+      }
+    };
+    fetchStores();
   }, []);
 
   // 從 URL 參數中獲取 employee_number 並設置 selectedUserId
@@ -135,28 +147,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         title: t('attendance.error') || '錯誤',
         text: error.response?.data?.message || '獲取用戶列表失敗'
       });
-    }
-  };
-
-  // 通過 employee_number 和日期獲取打卡記錄
-  const fetchClockRecordsByEmployeeAndDate = async (employeeNumber, date) => {
-    try {
-      // 使用新的 user-clock-records API 獲取該天的打卡記錄
-      const response = await axios.get('/api/attendances/user-clock-records', {
-        params: {
-          user_id: selectedUserId,
-          start_date: date,
-          end_date: date
-        }
-      });
-
-      if (response.data && response.data.clock_records && response.data.clock_records[date]) {
-        return response.data.clock_records[date] || [];
-      }
-      return [];
-    } catch (error) {
-      console.error(`Fetch clock records error for ${employeeNumber} on ${date}:`, error);
-      return [];
     }
   };
 
@@ -369,8 +359,9 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     if (!selectedUserId) return;
 
     setLoading(true);
+    setSummary(null); // 每次取數前清空，不顯示上一筆員工的資料
     try {
-      // 先嘗試從後端月結表 API 取得資料（已整合排班、例假、已批核假期等）
+      // 每次從後端即時取得月結表資料（排班、例假、已批核假期、考勤等）
       const listResponse = await axios.get('/api/monthly-attendance-summaries', {
         params: {
           user_id: selectedUserId,
@@ -382,21 +373,40 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       let summaries = listResponse.data?.summaries || [];
       let summaryData = summaries.length > 0 ? summaries[0] : null;
 
-      // 如果尚未產生該月份的月結表，則自動從考勤資料複製並計算
+      // 如果尚未產生該月份的月結表，則自動從考勤資料複製並計算（遲到、Break、全日上班總、超時、應計超時等都會一併計算）
       if (!summaryData) {
         const firstDayOfMonth = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`)
           .tz('Asia/Hong_Kong')
           .format('YYYY-MM-DD');
 
-        const copyResponse = await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
-          user_id: selectedUserId,
-          year: selectedYear,
-          month: selectedMonth,
-          // 後端目前要求 body 內要有 attendance_date，實際計算會按整個月份處理
-          attendance_date: firstDayOfMonth
-        });
+        try {
+          const copyResponse = await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
+            user_id: selectedUserId,
+            year: selectedYear,
+            month: selectedMonth,
+            // 後端目前要求 body 內要有 attendance_date，實際計算會按整個月份處理
+            attendance_date: firstDayOfMonth
+          });
 
-        summaryData = copyResponse.data?.summary || null;
+          summaryData = copyResponse.data?.summary || null;
+        } catch (copyError) {
+          const msg = copyError.response?.data?.message || copyError.message || '從考勤複製並計算失敗';
+          Swal.fire({
+            icon: 'warning',
+            title: t('attendance.error') || '錯誤',
+            text: msg + (msg.includes('部門群組') ? '。請確認該員工已分配部門群組。' : '')
+          });
+          setSummary({
+            id: null,
+            user_id: selectedUserId,
+            year: selectedYear,
+            month: selectedMonth,
+            daily_data: [],
+            created_at: null,
+            updated_at: null
+          });
+          return;
+        }
       }
 
       if (!summaryData) {
@@ -829,7 +839,58 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     }
   };
 
-  const dailyData = summary?.daily_data || [];
+  // 當有排班時間及考勤情況時，前端自行計算遲到、Break、全日上班總、超時、應計超時
+  const storesMap = useMemo(() => {
+    const map = {};
+    (stores || []).forEach(s => {
+      const code = s.store_code || s.store_code_;
+      const name = s.store_short_name_ ?? s.store_short_name;
+      if (code != null) map[String(code).trim()] = name || '';
+    });
+    return map;
+  }, [stores]);
+
+  const dailyData = useMemo(() => {
+    const raw = summary?.daily_data || [];
+    if (!selectedUserId || raw.length === 0) return raw;
+    const selectedUser = users.find(u => u.id === selectedUserId);
+    const employmentMode = (selectedUser?.position_employment_mode ?? selectedUser?.employment_mode ?? '').toString().trim().toUpperCase();
+
+    return raw.map(day => {
+      const schedule = day.schedule || day.attendance_data?.schedule || null;
+      const hasSchedule = schedule && (schedule.start_time || schedule.end_time || schedule.leave_type_name_zh);
+      const rawClockRecords = day.attendance_data?.clock_records ?? [];
+      const validOnly = day.valid_clock_records ?? [];
+      const clockRecords = Array.isArray(rawClockRecords) && rawClockRecords.length > 0
+        ? rawClockRecords
+        : Array.isArray(validOnly) && validOnly.length > 0
+          ? validOnly.map(r => ({ ...r, is_valid: true }))
+          : [];
+      const hasClockRecords = clockRecords.length > 0;
+
+      if (!hasSchedule && !hasClockRecords) return day;
+      // 有排班或考勤其一即可計算（例如只有考勤可算總工時，只有排班+考勤可算遲到/超時）
+      const attendanceItem = {
+        attendance_date: day.date,
+        schedule: schedule,
+        clock_records: clockRecords
+      };
+      const calculated = calculateDailyAttendance(attendanceItem, storesMap, employmentMode);
+      return {
+        ...day,
+        late_minutes: calculated.late_minutes !== null ? calculated.late_minutes : day.late_minutes,
+        break_duration: calculated.break_duration !== null ? calculated.break_duration : day.break_duration,
+        total_work_hours: calculated.total_work_hours !== null ? calculated.total_work_hours : day.total_work_hours,
+        overtime_hours: calculated.overtime_hours !== null ? calculated.overtime_hours : day.overtime_hours,
+        approved_overtime_minutes: calculated.approved_overtime_minutes !== null ? calculated.approved_overtime_minutes : day.approved_overtime_minutes,
+        store_short_name: calculated.store_short_name || day.store_short_name,
+        valid_clock_records: (calculated.valid_clock_records?.length ? calculated.valid_clock_records : null) ?? day.valid_clock_records,
+        early_leave: calculated.early_leave !== undefined ? calculated.early_leave : day.early_leave,
+        is_late: calculated.is_late !== undefined ? calculated.is_late : day.is_late,
+        is_absent: calculated.is_absent !== undefined ? calculated.is_absent : day.is_absent
+      };
+    });
+  }, [summary, selectedUserId, users, storesMap]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -1146,18 +1207,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                         validRecords = day.valid_clock_records;
                       }
                       
-                      // 方法2: 如果 valid_clock_records 為空，從 attendance_data.clock_records 中過濾所有有效的記錄
+                      // 方法2: 如果 valid_clock_records 為空，從 attendance_data.clock_records 中過濾所有有效的記錄（僅用後端回傳的資料，不暫存、不額外請求）
                       if (validRecords.length === 0 && day.attendance_data?.clock_records && Array.isArray(day.attendance_data.clock_records)) {
                         validRecords = day.attendance_data.clock_records
                           .filter(r => {
-                            // 支援多種 is_valid 格式，確保所有有效記錄都被識別
                             const isValid = r.is_valid === true || 
                                           r.is_valid === 'true' || 
                                           r.is_valid === 1 || 
                                           r.is_valid === '1' ||
                                           r.is_valid === 'True' ||
                                           (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true');
-                            return isValid && r.clock_time; // 確保有打卡時間
+                            return isValid && r.clock_time;
                           })
                           .sort((a, b) => {
                             const timeA = a.clock_time || '';
@@ -1165,98 +1225,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                             return timeA.localeCompare(timeB);
                           });
                       }
-                      
-                      // 方法3: 如果還是沒有記錄，或者 attendance_data 中沒有 clock_records，嘗試從緩存或 API 獲取
-                      const hasClockRecordsInData = day.attendance_data?.clock_records && Array.isArray(day.attendance_data.clock_records) && day.attendance_data.clock_records.length > 0;
-                      if ((validRecords.length === 0 || !hasClockRecordsInData) && day.date) {
-                        const selectedUser = users.find(u => u.id === selectedUserId);
-                        const employeeNumber = selectedUser?.employee_number;
-                        
-                        if (employeeNumber) {
-                          const cacheKey = `${employeeNumber}-${day.date}`;
-                          const cachedRecords = clockRecordsCache.get(cacheKey);
-                          
-                          if (cachedRecords && cachedRecords.length > 0) {
-                            // 使用緩存的記錄
-                            validRecords = cachedRecords;
-                            // 同時更新 summary 中的數據
-                            if (summary && !hasClockRecordsInData) {
-                              const updatedDailyData = [...(summary.daily_data || [])];
-                              const dayIndex = updatedDailyData.findIndex(d => d.date === day.date);
-                              if (dayIndex >= 0) {
-                                if (!updatedDailyData[dayIndex].attendance_data) {
-                                  updatedDailyData[dayIndex].attendance_data = {};
-                                }
-                                // 從緩存中獲取所有記錄（不僅僅是有效的）
-                                const allCachedRecords = clockRecordsCache.get(`${employeeNumber}-${day.date}-all`);
-                                updatedDailyData[dayIndex].attendance_data.clock_records = allCachedRecords || cachedRecords;
-                                updatedDailyData[dayIndex].valid_clock_records = cachedRecords;
-                                setSummary({ ...summary, daily_data: updatedDailyData });
-                              }
-                            }
-                          } else {
-                            // 異步獲取打卡記錄（不阻塞渲染）
-                            fetchClockRecordsByEmployeeAndDate(employeeNumber, day.date).then(clockRecords => {
-                              if (clockRecords && clockRecords.length > 0) {
-                                const valid = clockRecords
-                                  .filter(r => {
-                                    const isValid = r.is_valid === true || 
-                                                  r.is_valid === 'true' || 
-                                                  r.is_valid === 1 || 
-                                                  r.is_valid === '1' ||
-                                                  r.is_valid === 'True' ||
-                                                  (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true');
-                                    return isValid && r.clock_time;
-                                  })
-                                  .sort((a, b) => {
-                                    const timeA = a.clock_time || '';
-                                    const timeB = b.clock_time || '';
-                                    return timeA.localeCompare(timeB);
-                                  });
-                                
-                                // 更新緩存（保存所有記錄和有效記錄）
-                                const newCache = new Map(clockRecordsCache);
-                                newCache.set(cacheKey, valid);
-                                newCache.set(`${employeeNumber}-${day.date}-all`, clockRecords);
-                                setClockRecordsCache(newCache);
-                                
-                                // 更新 summary 中的數據
-                                if (summary) {
-                                  const updatedDailyData = [...(summary.daily_data || [])];
-                                  const dayIndex = updatedDailyData.findIndex(d => d.date === day.date);
-                                  if (dayIndex >= 0) {
-                                    if (!updatedDailyData[dayIndex].attendance_data) {
-                                      updatedDailyData[dayIndex].attendance_data = {};
-                                    }
-                                    updatedDailyData[dayIndex].attendance_data.clock_records = clockRecords;
-                                    updatedDailyData[dayIndex].valid_clock_records = valid;
-                                    setSummary({ ...summary, daily_data: updatedDailyData });
-                                  }
-                                }
-                              }
-                            }).catch(err => {
-                              console.error(`Error fetching clock records for ${employeeNumber} on ${day.date}:`, err);
-                            });
-                          }
-                        }
-                      }
-                      
-                      // 調試日誌（只對有記錄的日期）
-                      if (validRecords.length > 0) {
-                        console.log(`[MonthlyAttendanceSummary] Day ${day.date} - 將要顯示的有效打卡記錄:`, {
-                          date: day.date,
-                          validRecordsCount: validRecords.length,
-                          validRecords: validRecords.map((r, idx) => ({
-                            index: idx + 1,
-                            id: r.id,
-                            clock_time: r.clock_time,
-                            in_out: r.in_out,
-                            is_valid: r.is_valid,
-                            branch_code: r.branch_code
-                          }))
-                        });
-                      }
-                      
+
                       return (
                         <React.Fragment key={day.date || index}>
                           <TableRow>
@@ -1509,6 +1478,9 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
             >
               <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
                 {t('attendance.noMonthlySummary') || '沒有月結記錄'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 480, mx: 'auto' }}>
+                {t('attendance.noMonthlySummaryHint') || '選擇員工、年份與月份後，系統會自動從考勤複製並計算遲到、Break 時間、全日上班總時數、超時工作及應計超時工作時數，無需先生成月報。若仍無資料，請確認該員工已分配部門群組。'}
               </Typography>
             </Card>
           )}

@@ -1380,6 +1380,7 @@
     "isAbsent": "缺勤",
     "calculate": "计算",
     "noMonthlySummary": "没有月结记录",
+    "noMonthlySummaryHint": "选择员工、年份与月份后，系统会自动从考勤复制并计算迟到、Break 时间、全日上班总时数、超时工作及应计超时工作时数，无需先生成月报。若仍无资料，请确认该员工已分配部门群组。",
     "copyToMonthlySummary": "复制到月结表",
     "copyToMonthlySummaryConfirm": "确定要将此日期的考勤数据复制到月结表吗？",
     "copyToMonthlySummaryConfirmAll": "确定要为群组内所有成员生成 {{year}}年{{month}}月 的月结表吗？已有记录的员工将被略过。",

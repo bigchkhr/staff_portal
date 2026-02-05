@@ -90,16 +90,16 @@ class MonthlyAttendanceSummaryController {
     };
 
     // 獲取有效的打卡記錄（按時間排序）
-    // 確保正確識別有效的記錄（支援 boolean true、字符串 "true"、數字 1 等格式）
+    // 確保正確識別有效的記錄（支援 boolean、字串 "true"/"True"、數字 1、PostgreSQL 等）
     const allClockRecords = attendanceData.clock_records || [];
     const validRecords = allClockRecords
       .filter(r => {
-        // 檢查 is_valid 是否為 true（支援多種格式）
-        const isValid = r.is_valid === true || 
-                       r.is_valid === 'true' || 
-                       r.is_valid === 1 || 
+        const isValid = r.is_valid === true ||
+                       r.is_valid === 'true' ||
+                       (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true') ||
+                       r.is_valid === 1 ||
                        r.is_valid === '1';
-        return isValid;
+        return isValid && r.clock_time;
       })
       .sort((a, b) => {
         const timeA = a.clock_time || '';
@@ -424,6 +424,32 @@ class MonthlyAttendanceSummaryController {
           const lastDay = this.getLastDayOfMonthUTC8(summary.year, summary.month);
           const endDate = `${summary.year}-${String(summary.month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
           
+          // 從 database 即時取該員工該月所有打卡記錄（含最新 is_valid），避免月結表顯示舊的「未有效」
+          let clockRecordsByDate = new Map();
+          let employmentModeStr = '';
+          try {
+            const summaryUser = await User.findById(summary.user_id);
+            if (summaryUser) {
+              employmentModeStr = (summaryUser.position_employment_mode || summaryUser.employment_mode || '').toString().trim().toUpperCase();
+              if (summaryUser.employee_number) {
+                const freshClockRecords = await ClockRecord.findByEmployeeAndDateRange(
+                  summaryUser.employee_number,
+                  startDate,
+                  endDate
+                );
+                freshClockRecords.forEach(r => {
+                  const dateStr = r.attendance_date && (typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : null) || this.formatDateToUTC8(r.attendance_date);
+                  if (dateStr) {
+                    if (!clockRecordsByDate.has(dateStr)) clockRecordsByDate.set(dateStr, []);
+                    clockRecordsByDate.get(dateStr).push(r);
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            console.error('[getMonthlySummaries] Fetch fresh clock records error:', err);
+          }
+          
           // 獲取該用戶該月的所有排班資料（即時從 schedules 表讀取，包含 /schedule 最新改動）
           const userSchedules = await Schedule.findAll({
             user_id: summary.user_id,
@@ -509,6 +535,30 @@ class MonthlyAttendanceSummaryController {
               if (day.attendance_data && typeof day.attendance_data === 'object') {
                 day.attendance_data.schedule = newSchedule;
               }
+            }
+            
+            // 用 database 即時打卡記錄覆寫該日的 clock_records（含最新 is_valid），並重算有效記錄與遲到/Break/工時等
+            const freshRecords = clockRecordsByDate.get(day.date) || [];
+            if (freshRecords.length > 0) {
+              const attendanceData = {
+                attendance_date: day.date,
+                clock_records: freshRecords
+              };
+              const scheduleData = day.schedule || (day.attendance_data && day.attendance_data.schedule) || {};
+              const calculated = await this.calculateDailyAttendance(attendanceData, scheduleData, employmentModeStr);
+              day.attendance_data = day.attendance_data || {};
+              day.attendance_data.clock_records = freshRecords;
+              day.attendance_data.attendance_date = day.date;
+              day.valid_clock_records = calculated.valid_clock_records;
+              day.late_minutes = calculated.late_minutes;
+              day.break_duration = calculated.break_duration;
+              day.total_work_hours = calculated.total_work_hours;
+              day.overtime_hours = calculated.overtime_hours;
+              day.approved_overtime_minutes = calculated.approved_overtime_minutes;
+              day.store_short_name = calculated.store_short_name || day.store_short_name;
+              day.early_leave = calculated.early_leave;
+              day.is_late = calculated.is_late;
+              day.is_absent = calculated.is_absent;
             }
             
             // 填充缺失的分店資料：從第一個有效打卡記錄的 branch_code 查找 store_short_name

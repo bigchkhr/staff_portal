@@ -705,9 +705,9 @@ class AttendanceController {
                 return null;
               }
               
-              // 獲取有效的打卡記錄，按時間排序
+              // 獲取有效的打卡記錄，按時間排序（支援 DB 回傳 true/1/'true' 等）
               const validRecords = records
-                .filter(r => r.is_valid === true)
+                .filter(r => r.is_valid === true || r.is_valid === 1 || r.is_valid === 'true' || (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true'))
                 .sort((a, b) => {
                   const timeA = a.clock_time || '';
                   const timeB = b.clock_time || '';

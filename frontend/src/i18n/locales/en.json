@@ -1440,6 +1440,7 @@
     "isAbsent": "Absent",
     "calculate": "Calculate",
     "noMonthlySummary": "No monthly summary record",
+    "noMonthlySummaryHint": "After selecting employee, year and month, the system will automatically copy from attendance and calculate late minutes, break duration, total work hours, overtime and accrued OT. You do not need to generate a report first. If no data appears, ensure the employee is assigned to a department group.",
     "copyToMonthlySummary": "Copy to Monthly Summary",
     "copyToMonthlySummaryConfirm": "Are you sure you want to copy the attendance data for this date to the monthly summary?",
     "copyToMonthlySummaryConfirmAll": "Are you sure you want to generate monthly summary for all group members for {{year}}/{{month}}? Members with existing records will be skipped.",
