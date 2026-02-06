@@ -266,19 +266,11 @@ const Attendance = ({ noLayout = false }) => {
   };
 
   const handleOpenEditDialog = async (item) => {
-    console.log('handleOpenEditDialog - item:', item);
-    console.log('item.attendance_date:', item?.attendance_date);
-    console.log('item.clock_records:', item?.clock_records);
-    
-    // 確保 item 有必要的屬性
     if (!item) {
       console.error('handleOpenEditDialog: item is null or undefined');
       return;
     }
-    
-    // 確保 attendance_date 存在
     if (!item.attendance_date) {
-      console.error('handleOpenEditDialog: item.attendance_date is missing', item);
       Swal.fire({
         icon: 'error',
         title: t('attendance.error'),
@@ -286,48 +278,57 @@ const Attendance = ({ noLayout = false }) => {
       });
       return;
     }
-    
+
+    const dateStr = typeof item.attendance_date === 'string'
+      ? item.attendance_date.split('T')[0].split(' ')[0].substring(0, 10)
+      : `${item.attendance_date.getFullYear()}-${String(item.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(item.attendance_date.getDate()).padStart(2, '0')}`;
+
     setEditingAttendance(item);
     setEditClockInTime(item.attendance?.clock_in_time ? dayjs(item.attendance.clock_in_time, 'HH:mm:ss') : null);
     setEditClockOutTime(item.attendance?.clock_out_time ? dayjs(item.attendance.clock_out_time, 'HH:mm:ss') : null);
     setEditTimeOffStart(item.attendance?.time_off_start ? dayjs(item.attendance.time_off_start, 'HH:mm:ss') : null);
     setEditTimeOffEnd(item.attendance?.time_off_end ? dayjs(item.attendance.time_off_end, 'HH:mm:ss') : null);
-    // 設置店舖ID（從 schedule 中獲取），但需要從 stores 數據中查找對應的店舖
     const scheduleStoreId = item.schedule?.store_id;
     if (scheduleStoreId !== undefined && scheduleStoreId !== null) {
-      // 從 stores 數組中查找對應的店舖
       const foundStore = stores.find(store => Number(store.id) === Number(scheduleStoreId));
       setEditStoreId(foundStore ? Number(foundStore.id) : null);
     } else {
       setEditStoreId(null);
     }
-    
-    // 先使用 item 中的 clock_records
+
+    // 從 API 取得該員工當日的完整打卡記錄（含 branch_code、remarks），避免 comparison 資料缺欄位
     let clockRecords = item?.clock_records || [];
-    console.log('Initial clock_records from item:', clockRecords);
-    console.log('Initial clock_records length:', clockRecords.length);
-    console.log('item structure:', JSON.stringify(item, null, 2));
-    
-    // 確保 clock_records 是數組
-    if (!Array.isArray(clockRecords)) {
-      console.warn('clock_records is not an array, converting...', clockRecords);
-      clockRecords = [];
+    if (item.user_id && dateStr) {
+      try {
+        const res = await axios.get('/api/attendances/user-clock-records', {
+          params: { user_id: item.user_id, start_date: dateStr, end_date: dateStr }
+        });
+        const byDate = res.data?.clock_records || {};
+        const fetched = byDate[dateStr] ?? (Object.keys(byDate).length > 0 ? byDate[Object.keys(byDate)[0]] : null) ?? [];
+        if (Array.isArray(fetched) && fetched.length > 0) {
+          clockRecords = fetched;
+        }
+      } catch (err) {
+        console.warn('Fetch user-clock-records for edit modal failed, using item.clock_records:', err?.response?.data || err.message);
+      }
     }
-    
-    // 顯示所有記錄，保留它們當前的 is_valid 狀態，並添加可編輯的時間字段
+
+    if (!Array.isArray(clockRecords)) clockRecords = [];
+
+    const getBranchCode = (r) => (r.branch_code ?? r.branchCode ?? '') != null ? String(r.branch_code ?? r.branchCode ?? '') : '';
+    const getRemarks = (r) => (r.remarks ?? '') != null ? String(r.remarks ?? '') : '';
+
     setEditClockRecords(clockRecords.map(record => ({
       ...record,
-      is_valid: record.is_valid === true, // 保留當前的有效性狀態
-      editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '', // 可編輯的時間字符串
-      editableBranchCode: record.branch_code || '', // 可編輯的分行代碼
-      editableRemarks: record.remarks || '' // 可編輯的備註
+      branch_code: getBranchCode(record),
+      remarks: getRemarks(record),
+      is_valid: record.is_valid === true || record.is_valid === 1 || record.is_valid === 'true',
+      editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '',
+      editableBranchCode: getBranchCode(record),
+      editableRemarks: getRemarks(record)
     })));
-    
-    console.log('Final editClockRecords:', clockRecords);
-    
-    // 不再需要單獨的 editClockTimes，因為時間編輯直接在 editClockRecords 中
+
     setEditClockTimes([]);
-    
     setEditDialogOpen(true);
   };
 
@@ -448,60 +449,30 @@ const Attendance = ({ noLayout = false }) => {
             is_valid: isValid === true // 明確轉換為 boolean
           });
 
-          // 處理時間更新（如果有修改）
+          // 一按儲存：打卡時間、branch_code、remarks 必須同一筆一齊存入 DB
+          const editableBranchCode = record.editableBranchCode !== undefined && record.editableBranchCode !== null
+            ? String(record.editableBranchCode).trim()
+            : (record.branch_code != null ? String(record.branch_code).trim() : '');
+          const editableRemarks = record.editableRemarks !== undefined && record.editableRemarks !== null
+            ? String(record.editableRemarks).trim()
+            : (record.remarks != null ? String(record.remarks).trim() : '');
+
+          // 每筆有 id 的記錄：必定組裝一筆含 id + branch_code + remarks 的更新；有打卡時間則一併含 clock_time
+          const updateItem = {
+            id: record.id,
+            branch_code: editableBranchCode || null,
+            remarks: editableRemarks || null
+          };
+
           if (record.editableTime && record.editableTime.trim() !== '') {
-            // 驗證時間格式（支援 0-32 小時）
             const timeRegex = /^([0-2][0-9]|3[0-2]):[0-5][0-9]$/;
             if (!timeRegex.test(record.editableTime)) {
               throw new Error(t('attendance.invalidTimeFormat', { time: record.editableTime }));
             }
-
-            const timeStr = record.editableTime + ':00'; // 轉換為 HH:mm:ss 格式
-            const originalTime = record.clock_time ? 
-              (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '';
-            
-            if (originalTime !== record.editableTime) {
-              // 時間有變化，需要更新
-              timeUpdates.push({
-                id: record.id,
-                clock_time: timeStr
-              });
-            }
+            updateItem.clock_time = record.editableTime.trim() + ':00';
           }
 
-          // 處理 branch_code 和 remarks 更新（如果有修改）
-          const originalBranchCode = record.branch_code || '';
-          const originalRemarks = record.remarks || '';
-          const editableBranchCode = record.editableBranchCode !== undefined ? record.editableBranchCode : originalBranchCode;
-          const editableRemarks = record.editableRemarks !== undefined ? record.editableRemarks : originalRemarks;
-          
-          // 檢查是否有 branch_code 或 remarks 的變化
-          const branchCodeChanged = editableBranchCode !== originalBranchCode;
-          const remarksChanged = editableRemarks !== originalRemarks;
-          
-          if (branchCodeChanged || remarksChanged) {
-            // branch_code 或 remarks 有變化，需要更新
-            const existingUpdate = timeUpdates.find(u => u.id === record.id);
-            if (existingUpdate) {
-              // 如果已經有時間更新，添加 branch_code 和 remarks
-              if (branchCodeChanged) {
-                existingUpdate.branch_code = editableBranchCode || null;
-              }
-              if (remarksChanged) {
-                existingUpdate.remarks = editableRemarks || null;
-              }
-            } else {
-              // 如果時間更新列表中沒有這個記錄，創建一個新的更新項
-              const updateItem = { id: record.id };
-              if (branchCodeChanged) {
-                updateItem.branch_code = editableBranchCode || null;
-              }
-              if (remarksChanged) {
-                updateItem.remarks = editableRemarks || null;
-              }
-              timeUpdates.push(updateItem);
-            }
-          }
+          timeUpdates.push(updateItem);
         } else {
           // 新記錄，需要新增（只新增有效的記錄）
           if (record.is_valid && record.editableTime && record.editableTime.trim() !== '') {
@@ -541,7 +512,7 @@ const Attendance = ({ noLayout = false }) => {
       }
 
       if (creates.length > 0) {
-        // 先創建所有記錄，然後批量更新 branch_code 和 remarks
+        // 建立新記錄時一併把 clock_time、branch_code、remarks 傳給後端，一次寫入 DB
         for (const createData of creates) {
           await axios.post('/api/attendances', {
             employee_number: createData.employee_number,
@@ -552,55 +523,8 @@ const Attendance = ({ noLayout = false }) => {
             clock_out_time: null,
             time_off_start: null,
             time_off_end: null,
-            remarks: null
-          });
-        }
-        
-        // 如果有新記錄需要更新 branch_code 或 remarks，查詢並更新
-        const recordsToUpdate = [];
-        for (const createData of creates) {
-          if (createData.branch_code || createData.remarks) {
-            // 查詢剛創建的記錄（通過員工編號、日期和時間）
-            const clockTimeStr = createData.clock_time.includes(':') && createData.clock_time.split(':').length === 2 
-              ? createData.clock_time + ':00' 
-              : createData.clock_time;
-            const clockTimeForMatch = clockTimeStr.substring(0, 5); // HH:mm
-            
-            try {
-              const recordsResponse = await axios.get('/api/attendances/user-clock-records', {
-                params: {
-                  employee_number: createData.employee_number,
-                  attendance_date: createData.attendance_date
-                }
-              });
-              
-              // 找到匹配的記錄（通過時間匹配，選擇最接近的記錄）
-              const matchingRecord = recordsResponse.data.clock_records?.find(r => {
-                const recordTime = r.clock_time ? (typeof r.clock_time === 'string' ? r.clock_time.substring(0, 5) : r.clock_time) : '';
-                return recordTime === clockTimeForMatch;
-              });
-              
-              if (matchingRecord && matchingRecord.id) {
-                const updateData = { id: matchingRecord.id };
-                if (createData.branch_code) {
-                  updateData.branch_code = createData.branch_code;
-                }
-                if (createData.remarks) {
-                  updateData.remarks = createData.remarks;
-                }
-                recordsToUpdate.push(updateData);
-              }
-            } catch (error) {
-              console.error('Error querying new record for update:', error);
-              // 繼續處理其他記錄
-            }
-          }
-        }
-        
-        // 批量更新新創建的記錄的 branch_code 和 remarks
-        if (recordsToUpdate.length > 0) {
-          await axios.put('/api/attendances/update-clock-records-details', {
-            clock_records: recordsToUpdate
+            branch_code: createData.branch_code ?? null,
+            remarks: createData.remarks ?? null
           });
         }
       }
@@ -617,6 +541,9 @@ const Attendance = ({ noLayout = false }) => {
         }
       }
 
+      // 先重新取得考勤列表（含 branch_code、remarks），再關閉 dialog，確保第二次進入時會顯示
+      await fetchAttendanceComparison();
+
       setEditDialogOpen(false);
       setEditingAttendance(null);
       setEditClockInTime(null);
@@ -625,9 +552,7 @@ const Attendance = ({ noLayout = false }) => {
       setEditTimeOffEnd(null);
       setEditStoreId(null);
       setEditClockRecords([]);
-      
-      await fetchAttendanceComparison();
-      
+
       Swal.fire({
         icon: 'success',
         title: t('attendance.success'),
@@ -1013,46 +938,46 @@ const Attendance = ({ noLayout = false }) => {
                     {t('attendance.refresh')}
                   </Button>
                   {canEdit && (
-                    <>
-                      <Button
-                        variant={isEditMode ? "contained" : "outlined"}
-                        color={isEditMode ? "success" : "primary"}
-                        onClick={() => setIsEditMode(!isEditMode)}
-                        startIcon={<EditIcon />}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          boxShadow: isEditMode ? 3 : 1,
-                          '&:hover': {
-                            boxShadow: 3,
-                            transform: 'translateY(-2px)',
-                            transition: 'all 0.2s',
-                          },
-                        }}
-                      >
-                        {isEditMode ? t('schedule.exitEdit') : t('common.edit')}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        color="secondary"
-                        onClick={() => setCsvImportDialogOpen(true)}
-                        startIcon={<UploadIcon />}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          boxShadow: 1,
-                          '&:hover': {
-                            boxShadow: 3,
-                            transform: 'translateY(-2px)',
-                            transition: 'all 0.2s',
-                          },
-                        }}
-                      >
-                        {t('attendance.importCSV')}
-                      </Button>
-                    </>
+                    <Button
+                      variant={isEditMode ? "contained" : "outlined"}
+                      color={isEditMode ? "success" : "primary"}
+                      onClick={() => setIsEditMode(!isEditMode)}
+                      startIcon={<EditIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: isEditMode ? 3 : 1,
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {isEditMode ? t('schedule.exitEdit') : t('common.edit')}
+                    </Button>
+                  )}
+                  {departmentGroups.length > 0 && (
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={() => setCsvImportDialogOpen(true)}
+                      startIcon={<UploadIcon />}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        boxShadow: 1,
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'translateY(-2px)',
+                          transition: 'all 0.2s',
+                        },
+                      }}
+                    >
+                      {t('attendance.importCSV')}
+                    </Button>
                   )}
                 </Box>
               </Grid>
@@ -1224,10 +1149,6 @@ const Attendance = ({ noLayout = false }) => {
                                         attendance: null,
                                         clock_records: [] // 確保有 clock_records 屬性
                                       };
-                                      console.log('Opening edit dialog with item:', itemToEdit);
-                                      console.log('itemToEdit.clock_records:', itemToEdit.clock_records);
-                                      console.log('itemToEdit.clock_records type:', typeof itemToEdit.clock_records);
-                                      console.log('itemToEdit.clock_records isArray:', Array.isArray(itemToEdit.clock_records));
                                       handleOpenEditDialog(itemToEdit);
                                     }}
                                     sx={{ 
@@ -1692,7 +1613,7 @@ const Attendance = ({ noLayout = false }) => {
                                   />
                                   <TextField
                                     label={t('attendance.branchCode') || '分行代碼'}
-                                    value={record.editableBranchCode !== undefined ? record.editableBranchCode : (record.branch_code || '')}
+                                    value={(record.editableBranchCode !== undefined && record.editableBranchCode !== null) ? record.editableBranchCode : (record.branch_code != null ? String(record.branch_code) : '')}
                                     disabled={!canEdit}
                                     onChange={(e) => {
                                       if (!canEdit) return;
@@ -1715,7 +1636,7 @@ const Attendance = ({ noLayout = false }) => {
                                   />
                                   <TextField
                                     label={t('attendance.remarks') || '備註'}
-                                    value={record.editableRemarks !== undefined ? record.editableRemarks : (record.remarks || '')}
+                                    value={(record.editableRemarks !== undefined && record.editableRemarks !== null) ? record.editableRemarks : (record.remarks != null ? String(record.remarks) : '')}
                                     disabled={!canEdit}
                                     onChange={(e) => {
                                       if (!canEdit) return;

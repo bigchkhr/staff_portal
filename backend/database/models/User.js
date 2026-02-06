@@ -146,12 +146,12 @@ class User {
         .first();
       
       if (!hrGroup) {
-        console.log('[isHRMember] HR Group not found in delegation_groups');
+        // console.log('[isHRMember] HR Group not found in delegation_groups');
         return false;
       }
       
       if (!hrGroup.user_ids) {
-        console.log('[isHRMember] HR Group has no user_ids');
+        // console.log('[isHRMember] HR Group has no user_ids');
         return false;
       }
       
@@ -168,7 +168,7 @@ class User {
       }
       
       if (!Array.isArray(userIds)) {
-        console.log('[isHRMember] user_ids is not an array:', typeof userIds, userIds);
+        // console.log('[isHRMember] user_ids is not an array:', typeof userIds, userIds);
         return false;
       }
       
@@ -180,7 +180,7 @@ class User {
       
       return isMember;
     } catch (error) {
-      console.error('[isHRMember] Error:', error);
+      // console.error('[isHRMember] Error:', error);
       return false;
     }
   }
@@ -218,26 +218,26 @@ class User {
       .where('id', leaveApplicationId)
       .first();
     
-    if (!application) {
-      console.log(`[canViewApplication] 申請不存在: applicationId=${leaveApplicationId}`);
-      return false;
-    }
+    // if (!application) {
+    //   console.log(`[canViewApplication] 申請不存在: applicationId=${leaveApplicationId}`);
+    //   return false;
+    // }
 
-    // 檢查是否為 HR 成員
-    const isHRMember = await this.isHRMember(userId);
-    if (isHRMember) {
-      console.log(`[canViewApplication] 用戶是 HR 成員，允許查看: userId=${userId}, applicationId=${leaveApplicationId}`);
-      return true;
-    }
+    // // 檢查是否為 HR 成員
+    // const isHRMember = await this.isHRMember(userId);
+    // if (isHRMember) {
+    //   console.log(`[canViewApplication] 用戶是 HR 成員，允許查看: userId=${userId}, applicationId=${leaveApplicationId}`);
+    //   return true;
+    // }
 
     // 將 userId 轉換為數字以確保類型一致
     const userIdNum = Number(userId);
-    console.log(`[canViewApplication] 檢查權限: userId=${userId} (轉換為數字: ${userIdNum}), applicationId=${leaveApplicationId}`);
-    console.log(`[canViewApplication] 申請信息: user_id=${application.user_id} (type: ${typeof application.user_id}), checker_id=${application.checker_id} (type: ${typeof application.checker_id}), approver_1_id=${application.approver_1_id} (type: ${typeof application.approver_1_id}), approver_2_id=${application.approver_2_id} (type: ${typeof application.approver_2_id}), approver_3_id=${application.approver_3_id} (type: ${typeof application.approver_3_id})`);
+    // console.log(`[canViewApplication] 檢查權限: userId=${userId} (轉換為數字: ${userIdNum}), applicationId=${leaveApplicationId}`);
+    // console.log(`[canViewApplication] 申請信息: user_id=${application.user_id} (type: ${typeof application.user_id}), checker_id=${application.checker_id} (type: ${typeof application.checker_id}), approver_1_id=${application.approver_1_id} (type: ${typeof application.approver_1_id}), approver_2_id=${application.approver_2_id} (type: ${typeof application.approver_2_id}), approver_3_id=${application.approver_3_id} (type: ${typeof application.approver_3_id})`);
 
     // 檢查是否為申請人
     if (Number(application.user_id) === userIdNum) {
-      console.log(`[canViewApplication] 用戶是申請人，允許查看`);
+      // console.log(`[canViewApplication] 用戶是申請人，允許查看`);
       return true;
     }
 
@@ -248,28 +248,28 @@ class User {
       application.approver_2_id,
       application.approver_3_id
     ];
-    console.log(`[canViewApplication] 批核者 ID 列表: ${JSON.stringify(approverIds)}`);
+    // console.log(`[canViewApplication] 批核者 ID 列表: ${JSON.stringify(approverIds)}`);
     const isDirectApprover = approverIds.some(id => {
       if (id === null || id === undefined) {
         return false;
       }
       const idNum = Number(id);
       const match = idNum === userIdNum;
-      console.log(`[canViewApplication] 比較: id=${id} (轉換為數字: ${idNum}) === userIdNum=${userIdNum} => ${match}`);
+      // console.log(`[canViewApplication] 比較: id=${id} (轉換為數字: ${idNum}) === userIdNum=${userIdNum} => ${match}`);
       return match;
     });
 
-    if (isDirectApprover) {
-      console.log(`[canViewApplication] 用戶是直接批核者，允許查看`);
-      return true;
-    }
+    // if (isDirectApprover) {
+    //   console.log(`[canViewApplication] 用戶是直接批核者，允許查看`);
+    //   return true;
+    // }
 
     // 檢查是否屬於批核流程中任何階段的授權群組
     // 修改邏輯：只要用戶屬於批核流程中任何階段的授權群組，且該階段已設置（有對應的 approver_id），都應該能看到申請
     const DepartmentGroup = require('./DepartmentGroup');
     const userDelegationGroups = await this.getDelegationGroups(userId);
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
-    console.log(`[canViewApplication] 用戶的授權群組 ID: ${JSON.stringify(userDelegationGroupIds)}`);
+    // console.log(`[canViewApplication] 用戶的授權群組 ID: ${JSON.stringify(userDelegationGroupIds)}`);
 
     if (userDelegationGroupIds.length === 0) {
       console.log(`[canViewApplication] 用戶不屬於任何授權群組，拒絕訪問`);
@@ -278,12 +278,12 @@ class User {
 
     // 獲取申請人所屬的部門群組
     const departmentGroups = await DepartmentGroup.findByUserId(application.user_id);
-    console.log(`[canViewApplication] 申請人所屬的部門群組數量: ${departmentGroups ? departmentGroups.length : 0}`);
+    // console.log(`[canViewApplication] 申請人所屬的部門群組數量: ${departmentGroups ? departmentGroups.length : 0}`);
     
     if (departmentGroups && departmentGroups.length > 0) {
       const deptGroup = departmentGroups[0];
       const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
-      console.log(`[canViewApplication] 批核流程步驟數: ${approvalFlow ? approvalFlow.length : 0}`);
+      // console.log(`[canViewApplication] 批核流程步驟數: ${approvalFlow ? approvalFlow.length : 0}`);
       
       // 檢查用戶是否屬於批核流程中任何階段的授權群組
       // 對於已完成的申請（非 pending），即使批核者 ID 為 null，只要用戶屬於該階段的授權群組，也應該允許查看
@@ -304,18 +304,18 @@ class User {
             stepIsSet = !!(application.approver_3_id);
           }
           
-          console.log(`[canViewApplication] 檢查步驟 ${step.level}: delegation_group_id=${step.delegation_group_id}, stepIsSet=${stepIsSet}, isCompleted=${isCompleted}`);
+          // console.log(`[canViewApplication] 檢查步驟 ${step.level}: delegation_group_id=${step.delegation_group_id}, stepIsSet=${stepIsSet}, isCompleted=${isCompleted}`);
           
           // 如果用戶屬於該階段的授權群組，且（該階段已設置 或 申請已完成），允許查看
           if (stepIsSet || isCompleted) {
-            console.log(`[canViewApplication] 用戶屬於批核流程中的 ${step.level} 階段授權群組，${stepIsSet ? '且該階段已設置' : '且申請已完成'}，允許查看`);
+            // console.log(`[canViewApplication] 用戶屬於批核流程中的 ${step.level} 階段授權群組，${stepIsSet ? '且該階段已設置' : '且申請已完成'}，允許查看`);
             return true;
           }
         }
       }
     }
 
-    console.log(`[canViewApplication] 所有權限檢查都失敗，拒絕訪問`);
+    // console.log(`[canViewApplication] 所有權限檢查都失敗，拒絕訪問`);
     return false;
   }
 

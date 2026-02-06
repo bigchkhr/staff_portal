@@ -78,7 +78,7 @@ const checkApprovalMembership = async (userId) => {
 // 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 與批核角色（checker/approver1/2/3）不受限制）
 const apiLimiter = rateLimit({
   windowMs: 10* 60 * 1000, // 10 分鐘
-  max: 150, // 限制 150 個請求
+  max: 200, // 限制 200 個請求
   message: { message: 'Too many requests, please try again later. 請求過於頻繁，請稍後再試' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -153,9 +153,9 @@ const apiLimiter = rateLimit({
 
 // 登入 API 的嚴格 Rate Limiting（防暴力破解，基於用戶）
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分鐘
-  max: 3, // 只允許 3 次嘗試
-  message: { message: 'Too many login attempts. Please try again in 15 minutes. 登入嘗試次數過多，請 15 分鐘後再試' },
+  windowMs: 10 * 60 * 1000, // 15 分鐘
+  max: 6, // 只允許 6 次嘗試
+  message: { message: 'Too many login attempts. Please try again in 10 minutes. 登入嘗試次數過多，請 10 分鐘後再試' },
   skipSuccessfulRequests: true, // 成功的請求不計入
   standardHeaders: true,
   legacyHeaders: false,

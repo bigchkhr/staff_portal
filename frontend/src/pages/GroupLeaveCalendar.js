@@ -128,13 +128,6 @@ const GroupLeaveCalendar = () => {
       const weekStart = currentWeek.clone().tz('Asia/Hong_Kong').startOf('isoWeek').format('YYYY-MM-DD');
       const weekEnd = currentWeek.clone().tz('Asia/Hong_Kong').endOf('isoWeek').format('YYYY-MM-DD');
       
-      console.log('Fetching leave applications with params:', {
-        selectedGroupIds,
-        weekStart,
-        weekEnd,
-        currentWeek: currentWeek.format('YYYY-MM-DD')
-      });
-      
       // 為每個選中的群組獲取假期申請數據
       const allLeaveApplications = [];
       
@@ -153,20 +146,7 @@ const GroupLeaveCalendar = () => {
             const testResponse = await axios.get('/api/leaves', { params: testParams });
             const allApplications = testResponse.data.applications || [];
             
-            console.log(`All approved leave applications for user ${member.id} (${member.employee_number}):`, allApplications.length, 'applications');
-            
             if (allApplications.length > 0) {
-              console.log(`Sample application dates:`, allApplications.slice(0, 3).map(app => ({
-                id: app.id,
-                start_date: app.start_date,
-                end_date: app.end_date,
-                status: app.status,
-                is_reversed: app.is_reversed,
-                is_cancellation_request: app.is_cancellation_request,
-                start_session: app.start_session,
-                end_session: app.end_session
-              })));
-              
               // 檢查是否有與本週重疊的申請（使用香港時區）
               const weekStartDate = dayjs.tz(weekStart, 'Asia/Hong_Kong').startOf('day');
               const weekEndDate = dayjs.tz(weekEnd, 'Asia/Hong_Kong').startOf('day');
@@ -193,8 +173,6 @@ const GroupLeaveCalendar = () => {
                 // 檢查是否有重疊：申請的開始日期 <= 週的結束日期 且 申請的結束日期 >= 週的開始日期
                 return appStart.isSameOrBefore(weekEndDate, 'day') && appEnd.isSameOrAfter(weekStartDate, 'day');
               });
-              
-              console.log(`Overlapping applications for user ${member.id}:`, overlappingApps.length, overlappingApps);
             }
             
             // 擴大查詢範圍，確保包含所有相關假期
@@ -210,27 +188,9 @@ const GroupLeaveCalendar = () => {
               end_date_to: expandedWeekEnd
             };
             
-            console.log(`Fetching leave applications for user ${member.id} (${member.employee_number}) with expanded date range params:`, {
-              ...params,
-              weekStart,
-              weekEnd,
-              expandedWeekStart,
-              expandedWeekEnd
-            });
-            
             const response = await axios.get('/api/leaves', { params });
             
             const applications = response.data.applications || [];
-            console.log(`Leave applications for user ${member.id} in expanded date range:`, applications.length, 'applications');
-            
-            if (applications.length > 0) {
-              console.log(`Application details:`, applications.map(app => ({
-                id: app.id,
-                start_date: app.start_date,
-                end_date: app.end_date,
-                status: app.status
-              })));
-            }
             
             // 過濾掉已取消或已銷假的申請，並排除銷假交易本身
             // 確保包含紙本批核的假期（paper-flow 和 e-flow 都要顯示）
@@ -273,15 +233,6 @@ const GroupLeaveCalendar = () => {
               const weekStartDate = dayjs.tz(weekStart, 'Asia/Hong_Kong').startOf('day');
               const weekEndDate = dayjs.tz(weekEnd, 'Asia/Hong_Kong').startOf('day');
               
-              console.log(`Processing application ${app.id}:`, {
-                original_start: app.start_date,
-                original_end: app.end_date,
-                parsed_start: startDate.format('YYYY-MM-DD'),
-                parsed_end: endDate.format('YYYY-MM-DD'),
-                week_start: weekStartDate.format('YYYY-MM-DD'),
-                week_end: weekEndDate.format('YYYY-MM-DD')
-              });
-              
               // 使用日期字符串數組來確保包含所有日期
               const dateRange = [];
               let currentDate = startDate.clone();
@@ -291,14 +242,6 @@ const GroupLeaveCalendar = () => {
                 dateRange.push(currentDate.format('YYYY-MM-DD'));
                 currentDate = currentDate.add(1, 'day').clone();
               }
-              
-              console.log(`Date range for application ${app.id}:`, {
-                start: startDate.format('YYYY-MM-DD'),
-                end: endDate.format('YYYY-MM-DD'),
-                dates: dateRange,
-                weekStart,
-                weekEnd
-              });
               
               // 遍歷所有日期
               dateRange.forEach((currentDateStr, index) => {
@@ -377,24 +320,6 @@ const GroupLeaveCalendar = () => {
             mergedSession = 'PM';
           }
           
-          console.log(`Merging leave records for user ${leave.user_id} on ${leave.schedule_date}:`, {
-            existing: {
-              is_morning_leave: existing.is_morning_leave,
-              is_afternoon_leave: existing.is_afternoon_leave,
-              leave_session: existing.leave_session
-            },
-            new: {
-              is_morning_leave: leave.is_morning_leave,
-              is_afternoon_leave: leave.is_afternoon_leave,
-              leave_session: leave.leave_session
-            },
-            merged: {
-              is_morning_leave: mergedIsMorning,
-              is_afternoon_leave: mergedIsAfternoon,
-              leave_session: mergedSession
-            }
-          });
-          
           leaveMap.set(key, {
             ...existing,
             is_morning_leave: mergedIsMorning,
@@ -408,23 +333,10 @@ const GroupLeaveCalendar = () => {
       
       const mergedLeaves = Array.from(leaveMap.values());
       
-      console.log('All leave applications (before merge):', allLeaveApplications.length);
-      console.log('Merged leave applications:', mergedLeaves.length);
-      
-      // 按用戶和日期排序，方便調試
       mergedLeaves.sort((a, b) => {
         if (a.user_id !== b.user_id) return a.user_id - b.user_id;
         return a.schedule_date.localeCompare(b.schedule_date);
       });
-      
-      console.log('Sample merged leaves (first 10):', mergedLeaves.slice(0, 10).map(l => ({
-        user_id: l.user_id,
-        schedule_date: l.schedule_date,
-        is_morning_leave: l.is_morning_leave,
-        is_afternoon_leave: l.is_afternoon_leave,
-        leave_session: l.leave_session,
-        leave_type_name_zh: l.leave_type_name_zh
-      })));
       
       setSchedules(mergedLeaves);
     } catch (error) {
@@ -486,22 +398,7 @@ const GroupLeaveCalendar = () => {
                          schedule.leave_type_id !== undefined && 
                          schedule.leave_type_id !== '';
     
-    const result = hasMorningLeave || hasAfternoonLeave || hasLeaveType;
-    if (result) {
-      console.log('isOnLeave check:', {
-        schedule_id: schedule.id,
-        user_id: schedule.user_id,
-        date: schedule.schedule_date,
-        is_morning_leave: schedule.is_morning_leave,
-        is_afternoon_leave: schedule.is_afternoon_leave,
-        leave_type_id: schedule.leave_type_id,
-        hasMorningLeave,
-        hasAfternoonLeave,
-        hasLeaveType,
-        result
-      });
-    }
-    return result;
+    return hasMorningLeave || hasAfternoonLeave || hasLeaveType;
   };
 
   const getLeaveDisplayText = (schedule) => {
@@ -805,11 +702,7 @@ const GroupLeaveCalendar = () => {
                           // 直接找出當天放假的員工
                           const dayMembersOnLeave = members.filter(member => {
                             const schedule = getScheduleForUserAndDate(member.id, date);
-                            const onLeave = isOnLeave(schedule);
-                            if (onLeave) {
-                              console.log(`Member ${member.employee_number} (${member.name_zh || member.name}) on leave on ${dateStr}:`, schedule);
-                            }
-                            return onLeave;
+                            return isOnLeave(schedule);
                           });
 
                           return (

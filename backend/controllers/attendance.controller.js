@@ -46,7 +46,8 @@ class AttendanceController {
         clock_out_time,
         time_off_start,
         time_off_end,
-        remarks
+        remarks,
+        branch_code: body_branch_code
       } = req.body;
 
       console.log('createAttendance - req.body:', req.body);
@@ -102,15 +103,19 @@ class AttendanceController {
       if (clock_in_time || clock_out_time || time_off_start || time_off_end) {
         const clockRecords = [];
         
+      const createBranchCode = body_branch_code != null ? String(body_branch_code).trim() : '';
+      const createRemarks = remarks != null ? String(remarks) : null;
+
         if (clock_in_time) {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
-            branch_code: '',
+            branch_code: createBranchCode || '',
             attendance_date: finalAttendanceDate,
             clock_time: clock_in_time,
             in_out: 'IN1',
             is_valid: true,
+            remarks: createRemarks,
             created_by_id: userId,
             updated_by_id: userId
           });
@@ -119,11 +124,12 @@ class AttendanceController {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
-            branch_code: '',
+            branch_code: createBranchCode || '',
             attendance_date: finalAttendanceDate,
             clock_time: time_off_start,
             in_out: 'OUT1',
             is_valid: true,
+            remarks: createRemarks,
             created_by_id: userId,
             updated_by_id: userId
           });
@@ -132,11 +138,12 @@ class AttendanceController {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
-            branch_code: '',
+            branch_code: createBranchCode || '',
             attendance_date: finalAttendanceDate,
             clock_time: time_off_end,
             in_out: 'IN2',
             is_valid: true,
+            remarks: createRemarks,
             created_by_id: userId,
             updated_by_id: userId
           });
@@ -145,11 +152,12 @@ class AttendanceController {
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
-            branch_code: '',
+            branch_code: createBranchCode || '',
             attendance_date: finalAttendanceDate,
             clock_time: clock_out_time,
             in_out: 'OUT2',
             is_valid: true,
+            remarks: createRemarks,
             created_by_id: userId,
             updated_by_id: userId
           });
@@ -748,23 +756,25 @@ class AttendanceController {
               };
             })(),
             clock_records: (() => {
-              // 使用基於 employee_number 的打卡記錄
-              // 確保 employee_number 和 date 都是字符串格式
+              // 使用基於 employee_number 的打卡記錄，並明確帶出 branch_code、remarks（避免前端第二次進入時消失）
               const empNum = member.employee_number ? String(member.employee_number).trim() : '';
               let dateStr;
               if (date instanceof Date) {
-                // 使用本地時間的年份、月份、日期，避免UTC轉換
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
                 dateStr = `${year}-${month}-${day}`;
               } else {
-                // 已經是字符串格式，直接使用（移除時間部分）
                 dateStr = String(date).split('T')[0].split(' ')[0];
               }
               const employeeKey = `${empNum}_${dateStr}`;
-              
-              return clockRecordsByEmployee[employeeKey] || [];
+              const rawRecords = clockRecordsByEmployee[employeeKey] || [];
+              // 正規化每筆記錄，確保 branch_code、remarks 一定存在
+              return rawRecords.map(r => ({
+                ...r,
+                branch_code: r.branch_code != null ? String(r.branch_code) : '',
+                remarks: r.remarks != null ? String(r.remarks) : ''
+              }));
             })()
           });
         }

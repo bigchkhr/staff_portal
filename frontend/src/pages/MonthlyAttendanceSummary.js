@@ -34,7 +34,6 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { 
   Calculate as CalculateIcon,
-  Refresh as RefreshIcon,
   Download as DownloadIcon,
   Visibility as VisibilityIcon,
   ExpandMore as ExpandMoreIcon,
@@ -238,7 +237,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       const storeCode = String(validRecords[0].branch_code).trim();
       if (storeCode && storesMap && storesMap[storeCode]) {
         result.store_short_name = storesMap[storeCode];
-        console.log(`[calculateDailyAttendance] Date ${dateStr}: Found store_short_name "${result.store_short_name}" for store_code "${storeCode}"`);
       } else if (storeCode) {
         console.warn(`[calculateDailyAttendance] Date ${dateStr}: No store found for store_code "${storeCode}"`);
       }
@@ -915,17 +913,6 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
             >
               {t('attendance.monthlySummary') || '月結表'}
             </Typography>
-            {selectedUserId && selectedYear && selectedMonth && (
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={() => fetchSummary()}
-                disabled={loading}
-                sx={{ mb: 1, mr: 1 }}
-              >
-                {t('common.refresh') || '重新整理'}
-              </Button>
-            )}
             {summary && selectedUserId && (
               <Button
                 variant="contained"

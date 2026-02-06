@@ -86,25 +86,8 @@ const MyAttendance = () => {
           clock_records: item.clock_records || []
         };
         
-        // 調試日誌
-        if (mappedItem.clock_records.length > 0) {
-          const validCount = mappedItem.clock_records.filter(r => r.is_valid === true).length;
-          const invalidCount = mappedItem.clock_records.filter(r => r.is_valid === false || r.is_valid === null || r.is_valid === undefined).length;
-          console.log(`Date ${mappedItem.attendance_date} has ${mappedItem.clock_records.length} clock records (${validCount} valid, ${invalidCount} invalid/unreviewed):`, 
-            mappedItem.clock_records.map(r => ({
-              time: r.clock_time,
-              in_out: r.in_out,
-              is_valid: r.is_valid
-            }))
-          );
-        }
-        
         return mappedItem;
       });
-      
-      console.log(`Total attendance data: ${myData.length} days`);
-      console.log(`Days with clock records: ${myData.filter(d => d.clock_records && d.clock_records.length > 0).length}`);
-      console.log(`Total clock records: ${myData.reduce((sum, d) => sum + (d.clock_records ? d.clock_records.length : 0), 0)}`);
       
       setAttendanceData(myData);
     } catch (error) {

@@ -297,33 +297,6 @@ const Schedule = ({ noLayout = false }) => {
           // 如果獲取幫舖排班失敗，不影響原本群組的排班顯示
         }
       }
-      console.log('Fetched schedules:', schedulesData);
-      console.log('Fetched helper schedules:', helperSchedulesData);
-      console.log('Schedule dates:', schedulesData.map(s => ({ 
-        id: s.id, 
-        user_id: s.user_id, 
-        schedule_date: s.schedule_date, 
-        type: typeof s.schedule_date,
-        isDate: s.schedule_date instanceof Date,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        leave_type_name_zh: s.leave_type_name_zh,
-        leave_session: s.leave_session
-      })));
-      
-      // 調試：檢查有時間的排班記錄
-      const schedulesWithTime = schedulesData.filter(s => s.start_time || s.end_time);
-      console.log(`Schedules with time: ${schedulesWithTime.length}`, schedulesWithTime.slice(0, 5).map(s => ({
-        id: s.id,
-        user_id: s.user_id,
-        schedule_date: s.schedule_date,
-        start_time: s.start_time,
-        end_time: s.end_time
-      })));
-      console.log('Date range:', { 
-        start: startDate.format('YYYY-MM-DD'), 
-        end: endDate.format('YYYY-MM-DD') 
-      });
       setSchedules(schedulesData);
       setHelperSchedules(helperSchedulesData);
     } catch (error) {
@@ -557,15 +530,6 @@ const Schedule = ({ noLayout = false }) => {
       }
       
       const matches = sUserId === userIdNum && sDateStr === dateStr;
-      if (matches) {
-        console.log('Found schedule match:', { 
-          userId, 
-          sUserId, 
-          dateStr, 
-          sDateStr, 
-          schedule: s 
-        });
-      }
       return matches;
     });
     return found;
@@ -611,7 +575,6 @@ const Schedule = ({ noLayout = false }) => {
           dateStr = dateObj.format('YYYY-MM-DD');
         }
       }
-      console.log('Opening edit dialog for date:', { original: date, formatted: dateStr, isDayjs: dayjs.isDayjs(date) });
     } catch (error) {
       console.error('Error formatting date in handleOpenEditDialog:', error, date);
       return;
@@ -2405,16 +2368,6 @@ const Schedule = ({ noLayout = false }) => {
                       {dates.map(date => {
                         const schedule = getScheduleForUserAndDate(member.id, date);
                         const dateStr = date.format('YYYY-MM-DD');
-                        // 調試：檢查 schedule 資料
-                        if (schedule && schedule.leave_type_name_zh) {
-                          console.log('Schedule with leave:', {
-                            date: dateStr,
-                            user_id: member.id,
-                            leave_type_name_zh: schedule.leave_type_name_zh,
-                            leave_session: schedule.leave_session,
-                            has_session: !!schedule.leave_session
-                          });
-                        }
                         return (
                           <TableCell 
                             key={dateStr} 
