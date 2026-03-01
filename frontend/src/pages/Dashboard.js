@@ -415,6 +415,66 @@ const Dashboard = () => {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  // 是否為可預覽的檔案類型（PDF、圖片等）
+  const isPreviewableType = (fileType, fileName) => {
+    const mime = (fileType || '').toLowerCase();
+    const ext = (fileName || '').split('.').pop().toLowerCase();
+    if (/^application\/pdf$/i.test(mime) || ext === 'pdf') return true;
+    if (/^image\//i.test(mime) || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff'].includes(ext)) return true;
+    return false;
+  };
+
+  // 下載最新消息附件（透過 axios 帶認證，避免 window.open 無認證失敗）
+  const handleDownloadNewsAttachment = async (newsId, attachment) => {
+    try {
+      const response = await axios.get(
+        `/api/news/${newsId}/attachments/${attachment.id}/download`,
+        { responseType: 'blob' }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', attachment.file_name || 'attachment');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download attachment error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: t('common.error'),
+        text: error.response?.data?.message || t('dashboard.news.downloadFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
+        confirmButtonColor: '#3085d6'
+      });
+    }
+  };
+
+  // 預覽最新消息附件（PDF、圖片等於新分頁開啟）
+  const handlePreviewNewsAttachment = async (newsId, attachment) => {
+    try {
+      const response = await axios.get(
+        `/api/news/${newsId}/attachments/${attachment.id}/download`,
+        { params: { preview: '1' }, responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], { type: attachment.file_type || response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      // 延遲釋放 URL，讓新分頁有時間載入
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Preview attachment error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: t('common.error'),
+        text: error.response?.data?.message || t('dashboard.news.previewFailed'),
+        confirmButtonText: t('dashboard.news.confirm'),
+        confirmButtonColor: '#3085d6'
+      });
+    }
+  };
+
   // 發布消息
   const handleCreateNews = async () => {
     if (savingNews) return;
@@ -1199,14 +1259,26 @@ const Dashboard = () => {
                       <ListItem
                         key={attachment.id}
                         secondaryAction={
-                          <IconButton
-                            edge="end"
-                            onClick={() => {
-                              window.open(`/api/news/${viewingNews.id}/attachments/${attachment.id}/download`, '_blank');
-                            }}
-                          >
-                            <DownloadIcon />
-                          </IconButton>
+                          <Box component="span" sx={{ display: 'flex', gap: 0.5 }}>
+                            {isPreviewableType(attachment.file_type, attachment.file_name) && (
+                              <IconButton
+                                edge="end"
+                                size="small"
+                                onClick={() => handlePreviewNewsAttachment(viewingNews.id, attachment)}
+                                title={t('dashboard.news.preview')}
+                              >
+                                <VisibilityIcon />
+                              </IconButton>
+                            )}
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => handleDownloadNewsAttachment(viewingNews.id, attachment)}
+                              title={t('dashboard.news.download')}
+                            >
+                              <DownloadIcon />
+                            </IconButton>
+                          </Box>
                         }
                       >
                         <ListItemText

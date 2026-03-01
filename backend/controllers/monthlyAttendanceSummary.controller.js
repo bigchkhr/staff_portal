@@ -80,6 +80,8 @@ class MonthlyAttendanceSummaryController {
         start_time: scheduleData.start_time || null,
         end_time: scheduleData.end_time || null,
         leave_type_name_zh: scheduleData.leave_type_name_zh || null,
+        leave_type_name: scheduleData.leave_type_name || null,
+        leave_type_code: scheduleData.leave_type_code || null,
         leave_session: scheduleData.leave_session || null,
         is_approved_leave: scheduleData.is_approved_leave || false
       } : null,
@@ -517,6 +519,8 @@ class MonthlyAttendanceSummaryController {
                   start_time: scheduleRecord?.start_time || null,
                   end_time: scheduleRecord?.end_time || null,
                   leave_type_name_zh: leaveRecord.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+                  leave_type_name: leaveRecord.leave_type_name || scheduleRecord?.leave_type_name || null,
+                  leave_type_code: leaveRecord.leave_type_code || scheduleRecord?.leave_type_code || null,
                   leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leaveRecord, day.date) : scheduleRecord?.leave_session || null,
                   is_approved_leave: true
                 };
@@ -527,6 +531,8 @@ class MonthlyAttendanceSummaryController {
                   start_time: scheduleRecord.start_time || null,
                   end_time: scheduleRecord.end_time || null,
                   leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+                  leave_type_name: scheduleRecord.leave_type_name || null,
+                  leave_type_code: scheduleRecord.leave_type_code || null,
                   leave_session: scheduleRecord.leave_session || null,
                   is_approved_leave: false
                 };
@@ -897,6 +903,8 @@ class MonthlyAttendanceSummaryController {
             start_time: scheduleRecord?.start_time || null,
             end_time: scheduleRecord?.end_time || null,
             leave_type_name_zh: leaveRecord.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+            leave_type_name: leaveRecord.leave_type_name || scheduleRecord?.leave_type_name || null,
+            leave_type_code: leaveRecord.leave_type_code || scheduleRecord?.leave_type_code || null,
             leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leaveRecord, dateStr) : scheduleRecord?.leave_session || null,
             is_approved_leave: true
           };
@@ -908,6 +916,8 @@ class MonthlyAttendanceSummaryController {
             start_time: scheduleRecord.start_time || null,
             end_time: scheduleRecord.end_time || null,
             leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+            leave_type_name: scheduleRecord.leave_type_name || null,
+            leave_type_code: scheduleRecord.leave_type_code || null,
             leave_session: scheduleRecord.leave_session || null,
             is_approved_leave: false
           };
@@ -1042,6 +1052,8 @@ class MonthlyAttendanceSummaryController {
                 start_time: scheduleRecord?.start_time || null,
                 end_time: scheduleRecord?.end_time || null,
                 leave_type_name_zh: leave.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+                leave_type_name: leave.leave_type_name || scheduleRecord?.leave_type_name || null,
+                leave_type_code: leave.leave_type_code || scheduleRecord?.leave_type_code || null,
                 leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leave, dateStr) : scheduleRecord?.leave_session || null,
                 is_approved_leave: true
               };
@@ -1053,6 +1065,8 @@ class MonthlyAttendanceSummaryController {
                 start_time: scheduleRecord.start_time || null,
                 end_time: scheduleRecord.end_time || null,
                 leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+                leave_type_name: scheduleRecord.leave_type_name || null,
+                leave_type_code: scheduleRecord.leave_type_code || null,
                 leave_session: scheduleRecord.leave_session || null,
                 is_approved_leave: false
               };
@@ -1201,6 +1215,8 @@ class MonthlyAttendanceSummaryController {
           start_time: scheduleRecord?.start_time || null,
           end_time: scheduleRecord?.end_time || null,
           leave_type_name_zh: leave.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+          leave_type_name: leave.leave_type_name || scheduleRecord?.leave_type_name || null,
+          leave_type_code: leave.leave_type_code || scheduleRecord?.leave_type_code || null,
           leave_session: LeaveApplication.getSessionForDate ? LeaveApplication.getSessionForDate(leave, dateStr) : scheduleRecord?.leave_session || null,
           is_approved_leave: true
         };
@@ -1211,6 +1227,8 @@ class MonthlyAttendanceSummaryController {
           start_time: scheduleRecord.start_time || null,
           end_time: scheduleRecord.end_time || null,
           leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+          leave_type_name: scheduleRecord.leave_type_name || null,
+          leave_type_code: scheduleRecord.leave_type_code || null,
           leave_session: scheduleRecord.leave_session || null,
           is_approved_leave: false
         };

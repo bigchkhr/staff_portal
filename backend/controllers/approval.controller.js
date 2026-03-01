@@ -903,6 +903,22 @@ class ApprovalController {
           }
         }
         
+        // 方法4：若申請已被拒絕，且當前用戶屬於該申請批核流程中的任一階段（授權群組），則也顯示在批核記錄中，讓後續階段批核者（如 approver_3）能看到「被較早階段（如 approver_1）拒絕」的申請
+        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
+          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+          if (departmentGroups && departmentGroups.length > 0) {
+            const deptGroup = departmentGroups[0];
+            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+            for (const step of approvalFlow) {
+              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                isApprover = true;
+                userApprovalStage = 'rejected';
+                break;
+              }
+            }
+          }
+        }
+        
         if (isApprover) {
           // 添加用戶批核階段信息到申請對象
           app.user_approval_stage = userApprovalStage;
@@ -973,6 +989,22 @@ class ApprovalController {
           }
         }
         
+        // 方法4：被拒絕的申請，若當前用戶屬於該申請批核流程任一階段，也顯示在批核記錄中
+        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
+          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+          if (departmentGroups && departmentGroups.length > 0) {
+            const deptGroup = departmentGroups[0];
+            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+            for (const step of approvalFlow) {
+              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                isApprover = true;
+                userApprovalStage = 'rejected';
+                break;
+              }
+            }
+          }
+        }
+        
         if (isApprover) {
           app.user_approval_stage = userApprovalStage;
           app.application_type = 'extra_working_hours';
@@ -1038,6 +1070,22 @@ class ApprovalController {
                   isApprover = true;
                   break;
                 }
+              }
+            }
+          }
+        }
+        
+        // 方法4：被拒絕的申請，若當前用戶屬於該申請批核流程任一階段，也顯示在批核記錄中
+        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
+          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+          if (departmentGroups && departmentGroups.length > 0) {
+            const deptGroup = departmentGroups[0];
+            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+            for (const step of approvalFlow) {
+              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                isApprover = true;
+                userApprovalStage = 'rejected';
+                break;
               }
             }
           }

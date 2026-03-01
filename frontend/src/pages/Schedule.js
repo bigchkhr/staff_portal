@@ -709,7 +709,7 @@ const Schedule = ({ noLayout = false }) => {
       const parts = value.split(':');
       
       if (parts.length === 1) {
-        // 只有小時部分
+        // 只有小時部分，或 3 位數字過渡（如 094）以便輸入第 4 位後變成 0945
         const hours = parseInt(parts[0], 10);
         if (!isNaN(hours) && hours >= 0 && hours <= 32) {
           setEditStartTime(value);
@@ -718,6 +718,12 @@ const Schedule = ({ noLayout = false }) => {
             setEditStoreId(selectedDefaultStoreId);
           }
           return; // 還未輸入完整，不自動計算
+        }
+        // 3 位純數字（如 094）允許暫存，輸入第 4 位即會觸發 4 位轉 09:45
+        if (value.length === 3 && /^\d{3}$/.test(value)) {
+          setEditStartTime(value);
+          if (selectedDefaultStoreId && !editStoreId) setEditStoreId(selectedDefaultStoreId);
+          return;
         }
       } else if (parts.length === 2) {
         // 有小時和分鐘
@@ -774,6 +780,30 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
+  // 失焦時將 4 位數字轉成 HH:mm（後備，確保不需打冒號）
+  const normalizeEditStartTimeBlur = () => {
+    const v = (editStartTime || '').trim();
+    if (/^\d{4}$/.test(v)) {
+      const h = parseInt(v.substring(0, 2), 10);
+      const m = parseInt(v.substring(2, 4), 10);
+      if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+        setEditStartTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        const calculated = calculateEndTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        if (calculated) setEditEndTime(calculated);
+      }
+    }
+  };
+  const normalizeEditEndTimeBlur = () => {
+    const v = (editEndTime || '').trim();
+    if (/^\d{4}$/.test(v)) {
+      const h = parseInt(v.substring(0, 2), 10);
+      const m = parseInt(v.substring(2, 4), 10);
+      if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+        setEditEndTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+  };
+
   // 處理結束時間輸入（支援0-32小時格式，支援4位數字輸入如2330）
   const handleEndTimeChange = (e) => {
     const value = e.target.value;
@@ -809,10 +839,14 @@ const Schedule = ({ noLayout = false }) => {
     const parts = value.split(':');
     
     if (parts.length === 1) {
-      // 只有小時部分
+      // 只有小時部分，或 3 位數字過渡（如 094）以便輸入第 4 位後變成 09:45
       const hours = parseInt(parts[0], 10);
       if (isNaN(hours) || hours < 0 || hours > 32) {
-        return; // 小時超出範圍
+        // 3 位純數字允許暫存，輸入第 4 位即會觸發 4 位轉 HH:mm
+        if (value.length === 3 && /^\d{3}$/.test(value)) {
+          setEditEndTime(value);
+        }
+        return;
       }
       setEditEndTime(value);
     } else if (parts.length === 2) {
@@ -855,11 +889,18 @@ const Schedule = ({ noLayout = false }) => {
     }
 
     try {
-      // 處理開始時間，支援0-32小時格式
+      // 處理開始時間，支援0-32小時格式；接受 4 位數字（如 0945）自動轉成 09:45
       let startTimeValue = null;
-      if (editStartTime && editStartTime.trim() !== '') {
-        // 驗證格式
-        const timeMatch = editStartTime.match(/^(\d{1,2}):(\d{2})$/);
+      let startToValidate = (editStartTime || '').trim();
+      if (/^\d{4}$/.test(startToValidate)) {
+        const h = parseInt(startToValidate.substring(0, 2), 10);
+        const m = parseInt(startToValidate.substring(2, 4), 10);
+        if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+          startToValidate = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      if (startToValidate !== '') {
+        const timeMatch = startToValidate.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
           const hours = parseInt(timeMatch[1], 10);
           const minutes = parseInt(timeMatch[2], 10);
@@ -885,11 +926,18 @@ const Schedule = ({ noLayout = false }) => {
         }
       }
       
-      // 處理結束時間，支援0-32小時格式
+      // 處理結束時間，支援0-32小時格式；接受 4 位數字自動轉成 HH:mm
       let endTimeValue = null;
-      if (editEndTime && editEndTime.trim() !== '') {
-        // 驗證格式
-        const timeMatch = editEndTime.match(/^(\d{1,2}):(\d{2})$/);
+      let endToValidate = (editEndTime || '').trim();
+      if (/^\d{4}$/.test(endToValidate)) {
+        const h = parseInt(endToValidate.substring(0, 2), 10);
+        const m = parseInt(endToValidate.substring(2, 4), 10);
+        if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+          endToValidate = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      if (endToValidate !== '') {
+        const timeMatch = endToValidate.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
           const hours = parseInt(timeMatch[1], 10);
           const minutes = parseInt(timeMatch[2], 10);
@@ -914,7 +962,7 @@ const Schedule = ({ noLayout = false }) => {
           return;
         }
       }
-      
+
       const scheduleData = {
         user_id: editingSchedule.user_id,
         department_group_id: selectedGroupId,
@@ -1449,6 +1497,12 @@ const Schedule = ({ noLayout = false }) => {
           }
           return; // 還未輸入完整，不自動計算
         }
+        // 3 位純數字（如 094）允許暫存，輸入第 4 位即會觸發 4 位轉 09:45
+        if (value.length === 3 && /^\d{3}$/.test(value)) {
+          setBatchStartTime(value);
+          if (selectedDefaultStoreId && !batchStoreId) setBatchStoreId(selectedDefaultStoreId);
+          return;
+        }
       } else if (parts.length === 2) {
         const hours = parts[0] === '' ? -1 : parseInt(parts[0], 10);
         const minutes = parts[1] === '' ? -1 : parseInt(parts[1], 10);
@@ -1497,6 +1551,31 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
+  // 批量編輯：失焦時將 4 位數字轉成 HH:mm
+  const normalizeBatchStartTimeBlur = () => {
+    const v = (batchStartTime || '').trim();
+    if (/^\d{4}$/.test(v)) {
+      const h = parseInt(v.substring(0, 2), 10);
+      const m = parseInt(v.substring(2, 4), 10);
+      if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+        const formatted = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        setBatchStartTime(formatted);
+        const calculated = calculateEndTime(formatted);
+        if (calculated) setBatchEndTime(calculated);
+      }
+    }
+  };
+  const normalizeBatchEndTimeBlur = () => {
+    const v = (batchEndTime || '').trim();
+    if (/^\d{4}$/.test(v)) {
+      const h = parseInt(v.substring(0, 2), 10);
+      const m = parseInt(v.substring(2, 4), 10);
+      if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+        setBatchEndTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+  };
+
   // 處理批量編輯結束時間輸入
   const handleBatchEndTimeChange = (e) => {
     const value = e.target.value;
@@ -1528,6 +1607,10 @@ const Schedule = ({ noLayout = false }) => {
     if (parts.length === 1) {
       const hours = parseInt(parts[0], 10);
       if (isNaN(hours) || hours < 0 || hours > 32) {
+        // 3 位純數字允許暫存，輸入第 4 位即會觸發 4 位轉 HH:mm
+        if (value.length === 3 && /^\d{3}$/.test(value)) {
+          setBatchEndTime(value);
+        }
         return;
       }
       setBatchEndTime(value);
@@ -1564,10 +1647,18 @@ const Schedule = ({ noLayout = false }) => {
     }
 
     try {
-      // 處理開始時間
+      // 處理開始時間；接受 4 位數字（如 0945）自動轉成 09:45
       let startTimeValue = null;
-      if (batchStartTime && batchStartTime.trim() !== '') {
-        const timeMatch = batchStartTime.match(/^(\d{1,2}):(\d{2})$/);
+      let batchStartToValidate = (batchStartTime || '').trim();
+      if (/^\d{4}$/.test(batchStartToValidate)) {
+        const h = parseInt(batchStartToValidate.substring(0, 2), 10);
+        const m = parseInt(batchStartToValidate.substring(2, 4), 10);
+        if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+          batchStartToValidate = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      if (batchStartToValidate !== '') {
+        const timeMatch = batchStartToValidate.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
           const hours = parseInt(timeMatch[1], 10);
           const minutes = parseInt(timeMatch[2], 10);
@@ -1592,10 +1683,18 @@ const Schedule = ({ noLayout = false }) => {
         }
       }
       
-      // 處理結束時間
+      // 處理結束時間；接受 4 位數字自動轉成 HH:mm
       let endTimeValue = null;
-      if (batchEndTime && batchEndTime.trim() !== '') {
-        const timeMatch = batchEndTime.match(/^(\d{1,2}):(\d{2})$/);
+      let batchEndToValidate = (batchEndTime || '').trim();
+      if (/^\d{4}$/.test(batchEndToValidate)) {
+        const h = parseInt(batchEndToValidate.substring(0, 2), 10);
+        const m = parseInt(batchEndToValidate.substring(2, 4), 10);
+        if (h >= 0 && h <= 32 && m >= 0 && m <= 59) {
+          batchEndToValidate = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        }
+      }
+      if (batchEndToValidate !== '') {
+        const timeMatch = batchEndToValidate.match(/^(\d{1,2}):(\d{2})$/);
         if (timeMatch) {
           const hours = parseInt(timeMatch[1], 10);
           const minutes = parseInt(timeMatch[2], 10);
@@ -2901,7 +3000,9 @@ const Schedule = ({ noLayout = false }) => {
                     label={t('schedule.startTime')}
                     value={editStartTime}
                     onChange={handleStartTimeChange}
-                    placeholder="HH:mm 或 2330 (0-32:00-59)"
+                    onBlur={normalizeEditStartTimeBlur}
+                    placeholder="0945 或 09:45"
+                    inputProps={{ inputMode: 'numeric', pattern: '[0-9:]*', maxLength: 8 }}
                     fullWidth
                     helperText={t('schedule.startTimeHelper')}
                   />
@@ -2911,7 +3012,9 @@ const Schedule = ({ noLayout = false }) => {
                     label={t('schedule.endTime')}
                     value={editEndTime}
                     onChange={handleEndTimeChange}
-                    placeholder="HH:mm 或 2600 (0-32:00-59)"
+                    onBlur={normalizeEditEndTimeBlur}
+                    placeholder="1845 或 18:45"
+                    inputProps={{ inputMode: 'numeric', pattern: '[0-9:]*', maxLength: 8 }}
                     fullWidth
                     helperText={t('schedule.endTimeHelper')}
                   />
@@ -3172,7 +3275,9 @@ const Schedule = ({ noLayout = false }) => {
                     label={t('schedule.startTime')}
                     value={batchStartTime}
                     onChange={handleBatchStartTimeChange}
-                    placeholder="HH:mm 或 2330 (0-32:00-59)"
+                    onBlur={normalizeBatchStartTimeBlur}
+                    placeholder="0945 或 09:45"
+                    inputProps={{ inputMode: 'numeric', pattern: '[0-9:]*', maxLength: 8 }}
                     fullWidth
                     helperText={t('schedule.startTimeHelper')}
                   />
@@ -3182,7 +3287,9 @@ const Schedule = ({ noLayout = false }) => {
                     label={t('schedule.endTime')}
                     value={batchEndTime}
                     onChange={handleBatchEndTimeChange}
-                    placeholder="HH:mm 或 2600 (0-32:00-59)"
+                    onBlur={normalizeBatchEndTimeBlur}
+                    placeholder="1845 或 18:45"
+                    inputProps={{ inputMode: 'numeric', pattern: '[0-9:]*', maxLength: 8 }}
                     fullWidth
                     helperText={t('schedule.endTimeHelper')}
                   />

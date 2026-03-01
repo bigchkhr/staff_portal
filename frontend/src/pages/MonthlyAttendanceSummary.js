@@ -211,6 +211,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         start_time: schedule.start_time || null,
         end_time: schedule.end_time || null,
         leave_type_name_zh: schedule.leave_type_name_zh || null,
+        leave_type_name: schedule.leave_type_name || null,
+        leave_type_code: schedule.leave_type_code || null,
         leave_session: schedule.leave_session || null,
         is_approved_leave: schedule.is_approved_leave || false
       } : null,
@@ -629,9 +631,12 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     // 注意：PDF 使用英文，避免中文顯示成亂碼（jsPDF 預設字體不支援中文）
     const tableData = dailyData.map(day => {
       const schedule = day.schedule || day.attendance_data?.schedule || null;
+      const sessionSuffix = schedule?.leave_session ? ` (${schedule.leave_session})` : '';
       const rosterText = (schedule?.start_time || schedule?.end_time)
         ? `${schedule?.start_time ? formatTimeDisplay(schedule.start_time) : '--:--'} - ${schedule?.end_time ? formatTimeDisplay(schedule.end_time) : '--:--'}`
-        : (schedule?.leave_type_name_zh ? 'LEAVE' : '--');
+        : (schedule?.leave_type_code || schedule?.leave_type_name || schedule?.leave_type_name_zh
+            ? (schedule.leave_type_code || schedule.leave_type_name || 'Leave') + sessionSuffix
+            : '--');
 
       const storeText = day.store_short_name || '--';
 

@@ -744,18 +744,38 @@ class NewsController {
         });
       }
 
-      // 發送文件
-      res.download(attachment.file_path, attachment.file_name, (err) => {
-        if (err) {
-          console.error('Download error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({
-              success: false,
-              message: '下載附件時發生錯誤'
-            });
+      const isPreview = req.query.preview === '1' || req.query.preview === 'true';
+
+      if (isPreview) {
+        // 預覽：以 inline 方式傳送，讓瀏覽器可顯示 PDF/圖片等
+        const disposition = `inline; filename="${encodeURIComponent(attachment.file_name)}"`;
+        res.setHeader('Content-Disposition', disposition);
+        res.setHeader('Content-Type', attachment.file_type || 'application/octet-stream');
+        res.sendFile(path.resolve(attachment.file_path), (err) => {
+          if (err) {
+            console.error('Preview sendFile error:', err);
+            if (!res.headersSent) {
+              res.status(500).json({
+                success: false,
+                message: '預覽附件時發生錯誤'
+              });
+            }
           }
-        }
-      });
+        });
+      } else {
+        // 下載：以 attachment 方式傳送
+        res.download(attachment.file_path, attachment.file_name, (err) => {
+          if (err) {
+            console.error('Download error:', err);
+            if (!res.headersSent) {
+              res.status(500).json({
+                success: false,
+                message: '下載附件時發生錯誤'
+              });
+            }
+          }
+        });
+      }
     } catch (error) {
       console.error('Download attachment error:', error);
       res.status(500).json({
