@@ -267,6 +267,63 @@ class MonthlyAttendanceReportController {
         }
       }
 
+      /**
+       * 重要：為咗做到你講嘅「喺月結表抄過去」效果，
+       * 之後統計一律用「月結 API getMonthlySummaries 回傳嘅 daily_data」，
+       * 即係同前端 `/monthly-attendance-summary` 畫面見到嘅內容完全一致
+       *（包括根據最新排班 / 打卡重算同 employment_mode 有關嘅應計時數）。
+       */
+      try {
+        const monthlyAttendanceSummaryController = require('./monthlyAttendanceSummary.controller');
+        const mockReqForSummary = {
+          query: {
+            user_id,
+            year,
+            month
+          },
+          user: req.user
+        };
+        let latestSummary = null;
+        let summaryErrorMsg = null;
+
+        const mockResForSummary = {
+          json: (data) => {
+            const list = Array.isArray(data.summaries) ? data.summaries : [];
+            if (list.length > 0) {
+              // findByUserAndMonth 已經按 user_id/year/month 過濾，所以通常得 1 條
+              latestSummary = list[0];
+            }
+            return data;
+          },
+          status: (code) => ({
+            json: (data) => {
+              if (code >= 400) {
+                summaryErrorMsg = data.message || `取得月結記錄失敗 (status=${code})`;
+              }
+              return data;
+            }
+          })
+        };
+
+        await monthlyAttendanceSummaryController.getMonthlySummaries(
+          mockReqForSummary,
+          mockResForSummary
+        );
+
+        if (summaryErrorMsg) {
+          console.error('[generateReport] 透過 getMonthlySummaries 取得月結表失敗:', summaryErrorMsg);
+        } else if (latestSummary && latestSummary.daily_data) {
+          // 用 API 回傳嘅最新 daily_data 覆蓋原本由 model 直接讀出嘅 summary
+          summary = latestSummary;
+          console.log(
+            `[generateReport] 已使用 getMonthlySummaries 回傳嘅 daily_data，day 數量 = ${summary.daily_data.length}`
+          );
+        }
+      } catch (e) {
+        console.error('[generateReport] 透過 getMonthlySummaries 同步月結表時發生錯誤:', e);
+        // 如果失敗，沿用原本 summary（至少唔影響舊有行為）
+      }
+
       // 初始化統計數據
       const reportData = {
         user_id: parseInt(user_id, 10),
@@ -407,34 +464,25 @@ class MonthlyAttendanceReportController {
             }
           }
         } else if (employmentMode === 'PT') {
-          // PT: 使用應計工作時數（approved_overtime_minutes）
+          // PT: 直接「抄」月結表嘅應計工作時數（approved_overtime_minutes），
+          // 唔再用 total_work_hours 做後備計算，確保月報同月結表完全一致。
           const hasApprovedOvertime = day.hasOwnProperty('approved_overtime_minutes');
           const approvedOvertimeValue = day.approved_overtime_minutes;
-          
+
           console.log(`[generateReport] PT 員工 ${user_id} 日期 ${day.date || '未知'}: hasOwnProperty=${hasApprovedOvertime}, value=${approvedOvertimeValue}, type=${typeof approvedOvertimeValue}`);
-          
+
           if (hasApprovedOvertime && approvedOvertimeValue !== null && approvedOvertimeValue !== undefined) {
             const approvedWorkMinutes = parseFloat(approvedOvertimeValue) || 0;
             if (approvedWorkMinutes > 0) {
               const workHours = approvedWorkMinutes / 60;
               reportData.pt_work_hours = (parseFloat(reportData.pt_work_hours) || 0) + workHours;
-              console.log(`[generateReport] ✓ PT 員工 ${user_id} 日期 ${day.date || '未知'}: approved_overtime_minutes=${approvedWorkMinutes}, 轉換為小時=${workHours.toFixed(2)}, 累計=${reportData.pt_work_hours.toFixed(2)}`);
+              console.log(`[generateReport] ✓ PT 員工 ${user_id} 日期 ${day.date || '未知'}: from summary approved_overtime_minutes=${approvedWorkMinutes}, 轉換為小時=${workHours.toFixed(2)}, 累計=${reportData.pt_work_hours.toFixed(2)}`);
             } else {
               console.log(`[generateReport] - PT 員工 ${user_id} 日期 ${day.date || '未知'}: approved_overtime_minutes=${approvedWorkMinutes} (為0或負數，不累加)`);
             }
           } else {
-            // 如果沒有 approved_overtime_minutes，使用備用方案 total_work_hours
-            const totalWorkHours = parseFloat(day.total_work_hours) || 0;
-            if (totalWorkHours > 0) {
-              // 對於 PT 員工，如果有總工作時數，向下取整到15分鐘
-              const totalWorkMinutes = totalWorkHours * 60;
-              const adjustedMinutes = Math.floor(totalWorkMinutes / 15) * 15;
-              const adjustedHours = adjustedMinutes / 60;
-              reportData.pt_work_hours = (parseFloat(reportData.pt_work_hours) || 0) + adjustedHours;
-              console.log(`[generateReport] ⚠ PT 員工 ${user_id} 日期 ${day.date || '未知'}: 使用備用方案 total_work_hours=${totalWorkHours}, 調整後=${adjustedHours.toFixed(2)}, 累計=${reportData.pt_work_hours.toFixed(2)}`);
-            } else {
-              console.log(`[generateReport] ✗ PT 員工 ${user_id} 日期 ${day.date || '未知'}: 沒有 approved_overtime_minutes 字段且沒有 total_work_hours`);
-            }
+            // 月結表冇呢個欄位，就當 0，唔再用其他欄位估算
+            console.log(`[generateReport] ✗ PT 員工 ${user_id} 日期 ${day.date || '未知'}: 月結表冇 approved_overtime_minutes，當 0 處理（唔再由 total_work_hours 重算）`);
           }
         }
       }
