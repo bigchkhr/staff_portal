@@ -45,6 +45,7 @@ import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
 import ShiftManagement from './pages/ShiftManagement';
+import ShiftUserSchedules from './pages/ShiftUserSchedules';
 import MyRoster from './pages/MyRoster';
 import MyAttendance from './pages/MyAttendance';
 import MyContacts from './pages/MyContacts';
@@ -55,9 +56,9 @@ import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 
 // 設定後端 API 地址
-axios.defaults.baseURL = 'http://3.1.139.29:1689';
+// axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.68:1689';
+axios.defaults.baseURL = 'http://172.31.132.45:1689';
 // axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
@@ -116,6 +117,7 @@ function App() {
             <Route path="/group-leave-calendar" element={<PrivateRoute><GroupLeaveCalendar /></PrivateRoute>} />
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
+            <Route path="/shift-management/user-schedules" element={<PrivateRoute><ShiftUserSchedules /></PrivateRoute>} />
             <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />
             <Route path="/my-attendance" element={<PrivateRoute><MyAttendance /></PrivateRoute>} />
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />

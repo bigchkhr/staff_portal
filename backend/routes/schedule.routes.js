@@ -9,6 +9,9 @@ router.use(authenticate);
 // 獲取用戶有權限查看的排班群組列表
 router.get('/accessible-groups', scheduleController.getAccessibleScheduleGroups.bind(scheduleController));
 
+// 以員工編號 + 日期範圍查詢單一員工排班（只限 approver1/2/3 或系統管理員）
+router.get('/user-schedules', scheduleController.getUserSchedulesForApprover.bind(scheduleController));
+
 // 更新群組的 checker 編輯權限設置（必須放在 /:id 之前）
 router.put('/group/:department_group_id/checker-edit-permission', scheduleController.updateCheckerEditPermission.bind(scheduleController));
 

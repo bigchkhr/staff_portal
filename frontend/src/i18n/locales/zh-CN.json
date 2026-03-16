@@ -98,7 +98,8 @@
     "yearManagement": "年份管理",
     "changePassword": "更改密码",
     "logout": "登出",
-    "systemTitle": "员工线上平台"
+    "systemTitle": "员工线上平台",
+    "userSchedules": "员工班表（批核用）"
   },
   "adminStores": {
     "title": "店铺管理",
@@ -815,6 +816,42 @@
     "schedule": "排班表",
     "attendance": "考勤管理",
     "managementTools": "管理工具"
+  },
+  "shiftUserSchedules": {
+    "title": "员工班表（批核用）",
+    "fields": {
+      "employeeNumber": "员工编号",
+      "startDate": "开始日期",
+      "endDate": "结束日期"
+    },
+    "actions": {
+      "search": "查询",
+      "saveAll": "全部保存"
+    },
+    "table": {
+      "date": "日期",
+      "departmentGroupId": "部门群组 ID",
+      "storeId": "店铺 ID",
+      "startTime": "开始时间",
+      "endTime": "结束时间",
+      "leaveType": "假期类型",
+      "leaveSession": "假期时段"
+    },
+    "errors": {
+      "missingRequired": "请输入员工编号、开始日期及结束日期",
+      "invalidDateFormat": "日期格式不正确，请使用 YYYY-MM-DD",
+      "endBeforeStart": "结束日期必须大于或等于开始日期",
+      "rangeTooLong": "日期范围最多只能 31 天",
+      "fetchFailed": "加载班表失败",
+      "nothingToSave": "没有可保存的班表记录",
+      "saveAllFailed": "批量保存班表失败"
+    },
+    "messages": {
+      "noSchedules": "没有找到任何班表记录",
+      "saveAllSuccess": "所有记录已成功保存",
+      "pleaseSearch": "请先输入条件并查询"
+    },
+    "targetUser": "目标员工：{{employeeNumber}} - {{name}}"
   },
   "adminPaperFlow": {
     "title": "Paper Flow 假期申请（系统管理员专用）",

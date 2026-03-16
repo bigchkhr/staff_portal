@@ -803,6 +803,54 @@
     "myContacts": "My Contacts",
     "storeDirectory": "Store Directory"
   },
+  "layout": {
+    "appTitle": "Big C HK Staff Portal",
+    "dashboard": "Dashboard",
+    "announcements": "Announcements",
+    "chatRoom": "Message Delivery",
+    "myApplications": "My Applications",
+    "myApprovals": "My Approvals",
+    "myRoster": "My Roster",
+    "myAttendance": "My Attendance",
+    "schedule": "Schedule",
+    "attendance": "Attendance",
+    "shiftManagement": "Shift Management",
+    "groupLeaveCalendar": "Group Leave Calendar",
+    "monthlyAttendanceSummary": "Monthly Attendance Summary",
+    "monthlyAttendanceReport": "Monthly Attendance Report",
+    "monthlyAttendanceReportExport": "Export Monthly Report CSV",
+    "systemMaintenance": "System Maintenance",
+    "manualApproval": "Manual Approval",
+    "applyLeave": "Apply Leave",
+    "leaveHistory": "Leave History",
+    "leaveBalance": "Leave Balance",
+    "applyExtraWorkingHours": "Extra Working Hours Application",
+    "extraWorkingHoursHistory": "Extra Working Hours History",
+    "applyOutdoorWork": "Outdoor Work Application",
+    "outdoorWorkHistory": "Outdoor Work History",
+    "myDocuments": "My Documents",
+    "tools": "Tools",
+    "pendingApproval": "Pending Approval",
+    "approvalHistory": "Approval History",
+    "departmentGroupBalances": "Department Group Balances",
+    "documentUpload": "Document Upload",
+    "paperFlow": "Paper Flow",
+    "extraWorkingHoursPaperFlow": "Extra Working Hours Paper Flow",
+    "outdoorWorkPaperFlow": "Outdoor Work Paper Flow",
+    "userManagement": "User Management",
+    "leaveTypeManagement": "Leave Type Management",
+    "balanceManagement": "Balance Management",
+    "departmentManagement": "Department Management",
+    "positionManagement": "Position Management",
+    "groupManagement": "Group Management",
+    "publicHolidayManagement": "Statutory Holiday Management",
+    "storeManagement": "Store Management",
+    "yearManagement": "Year Management",
+    "changePassword": "Change Password",
+    "logout": "Logout",
+    "systemTitle": "Staff Portal",
+    "userSchedules": "Employee Schedule (For Mainetenance)"
+  },
   "storeDirectory": {
     "title": "Store Directory",
     "storeCode": "Store Code",
@@ -820,6 +868,42 @@
     "schedule": "Schedule",
     "attendance": "Attendance",
     "managementTools": "Management Tools"
+  },
+  "shiftUserSchedules": {
+    "title": "Employee Schedule (For Maintenance)",
+    "fields": {
+      "employeeNumber": "Employee Number",
+      "startDate": "Start Date",
+      "endDate": "End Date"
+    },
+    "actions": {
+      "search": "Search",
+      "saveAll": "Save All"
+    },
+    "table": {
+      "date": "Date",
+      "departmentGroupId": "Department Group ID",
+      "storeId": "Store ID",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "leaveType": "Leave Type",
+      "leaveSession": "Leave Session"
+    },
+    "errors": {
+      "missingRequired": "Please enter employee number, start date and end date",
+      "invalidDateFormat": "Invalid date format, please use YYYY-MM-DD",
+      "endBeforeStart": "End date must be greater than or equal to start date",
+      "rangeTooLong": "Date range can be at most 31 days",
+      "fetchFailed": "Failed to load schedules",
+      "nothingToSave": "There is no schedule record to save",
+      "saveAllFailed": "Failed to save schedules"
+    },
+    "messages": {
+      "noSchedules": "No schedule records found",
+      "saveAllSuccess": "All records saved successfully",
+      "pleaseSearch": "Please enter conditions and search first"
+    },
+    "targetUser": "Target employee: {{employeeNumber}} - {{name}}"
   },
   "adminPaperFlow": {
     "title": "Paper Flow Leave Application (System Administrator Only)",

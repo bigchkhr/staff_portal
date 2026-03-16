@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import Layout from '../components/Layout';
+import ShiftUserSchedules from './ShiftUserSchedules';
 
 const ShiftManagement = () => {
   const { t } = useTranslation();
@@ -149,6 +150,13 @@ const ShiftManagement = () => {
       icon: <EventNoteIcon sx={{ fontSize: 48 }} />,
       path: '/group-leave-calendar',
       translationKey: 'groupLeaveCalendar',
+      show: canViewApproverFeatures
+    },
+    {
+      key: 'userSchedules',
+      icon: <EventNoteIcon sx={{ fontSize: 48 }} />,
+      path: '/shift-management/user-schedules',
+      translationKey: 'userSchedules',
       show: canViewApproverFeatures
     },
     {

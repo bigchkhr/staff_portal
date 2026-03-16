@@ -192,6 +192,108 @@ class ScheduleController {
     }
   }
 
+  // 以員工編號 + 日期範圍查詢單一員工排班（只限 approver1 / approver2 / approver3 或系統管理員）
+  async getUserSchedulesForApprover(req, res) {
+    try {
+      const { employee_number, start_date, end_date } = req.query;
+      const currentUser = req.user;
+
+      if (!employee_number || !start_date || !end_date) {
+        return res.status(400).json({ message: '必須提供 employee_number、start_date 和 end_date' });
+      }
+
+      // 檢查日期範圍最多 31 日
+      const start = new Date(start_date);
+      const end = new Date(end_date);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ message: '日期格式不正確，請使用 YYYY-MM-DD' });
+      }
+      const diffDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+      if (diffDays <= 0) {
+        return res.status(400).json({ message: 'end_date 必須大於或等於 start_date' });
+      }
+      if (diffDays > 31) {
+        return res.status(400).json({ message: '日期範圍最長只可以 31 日' });
+      }
+
+      // 找出目標員工
+      const targetUser = await User.findByEmployeeNumber(employee_number);
+      if (!targetUser) {
+        return res.status(404).json({ message: '找不到此員工編號的用戶' });
+      }
+
+      // 系統管理員可以直接查看
+      let isAllowed = currentUser.is_system_admin;
+
+      if (!isAllowed) {
+        // 取得目前登入用戶所屬的授權群組 ID
+        const userDelegationGroupIds = (currentUser.delegation_groups || [])
+          .map(g => Number(g.id))
+          .filter(id => !Number.isNaN(id));
+
+        if (userDelegationGroupIds.length > 0) {
+          // 取得目標員工所屬的部門群組
+          const targetGroups = await DepartmentGroup.findByUserId(targetUser.id);
+
+          // 只要在任何一個目標員工群組入面充當 approver1/2/3 即可（不包括 checker）
+          isAllowed = targetGroups.some(group => {
+            const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
+            const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
+            const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
+
+            return (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
+                   (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
+                   (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
+          });
+        }
+      }
+
+      if (!isAllowed) {
+        return res.status(403).json({ message: '只有 approver1、approver2、approver3 或系統管理員可以查看此員工的更表' });
+      }
+
+      // 查詢此員工在日期範圍內的所有排班
+      const db = require('../config/database');
+      const schedules = await db('schedules')
+        .leftJoin('stores', 'schedules.store_id', 'stores.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+        .where('schedules.user_id', targetUser.id)
+        .whereBetween('schedules.schedule_date', [start_date, end_date])
+        .select(
+          'schedules.*',
+          'stores.id as store_id',
+          'stores.store_code as store_code',
+          'stores.store_short_name_ as store_short_name',
+          'leave_types.code as leave_type_code',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh'
+        )
+        .orderBy('schedules.schedule_date', 'asc');
+
+      // 將 schedule_date 格式化為 YYYY-MM-DD（UTC+8）
+      const formattedSchedules = schedules.map(s => ({
+        ...s,
+        schedule_date: this.formatDateToUTC8(s.schedule_date) || s.schedule_date
+      }));
+
+      return res.json({
+        user: {
+          id: targetUser.id,
+          employee_number: targetUser.employee_number,
+          display_name: targetUser.display_name,
+          name_zh: targetUser.name_zh
+        },
+        schedules: formattedSchedules
+      });
+    } catch (error) {
+      console.error('Get user schedules for approver error:', error);
+      return res.status(500).json({
+        message: '取得員工排班表失敗',
+        error: error.message
+      });
+    }
+  }
+
   // 取得員工自己嘅更表（用於 /my-roster 頁面）
   async getMyRosterSchedules(res, userId, startDate, endDate) {
     try {
@@ -827,7 +929,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { start_time, end_time, leave_type_id, leave_session, store_id } = req.body;
+      const { start_time, end_time, leave_type_id, leave_session, store_id, department_group_id } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -884,6 +986,9 @@ class ScheduleController {
       if (leave_type_id !== undefined) updateData.leave_type_id = leave_type_id || null;
       if (leave_session !== undefined) updateData.leave_session = leave_session || null;
       if (store_id !== undefined) updateData.store_id = validStoreId;
+      if (department_group_id !== undefined && department_group_id !== null && department_group_id !== '') {
+        updateData.department_group_id = Number(department_group_id);
+      }
 
       const updatedSchedule = await Schedule.update(id, updateData);
       // 同步到月結表，令 /monthly-attendance-summary 顯示嘅排班時間與 schedules 表一致
