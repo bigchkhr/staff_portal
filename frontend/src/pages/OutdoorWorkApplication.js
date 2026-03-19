@@ -282,7 +282,7 @@ const OutdoorWorkApplication = () => {
         {useBatchMode ? (
           <Box component="form" onSubmit={handleBatchSubmit}>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <TableContainer sx={{ mb: 2 }}>
+              <TableContainer sx={{ mb: 2, overflowX: 'auto' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -295,7 +295,6 @@ const OutdoorWorkApplication = () => {
                       <TableCell>{t('outdoorWorkApplication.startLocation')}</TableCell>
                       <TableCell>{t('outdoorWorkApplication.endLocation')}</TableCell>
                       <TableCell>{t('outdoorWorkApplication.transportation')}</TableCell>
-                      <TableCell>{t('outdoorWorkApplication.expense')}</TableCell>
                       <TableCell>{t('outdoorWorkApplication.purpose')}</TableCell>
                       <TableCell sx={{ width: 96 }} />
                     </TableRow>
@@ -304,7 +303,7 @@ const OutdoorWorkApplication = () => {
                     {batchRows.map((row, idx) => (
                       <TableRow key={idx}>
                         <TableCell>{idx + 1}</TableCell>
-                        <TableCell sx={{ minWidth: 160 }}>
+                        <TableCell sx={{ minWidth: 210 }}>
                           <DatePicker
                             value={row.start_date}
                             onChange={(date) => updateBatchRow(idx, { start_date: date })}
@@ -312,14 +311,14 @@ const OutdoorWorkApplication = () => {
                             slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
                           />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 150 }}>
+                        <TableCell sx={{ minWidth: 190 }}>
                           <TimePicker
                             value={row.start_time}
                             onChange={(time) => updateBatchRow(idx, { start_time: time })}
                             slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
                           />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 160 }}>
+                        <TableCell sx={{ minWidth: 210 }}>
                           <DatePicker
                             value={row.end_date}
                             onChange={(date) => updateBatchRow(idx, { end_date: date })}
@@ -328,7 +327,7 @@ const OutdoorWorkApplication = () => {
                             slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
                           />
                         </TableCell>
-                        <TableCell sx={{ minWidth: 150 }}>
+                        <TableCell sx={{ minWidth: 190 }}>
                           <TimePicker
                             value={row.end_time}
                             onChange={(time) => updateBatchRow(idx, { end_time: time })}
@@ -368,16 +367,6 @@ const OutdoorWorkApplication = () => {
                             size="small"
                             value={row.transportation}
                             onChange={(e) => updateBatchRow(idx, { transportation: e.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ minWidth: 130 }}>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            type="number"
-                            value={row.expense}
-                            onChange={(e) => updateBatchRow(idx, { expense: e.target.value })}
-                            inputProps={{ min: 0, step: 0.01 }}
                           />
                         </TableCell>
                         <TableCell sx={{ minWidth: 220 }}>
@@ -438,7 +427,7 @@ const OutdoorWorkApplication = () => {
           <Box component="form" onSubmit={handleSubmit}>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={12}>
                   <DatePicker
                     label={t('outdoorWorkApplication.startDate')}
                     value={formData.start_date}
@@ -447,7 +436,7 @@ const OutdoorWorkApplication = () => {
                     slotProps={{ textField: { fullWidth: true, required: true } }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={12}>
                   <TimePicker
                     label={t('outdoorWorkApplication.startTime')}
                     value={formData.start_time}
@@ -455,7 +444,7 @@ const OutdoorWorkApplication = () => {
                     slotProps={{ textField: { fullWidth: true, required: true } }}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={12}>
                   <DatePicker
                     label={t('outdoorWorkApplication.endDate')}
                     value={formData.end_date}
@@ -465,7 +454,7 @@ const OutdoorWorkApplication = () => {
                     minDate={formData.start_date}
                   />
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12} sm={12}>
                   <TimePicker
                     label={t('outdoorWorkApplication.endTime')}
                     value={formData.end_time}
@@ -510,17 +499,6 @@ const OutdoorWorkApplication = () => {
               value={formData.transportation}
               onChange={(e) => setFormData(prev => ({ ...prev, transportation: e.target.value }))}
               sx={{ mb: 2 }}
-            />
-
-            <TextField
-              fullWidth
-              label={t('outdoorWorkApplication.expense')}
-              type="number"
-              value={formData.expense}
-              onChange={(e) => setFormData(prev => ({ ...prev, expense: e.target.value }))}
-              sx={{ mb: 2 }}
-              inputProps={{ min: 0, step: 0.01 }}
-              helperText={t('outdoorWorkApplication.expenseHelper')}
             />
 
             <TextField

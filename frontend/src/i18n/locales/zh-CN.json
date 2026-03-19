@@ -99,7 +99,7 @@
     "changePassword": "更改密码",
     "logout": "登出",
     "systemTitle": "员工线上平台",
-    "userSchedules": "员工班表（批核用）"
+    "userSchedules": "员工班表（維謢用）"
   },
   "adminStores": {
     "title": "店铺管理",
@@ -818,7 +818,7 @@
     "managementTools": "管理工具"
   },
   "shiftUserSchedules": {
-    "title": "员工班表（批核用）",
+    "title": "员工班表（维謢用）",
     "fields": {
       "employeeNumber": "员工编号",
       "startDate": "开始日期",
@@ -1606,5 +1606,28 @@
     "confirmDelete": "确定要删除此年份吗？",
     "pleaseEnterYear": "请输入年份",
     "operationFailed": "操作失败"
+  },
+  "outdoorWorkBulkApproval": {
+    "title": "外勤工作批量批核",
+    "noApplications": "此员工暂无待批核外勤工作申请。",
+    "startDateTime": "开始日期及时间",
+    "endDateTime": "结束日期及时间",
+    "purpose": "目的",
+    "remarksOptional": "备注（可选）",
+    "approveSelected": "批核已选取",
+    "rejectSelected": "拒绝已选取",
+    "backButton": "返回",
+    "noSelectionText": "请先选择至少一项申请",
+    "confirmTitleApprove": "确认批核",
+    "confirmTitleReject": "确认拒绝",
+    "confirmTextApprove": "将会对 {{count}} 笔外勤工作申请进行批核。",
+    "confirmTextReject": "将会对 {{count}} 笔外勤工作申请进行拒绝。",
+    "successTitle": "完成",
+    "successTextFallback": "批量操作完成",
+    "errorTitle": "操作失败",
+    "bulkOperationErrorFallback": "批量批核时发生错误",
+    "forbiddenDetail": "\n\n无权限项目（ID）：{{ids}}\n常见原因：未轮到你这一关／你不属于该阶段授权群组／该笔已被其他人处理。",
+    "action": "操作",
+    "viewApplicationDetails": "查看申请详情"
   }
 }

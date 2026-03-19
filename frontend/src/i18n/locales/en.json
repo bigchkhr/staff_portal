@@ -1714,5 +1714,28 @@
     "confirmDelete": "Are you sure you want to delete this year?",
     "pleaseEnterYear": "Please enter a year",
     "operationFailed": "Operation failed"
+  },
+  "outdoorWorkBulkApproval": {
+    "title": "Outdoor Work Bulk Approval",
+    "noApplications": "No pending outdoor work applications for this employee.",
+    "startDateTime": "Start Date & Time",
+    "endDateTime": "End Date & Time",
+    "purpose": "Purpose",
+    "remarksOptional": "Remarks (Optional)",
+    "approveSelected": "Approve Selected",
+    "rejectSelected": "Reject Selected",
+    "backButton": "Back",
+    "noSelectionText": "Please select at least one application.",
+    "confirmTitleApprove": "Confirm Approval",
+    "confirmTitleReject": "Confirm Rejection",
+    "confirmTextApprove": "You are about to approve {{count}} outdoor work application(s).",
+    "confirmTextReject": "You are about to reject {{count}} outdoor work application(s).",
+    "successTitle": "Done",
+    "successTextFallback": "Bulk operation completed",
+    "errorTitle": "Operation Failed",
+    "bulkOperationErrorFallback": "Bulk approval failed",
+    "forbiddenDetail": "\n\nNo permission for item(s) (ID): {{ids}}\nCommon reasons: you are not on the current approval stage, you are not in the authorization group for this stage, or the application has already been processed by someone else.",
+    "action": "Action",
+    "viewApplicationDetails": "View Application Details"
   }
 }

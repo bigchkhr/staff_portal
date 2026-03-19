@@ -849,7 +849,7 @@
     "changePassword": "更改密碼",
     "logout": "登出",
     "systemTitle": "網上職員平台",
-    "userSchedules": "員工更表（批核用）"
+    "userSchedules": "員工更表（維謢用）"
   },
   "storeDirectory": {
     "title": "店舖資訊",
@@ -1725,5 +1725,28 @@
     "confirmDelete": "確定要刪除此年份嗎？",
     "pleaseEnterYear": "請輸入年份",
     "operationFailed": "操作失敗"
+  },
+  "outdoorWorkBulkApproval": {
+    "title": "外勤工作批量批核",
+    "noApplications": "此員工暫無待批核外勤工作申請。",
+    "startDateTime": "開始日期及時間",
+    "endDateTime": "結束日期及時間",
+    "purpose": "目的",
+    "remarksOptional": "備註（可選）",
+    "approveSelected": "批核已選取",
+    "rejectSelected": "拒絕已選取",
+    "backButton": "返回",
+    "noSelectionText": "請先選擇最少一個申請",
+    "confirmTitleApprove": "確認批核",
+    "confirmTitleReject": "確認拒絕",
+    "confirmTextApprove": "將會對 {{count}} 筆外勤工作申請進行批核。",
+    "confirmTextReject": "將會對 {{count}} 筆外勤工作申請進行拒絕。",
+    "successTitle": "完成",
+    "successTextFallback": "批量操作完成",
+    "errorTitle": "操作失敗",
+    "bulkOperationErrorFallback": "批量批核時發生錯誤",
+    "forbiddenDetail": "\n\n無權限項目（ID）：{{ids}}\n常見原因：未輪到你嗰一關／你唔屬於該階段授權群組／該筆已被其他人處理。",
+    "action": "操作",
+    "viewApplicationDetails": "查看申請詳情"
   }
 }
