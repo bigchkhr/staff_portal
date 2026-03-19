@@ -526,14 +526,16 @@ class User {
       return false;
     }
 
+    const currentUserId = Number(userId);
+
     // Method 1: Check if the user is directly assigned as the current stage approver
-    if (currentStage === 'checker' && application.checker_id === userId && !application.checker_at) {
+    if (currentStage === 'checker' && Number(application.checker_id) === currentUserId && !application.checker_at) {
       return true;
-    } else if (currentStage === 'approver_1' && application.approver_1_id === userId && !application.approver_1_at) {
+    } else if (currentStage === 'approver_1' && Number(application.approver_1_id) === currentUserId && !application.approver_1_at) {
       return true;
-    } else if (currentStage === 'approver_2' && application.approver_2_id === userId && !application.approver_2_at) {
+    } else if (currentStage === 'approver_2' && Number(application.approver_2_id) === currentUserId && !application.approver_2_at) {
       return true;
-    } else if (currentStage === 'approver_3' && application.approver_3_id === userId && !application.approver_3_at) {
+    } else if (currentStage === 'approver_3' && Number(application.approver_3_id) === currentUserId && !application.approver_3_at) {
       return true;
     }
 

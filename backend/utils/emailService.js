@@ -261,20 +261,408 @@ class EmailService {
     await Promise.allSettled(sendPromises);
   }
 
-  // 發送假期申請通知給批核者
-  async sendApprovalNotification(application, approvers, stage) {
-    if (!application || !approvers || approvers.length === 0) {
-      return;
-    }
-
+  _getStageNames(stage) {
     const stageNames = {
       checker: { en: 'Checker', zh: '檢查' },
       approver_1: { en: 'First Approval', zh: '第一批核' },
       approver_2: { en: 'Second Approval', zh: '第二批核' },
       approver_3: { en: 'Third Approval', zh: '第三批核' }
     };
+    return stageNames[stage] || { en: stage, zh: stage };
+  }
 
-    const stageName = stageNames[stage] || { en: stage, zh: stage };
+  _getFrontendApprovalUrl(applicationId, applicationType) {
+    const base = process.env.FRONTEND_URL || '';
+    const typeParam = applicationType ? `?type=${encodeURIComponent(applicationType)}` : '';
+    return `${base}/approval/${applicationId}${typeParam}`;
+  }
+
+  _escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  async sendExtraWorkingHoursApprovalNotification(application, approvers, stage) {
+    if (!application || !approvers || approvers.length === 0) return;
+
+    const stageName = this._getStageNames(stage);
+    const subject = `[Staff Portal] New Extra Working Hours Application Requires Approval - ${stageName.en} / [員工系統] 新的額外工作時數申報需要批核 - ${stageName.zh}`;
+
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    const applicantName = applicant?.display_name || applicant?.name_zh || application.applicant_display_name || 'Applicant';
+    const staffId = applicant?.employee_number || application.applicant_employee_number || '';
+    const transactionId = application.transaction_id || `EWH-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'extra_working_hours');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Extra Working Hours Approval Notification / 額外工作時數批核通知</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好，</p>
+            <p>You have a new extra working hours application that requires <strong>${stageName.en}</strong>.<br>
+            您有一個新的額外工作時數申報需要 <strong>${stageName.zh}</strong>。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            <div class="info-row"><span class="label">Applicant / 申請人:</span> ${this._escapeHtml(applicantName)}</div>
+            ${staffId ? `<div class="info-row"><span class="label">Staff ID / 員工編號:</span> ${this._escapeHtml(staffId)}</div>` : ''}
+            <div class="info-row"><span class="label">Start / 開始:</span> ${this._escapeHtml(application.start_date)} ${this._escapeHtml(application.start_time || '')}</div>
+            <div class="info-row"><span class="label">End / 結束:</span> ${this._escapeHtml(application.end_date)} ${this._escapeHtml(application.end_time || '')}</div>
+            <div class="info-row"><span class="label">Total Hours / 總時數:</span> ${this._escapeHtml(application.total_hours || 0)} hour(s) / ${this._escapeHtml(application.total_hours || 0)} 小時</div>
+            ${application.reason ? `<div class="info-row"><span class="label">Reason / 原因:</span> ${this._escapeHtml(application.reason)}</div>` : ''}
+            ${application.description ? `<div class="info-row"><span class="label">Description / 描述:</span> ${this._escapeHtml(application.description)}</div>` : ''}
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Application / 查看申請
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const approverEmails = approvers.map((a) => a.email).filter((email) => email && email.trim());
+    if (approverEmails.length > 0) {
+      await this.sendBulkEmails(approverEmails, { subject, html });
+    }
+  }
+
+  async sendOutdoorWorkApprovalNotification(application, approvers, stage) {
+    if (!application || !approvers || approvers.length === 0) return;
+
+    const stageName = this._getStageNames(stage);
+    const subject = `[Staff Portal] New Outdoor Work Application Requires Approval - ${stageName.en} / [員工系統] 新的外勤工作申請需要批核 - ${stageName.zh}`;
+
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    const applicantName = applicant?.display_name || applicant?.name_zh || application.applicant_display_name || 'Applicant';
+    const staffId = applicant?.employee_number || application.applicant_employee_number || '';
+    const transactionId = application.transaction_id || `ODW-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'outdoor_work');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Outdoor Work Approval Notification / 外勤工作批核通知</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好，</p>
+            <p>You have a new outdoor work application that requires <strong>${stageName.en}</strong>.<br>
+            您有一個新的外勤工作申請需要 <strong>${stageName.zh}</strong>。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            <div class="info-row"><span class="label">Applicant / 申請人:</span> ${this._escapeHtml(applicantName)}</div>
+            ${staffId ? `<div class="info-row"><span class="label">Staff ID / 員工編號:</span> ${this._escapeHtml(staffId)}</div>` : ''}
+            <div class="info-row"><span class="label">Start / 開始:</span> ${this._escapeHtml(application.start_date)} ${this._escapeHtml(application.start_time || '')}</div>
+            <div class="info-row"><span class="label">End / 結束:</span> ${this._escapeHtml(application.end_date)} ${this._escapeHtml(application.end_time || '')}</div>
+            <div class="info-row"><span class="label">Total Hours / 總時數:</span> ${this._escapeHtml(application.total_hours || 0)} hour(s) / ${this._escapeHtml(application.total_hours || 0)} 小時</div>
+            ${application.start_location ? `<div class="info-row"><span class="label">From / 起點:</span> ${this._escapeHtml(application.start_location)}</div>` : ''}
+            ${application.end_location ? `<div class="info-row"><span class="label">To / 終點:</span> ${this._escapeHtml(application.end_location)}</div>` : ''}
+            ${application.transportation ? `<div class="info-row"><span class="label">Transportation / 交通:</span> ${this._escapeHtml(application.transportation)}</div>` : ''}
+            ${application.expense !== null && application.expense !== undefined ? `<div class="info-row"><span class="label">Expense / 費用:</span> $${this._escapeHtml(Number(application.expense).toFixed(2))}</div>` : ''}
+            ${application.purpose ? `<div class="info-row"><span class="label">Purpose / 目的:</span> ${this._escapeHtml(application.purpose)}</div>` : ''}
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Application / 查看申請
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const approverEmails = approvers.map((a) => a.email).filter((email) => email && email.trim());
+    if (approverEmails.length > 0) {
+      await this.sendBulkEmails(approverEmails, { subject, html });
+    }
+  }
+
+  async sendExtraWorkingHoursApprovalCompleteNotification(application) {
+    if (!application) return;
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    if (!applicant || !applicant.email) return;
+
+    const applicantName = applicant.display_name || applicant.name_zh || 'Applicant';
+    const staffId = applicant?.employee_number || '';
+    const transactionId = application.transaction_id || `EWH-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'extra_working_hours');
+
+    const subject = `[Staff Portal] Your Extra Working Hours Application Has Been Approved / [員工系統] 您的額外工作時數申報已獲批准`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Extra Working Hours Approved / 額外工作時數已獲批准</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好 ${this._escapeHtml(applicantName)}，</p>
+            <p>Your extra working hours application has been approved.<br>您的額外工作時數申報已獲批准。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            ${staffId ? `<div class="info-row"><span class="label">Staff ID / 員工編號:</span> ${this._escapeHtml(staffId)}</div>` : ''}
+            <div class="info-row"><span class="label">Start / 開始:</span> ${this._escapeHtml(application.start_date)} ${this._escapeHtml(application.start_time || '')}</div>
+            <div class="info-row"><span class="label">End / 結束:</span> ${this._escapeHtml(application.end_date)} ${this._escapeHtml(application.end_time || '')}</div>
+            <div class="info-row"><span class="label">Total Hours / 總時數:</span> ${this._escapeHtml(application.total_hours || 0)} hour(s) / ${this._escapeHtml(application.total_hours || 0)} 小時</div>
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Details / 查看詳情
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({ to: applicant.email, subject, html });
+  }
+
+  async sendOutdoorWorkApprovalCompleteNotification(application) {
+    if (!application) return;
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    if (!applicant || !applicant.email) return;
+
+    const applicantName = applicant.display_name || applicant.name_zh || 'Applicant';
+    const staffId = applicant?.employee_number || '';
+    const transactionId = application.transaction_id || `ODW-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'outdoor_work');
+
+    const subject = `[Staff Portal] Your Outdoor Work Application Has Been Approved / [員工系統] 您的外勤工作申請已獲批准`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Outdoor Work Approved / 外勤工作已獲批准</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好 ${this._escapeHtml(applicantName)}，</p>
+            <p>Your outdoor work application has been approved.<br>您的外勤工作申請已獲批准。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            ${staffId ? `<div class="info-row"><span class="label">Staff ID / 員工編號:</span> ${this._escapeHtml(staffId)}</div>` : ''}
+            <div class="info-row"><span class="label">Start / 開始:</span> ${this._escapeHtml(application.start_date)} ${this._escapeHtml(application.start_time || '')}</div>
+            <div class="info-row"><span class="label">End / 結束:</span> ${this._escapeHtml(application.end_date)} ${this._escapeHtml(application.end_time || '')}</div>
+            <div class="info-row"><span class="label">Total Hours / 總時數:</span> ${this._escapeHtml(application.total_hours || 0)} hour(s) / ${this._escapeHtml(application.total_hours || 0)} 小時</div>
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Details / 查看詳情
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({ to: applicant.email, subject, html });
+  }
+
+  async sendExtraWorkingHoursRejectionNotification(application, rejectionReason) {
+    if (!application) return;
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    if (!applicant || !applicant.email) return;
+
+    const applicantName = applicant.display_name || applicant.name_zh || 'Applicant';
+    const transactionId = application.transaction_id || `EWH-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'extra_working_hours');
+
+    const subject = `[Staff Portal] Your Extra Working Hours Application Has Been Rejected / [員工系統] 您的額外工作時數申報已被拒絕`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #f44336; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .rejection-reason { background-color: #ffebee; padding: 15px; margin: 15px 0; border-left: 4px solid #f44336; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Extra Working Hours Rejected / 額外工作時數已被拒絕</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好 ${this._escapeHtml(applicantName)}，</p>
+            <p>We regret to inform you that your extra working hours application has been rejected.<br>
+            很遺憾地通知您，您的額外工作時數申報已被拒絕。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            ${rejectionReason ? `<div class="rejection-reason"><strong>Rejection Reason / 拒絕原因:</strong><br>${this._escapeHtml(rejectionReason)}</div>` : ''}
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Details / 查看詳情
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({ to: applicant.email, subject, html });
+  }
+
+  async sendOutdoorWorkRejectionNotification(application, rejectionReason) {
+    if (!application) return;
+    const User = require('../database/models/User');
+    const applicant = await User.findById(application.user_id);
+    if (!applicant || !applicant.email) return;
+
+    const applicantName = applicant.display_name || applicant.name_zh || 'Applicant';
+    const transactionId = application.transaction_id || `ODW-${String(application.id).padStart(6, '0')}`;
+    const detailUrl = this._getFrontendApprovalUrl(application.id, 'outdoor_work');
+
+    const subject = `[Staff Portal] Your Outdoor Work Application Has Been Rejected / [員工系統] 您的外勤工作申請已被拒絕`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #f44336; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 20px; margin-top: 20px; }
+          .info-row { margin: 10px 0; }
+          .label { font-weight: bold; }
+          .rejection-reason { background-color: #ffebee; padding: 15px; margin: 15px 0; border-left: 4px solid #f44336; }
+          .footer { margin-top: 20px; padding: 10px; text-align: center; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Outdoor Work Rejected / 外勤工作已被拒絕</h2>
+          </div>
+          <div class="content">
+            <p>Hello 您好 ${this._escapeHtml(applicantName)}，</p>
+            <p>We regret to inform you that your outdoor work application has been rejected.<br>
+            很遺憾地通知您，您的外勤工作申請已被拒絕。</p>
+            <div class="info-row"><span class="label">Application ID / 申請編號:</span> ${this._escapeHtml(transactionId)}</div>
+            ${rejectionReason ? `<div class="rejection-reason"><strong>Rejection Reason / 拒絕原因:</strong><br>${this._escapeHtml(rejectionReason)}</div>` : ''}
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}"
+                 style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Details / 查看詳情
+              </a>
+            </p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。</p>
+            <p>Staff Portal / 員工系統</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({ to: applicant.email, subject, html });
+  }
+
+  // 發送假期申請通知給批核者
+  async sendApprovalNotification(application, approvers, stage) {
+    if (!application || !approvers || approvers.length === 0) {
+      return;
+    }
+
+    const stageName = this._getStageNames(stage);
     const stageNameEn = stageName.en || stage;
     const stageNameZh = stageName.zh || stage;
 
@@ -346,7 +734,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL}/approval/${application.id}" 
+              <a href="${this._getFrontendApprovalUrl(application.id, 'leave')}" 
                  style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Application / 查看申請
               </a>
@@ -446,7 +834,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL}/approval/${application.id}" 
+              <a href="${this._getFrontendApprovalUrl(application.id, 'leave')}" 
                  style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>
@@ -541,7 +929,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL}/approval/${application.id}" 
+              <a href="${this._getFrontendApprovalUrl(application.id, 'leave')}" 
                  style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>
@@ -668,7 +1056,7 @@ class EmailService {
             </div>
             ` : ''}
             <p style="margin-top: 20px;">
-              <a href="${process.env.FRONTEND_URL}/approval/${application.id}" 
+              <a href="${this._getFrontendApprovalUrl(application.id, 'leave')}" 
                  style="background-color: #2196F3; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                 View Details / 查看詳情
               </a>

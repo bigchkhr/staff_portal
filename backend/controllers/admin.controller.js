@@ -21,7 +21,8 @@ class AdminController {
         department_id,
         position_id,
         hire_date,
-        deactivated
+        deactivated,
+        force_password_change
       } = req.body;
 
       if (!employee_number || !surname || !given_name || !name_zh || !password) {
@@ -57,7 +58,9 @@ class AdminController {
         position_id: position_id || null,
         hire_date: hire_date || null,
         // 帳戶是否停用（預設為未停用，可由 HR/System Admin 指定）
-        deactivated: deactivated !== undefined ? !!deactivated : false
+        deactivated: deactivated !== undefined ? !!deactivated : false,
+        // 是否強制首次登入更改密碼（預設為 false，可由 HR/System Admin 指定）
+        force_password_change: force_password_change !== undefined ? !!force_password_change : false
       };
 
       const user = await User.create(userData);

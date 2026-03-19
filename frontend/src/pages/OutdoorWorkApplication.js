@@ -7,7 +7,17 @@ import {
   Typography,
   Box,
   Grid,
-  LinearProgress
+  LinearProgress,
+  Switch,
+  FormControlLabel,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Stack
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
@@ -18,10 +28,12 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
+import { AddCircleOutline, DeleteOutline, ContentCopy } from '@mui/icons-material';
 
 const OutdoorWorkApplication = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const [useBatchMode, setUseBatchMode] = useState(false);
   const [formData, setFormData] = useState({
     start_date: null,
     start_time: null,
@@ -49,6 +61,21 @@ const OutdoorWorkApplication = () => {
     return diffInHours > 0 ? diffInHours : 0;
   };
 
+  const createEmptyRow = () => ({
+    start_date: null,
+    start_time: null,
+    end_date: null,
+    end_time: null,
+    total_hours: '',
+    start_location: '',
+    end_location: '',
+    transportation: '',
+    expense: '',
+    purpose: ''
+  });
+
+  const [batchRows, setBatchRows] = useState([createEmptyRow()]);
+
   // 當日期或時間改變時，自動計算總時數
   React.useEffect(() => {
     if (formData.start_date && formData.start_time && formData.end_date && formData.end_time) {
@@ -61,6 +88,107 @@ const OutdoorWorkApplication = () => {
       setFormData(prev => ({ ...prev, total_hours: totalHours > 0 ? totalHours.toFixed(2) : '' }));
     }
   }, [formData.start_date, formData.start_time, formData.end_date, formData.end_time]);
+
+  const updateBatchRow = (rowIndex, patch) => {
+    setBatchRows(prev => {
+      const next = prev.map((row, idx) => (idx === rowIndex ? { ...row, ...patch } : row));
+      const row = next[rowIndex];
+      if (row.start_date && row.start_time && row.end_date && row.end_time) {
+        const totalHours = calculateTotalHours(row.start_date, row.start_time, row.end_date, row.end_time);
+        next[rowIndex] = { ...row, total_hours: totalHours > 0 ? totalHours.toFixed(2) : '' };
+      }
+      return next;
+    });
+  };
+
+  const cloneBatchRowToNew = (rowIndex) => {
+    setBatchRows(prev => {
+      const source = prev[rowIndex] || createEmptyRow();
+      const cloned = { ...source };
+      return [...prev, cloned];
+    });
+  };
+
+  const handleBatchSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const invalidRowIndexes = batchRows
+      .map((row, idx) => {
+        const missingRequired =
+          !row.start_date || !row.start_time || !row.end_date || !row.end_time || !row.total_hours;
+        return missingRequired ? idx : null;
+      })
+      .filter(v => v !== null);
+
+    if (invalidRowIndexes.length > 0) {
+      await Swal.fire({
+        icon: 'warning',
+        title: t('outdoorWorkApplication.validationFailed'),
+        text: t('outdoorWorkApplication.batchFillAllFields', { rows: invalidRowIndexes.map(i => i + 1).join(', ') }),
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#3085d6'
+      });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const payloads = batchRows.map(row => ({
+        user_id: user.id,
+        start_date: row.start_date.format('YYYY-MM-DD'),
+        start_time: row.start_time.format('HH:mm:ss'),
+        end_date: row.end_date.format('YYYY-MM-DD'),
+        end_time: row.end_time.format('HH:mm:ss'),
+        total_hours: parseFloat(row.total_hours),
+        start_location: row.start_location || null,
+        end_location: row.end_location || null,
+        transportation: row.transportation || null,
+        expense: row.expense ? parseFloat(row.expense) : null,
+        purpose: row.purpose || null,
+        application_date: new Date().toISOString().split('T')[0]
+      }));
+
+      const results = await Promise.allSettled(payloads.map(p => axios.post('/api/outdoor-work', p)));
+      const successes = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value?.data?.application?.transaction_id)
+        .filter(Boolean);
+      const failures = results.filter(r => r.status === 'rejected');
+
+      if (failures.length === 0) {
+        await Swal.fire({
+          icon: 'success',
+          title: t('outdoorWorkApplication.batchSubmitSuccess', { count: successes.length }),
+          text: successes.length > 0
+            ? t('outdoorWorkApplication.batchTransactionIds', { transactionIds: successes.join(', ') })
+            : t('outdoorWorkApplication.submitSuccess'),
+          confirmButtonText: t('common.confirm'),
+          confirmButtonColor: '#3085d6'
+        });
+        setBatchRows([createEmptyRow()]);
+      } else {
+        const firstError = failures[0]?.reason?.response?.data?.message || failures[0]?.reason?.message;
+        await Swal.fire({
+          icon: 'warning',
+          title: t('outdoorWorkApplication.batchSubmitPartial', { successCount: successes.length, failCount: failures.length }),
+          text: firstError || t('outdoorWorkApplication.submitError'),
+          confirmButtonText: t('common.confirm'),
+          confirmButtonColor: '#3085d6'
+        });
+      }
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: t('outdoorWorkApplication.submitFailed'),
+        text: error.response?.data?.message || t('outdoorWorkApplication.submitError'),
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#d33'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -131,123 +259,294 @@ const OutdoorWorkApplication = () => {
   };
 
   return (
-    <Container maxWidth="md">
+    <Container
+      maxWidth={false}
+      sx={{ maxWidth: { xs: 'md', md: 1200, lg: 1600 }, mx: 'auto' }}
+    >
       <Paper sx={{ p: 4 }}>
         <Typography variant="h5" gutterBottom>
           {t('outdoorWorkApplication.title')}
         </Typography>
 
-        <Box component="form" onSubmit={handleSubmit}>
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <Grid container spacing={2} sx={{ mb: 2 }}>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label={t('outdoorWorkApplication.startDate')}
-                  value={formData.start_date}
-                  onChange={(date) => setFormData(prev => ({ ...prev, start_date: date }))}
-                  format="DD/MM/YYYY"
-                  slotProps={{ textField: { fullWidth: true, required: true } }}
-                />
+        <FormControlLabel
+          sx={{ mb: 2 }}
+          control={
+            <Switch
+              checked={useBatchMode}
+              onChange={(e) => setUseBatchMode(e.target.checked)}
+            />
+          }
+          label={useBatchMode ? t('outdoorWorkApplication.batchMode') : t('outdoorWorkApplication.singleMode')}
+        />
+
+        {useBatchMode ? (
+          <Box component="form" onSubmit={handleBatchSubmit}>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <TableContainer sx={{ mb: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ width: 56 }}>#</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.startDate')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.startTime')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.endDate')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.endTime')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.totalHours')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.startLocation')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.endLocation')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.transportation')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.expense')}</TableCell>
+                      <TableCell>{t('outdoorWorkApplication.purpose')}</TableCell>
+                      <TableCell sx={{ width: 96 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {batchRows.map((row, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell>{idx + 1}</TableCell>
+                        <TableCell sx={{ minWidth: 160 }}>
+                          <DatePicker
+                            value={row.start_date}
+                            onChange={(date) => updateBatchRow(idx, { start_date: date })}
+                            format="DD/MM/YYYY"
+                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <TimePicker
+                            value={row.start_time}
+                            onChange={(time) => updateBatchRow(idx, { start_time: time })}
+                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 160 }}>
+                          <DatePicker
+                            value={row.end_date}
+                            onChange={(date) => updateBatchRow(idx, { end_date: date })}
+                            format="DD/MM/YYYY"
+                            minDate={row.start_date}
+                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <TimePicker
+                            value={row.end_time}
+                            onChange={(time) => updateBatchRow(idx, { end_time: time })}
+                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 140 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            value={row.total_hours}
+                            onChange={(e) => updateBatchRow(idx, { total_hours: e.target.value })}
+                            required
+                            inputProps={{ min: 0, step: 0.5 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 160 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={row.start_location}
+                            onChange={(e) => updateBatchRow(idx, { start_location: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 160 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={row.end_location}
+                            onChange={(e) => updateBatchRow(idx, { end_location: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 150 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={row.transportation}
+                            onChange={(e) => updateBatchRow(idx, { transportation: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 130 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            type="number"
+                            value={row.expense}
+                            onChange={(e) => updateBatchRow(idx, { expense: e.target.value })}
+                            inputProps={{ min: 0, step: 0.01 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 220 }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={row.purpose}
+                            onChange={(e) => updateBatchRow(idx, { purpose: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.5}>
+                            <IconButton
+                              size="small"
+                              onClick={() => setBatchRows(prev => [...prev, createEmptyRow()])}
+                              aria-label={t('outdoorWorkApplication.addRow')}
+                            >
+                              <AddCircleOutline fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => cloneBatchRowToNew(idx)}
+                              aria-label={t('outdoorWorkApplication.copyRow')}
+                            >
+                              <ContentCopy fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => setBatchRows(prev => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev))}
+                              disabled={batchRows.length <= 1}
+                              aria-label={t('outdoorWorkApplication.removeRow')}
+                            >
+                              <DeleteOutline fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </LocalizationProvider>
+
+            {loading && (
+              <LinearProgress sx={{ mb: 2 }} />
+            )}
+
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={loading}
+            >
+              {loading ? t('outdoorWorkApplication.submitting') : t('outdoorWorkApplication.batchSubmit')}
+            </Button>
+          </Box>
+        ) : (
+          <Box component="form" onSubmit={handleSubmit}>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Grid container spacing={2} sx={{ mb: 2 }}>
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label={t('outdoorWorkApplication.startDate')}
+                    value={formData.start_date}
+                    onChange={(date) => setFormData(prev => ({ ...prev, start_date: date }))}
+                    format="DD/MM/YYYY"
+                    slotProps={{ textField: { fullWidth: true, required: true } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TimePicker
+                    label={t('outdoorWorkApplication.startTime')}
+                    value={formData.start_time}
+                    onChange={(time) => setFormData(prev => ({ ...prev, start_time: time }))}
+                    slotProps={{ textField: { fullWidth: true, required: true } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label={t('outdoorWorkApplication.endDate')}
+                    value={formData.end_date}
+                    onChange={(date) => setFormData(prev => ({ ...prev, end_date: date }))}
+                    format="DD/MM/YYYY"
+                    slotProps={{ textField: { fullWidth: true, required: true } }}
+                    minDate={formData.start_date}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TimePicker
+                    label={t('outdoorWorkApplication.endTime')}
+                    value={formData.end_time}
+                    onChange={(time) => setFormData(prev => ({ ...prev, end_time: time }))}
+                    slotProps={{ textField: { fullWidth: true, required: true } }}
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TimePicker
-                  label={t('outdoorWorkApplication.startTime')}
-                  value={formData.start_time}
-                  onChange={(time) => setFormData(prev => ({ ...prev, start_time: time }))}
-                  slotProps={{ textField: { fullWidth: true, required: true } }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <DatePicker
-                  label={t('outdoorWorkApplication.endDate')}
-                  value={formData.end_date}
-                  onChange={(date) => setFormData(prev => ({ ...prev, end_date: date }))}
-                  format="DD/MM/YYYY"
-                  slotProps={{ textField: { fullWidth: true, required: true } }}
-                  minDate={formData.start_date}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TimePicker
-                  label={t('outdoorWorkApplication.endTime')}
-                  value={formData.end_time}
-                  onChange={(time) => setFormData(prev => ({ ...prev, end_time: time }))}
-                  slotProps={{ textField: { fullWidth: true, required: true } }}
-                />
-              </Grid>
-            </Grid>
-          </LocalizationProvider>
+            </LocalizationProvider>
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.totalHours')}
-            type="number"
-            value={formData.total_hours}
-            onChange={(e) => setFormData(prev => ({ ...prev, total_hours: e.target.value }))}
-            required
-            sx={{ mb: 2 }}
-            inputProps={{ min: 0, step: 0.5 }}
-            helperText={t('outdoorWorkApplication.totalHoursHelper')}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.totalHours')}
+              type="number"
+              value={formData.total_hours}
+              onChange={(e) => setFormData(prev => ({ ...prev, total_hours: e.target.value }))}
+              required
+              sx={{ mb: 2 }}
+              inputProps={{ min: 0, step: 0.5 }}
+              helperText={t('outdoorWorkApplication.totalHoursHelper')}
+            />
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.startLocation')}
-            value={formData.start_location}
-            onChange={(e) => setFormData(prev => ({ ...prev, start_location: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.startLocation')}
+              value={formData.start_location}
+              onChange={(e) => setFormData(prev => ({ ...prev, start_location: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.endLocation')}
-            value={formData.end_location}
-            onChange={(e) => setFormData(prev => ({ ...prev, end_location: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.endLocation')}
+              value={formData.end_location}
+              onChange={(e) => setFormData(prev => ({ ...prev, end_location: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.transportation')}
-            value={formData.transportation}
-            onChange={(e) => setFormData(prev => ({ ...prev, transportation: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.transportation')}
+              value={formData.transportation}
+              onChange={(e) => setFormData(prev => ({ ...prev, transportation: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.expense')}
-            type="number"
-            value={formData.expense}
-            onChange={(e) => setFormData(prev => ({ ...prev, expense: e.target.value }))}
-            sx={{ mb: 2 }}
-            inputProps={{ min: 0, step: 0.01 }}
-            helperText={t('outdoorWorkApplication.expenseHelper')}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.expense')}
+              type="number"
+              value={formData.expense}
+              onChange={(e) => setFormData(prev => ({ ...prev, expense: e.target.value }))}
+              sx={{ mb: 2 }}
+              inputProps={{ min: 0, step: 0.01 }}
+              helperText={t('outdoorWorkApplication.expenseHelper')}
+            />
 
-          <TextField
-            fullWidth
-            label={t('outdoorWorkApplication.purpose')}
-            multiline
-            rows={4}
-            value={formData.purpose}
-            onChange={(e) => setFormData(prev => ({ ...prev, purpose: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
+            <TextField
+              fullWidth
+              label={t('outdoorWorkApplication.purpose')}
+              multiline
+              rows={4}
+              value={formData.purpose}
+              onChange={(e) => setFormData(prev => ({ ...prev, purpose: e.target.value }))}
+              sx={{ mb: 2 }}
+            />
 
-          {loading && (
-            <LinearProgress sx={{ mb: 2 }} />
-          )}
+            {loading && (
+              <LinearProgress sx={{ mb: 2 }} />
+            )}
 
-          <Button
-            type="submit"
-            variant="contained"
-            fullWidth
-            disabled={loading}
-          >
-            {loading ? t('outdoorWorkApplication.submitting') : t('outdoorWorkApplication.submit')}
-          </Button>
-        </Box>
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={loading}
+            >
+              {loading ? t('outdoorWorkApplication.submitting') : t('outdoorWorkApplication.submit')}
+            </Button>
+          </Box>
+        )}
       </Paper>
     </Container>
   );

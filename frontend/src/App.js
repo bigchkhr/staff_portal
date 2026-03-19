@@ -19,6 +19,7 @@ import OutdoorWorkHistory from './pages/OutdoorWorkHistory';
 import ApprovalList from './pages/ApprovalList';
 import ApprovalDetail from './pages/ApprovalDetail';
 import ApprovalHistory from './pages/ApprovalHistory';
+import OutdoorWorkBulkApproval from './pages/OutdoorWorkBulkApproval';
 import AdminUsers from './pages/AdminUsers';
 import AdminLeaveTypes from './pages/AdminLeaveTypes';
 import AdminBalances from './pages/AdminBalances';
@@ -96,6 +97,7 @@ function App() {
             <Route path="/approval/list" element={<PrivateRoute><ApprovalList /></PrivateRoute>} />
             <Route path="/approval/history" element={<PrivateRoute><ApprovalHistory /></PrivateRoute>} />
             <Route path="/approval/:id" element={<PrivateRoute><ApprovalDetail /></PrivateRoute>} />
+            <Route path="/approval/outdoor-work/bulk/:applicantId" element={<PrivateRoute><OutdoorWorkBulkApproval /></PrivateRoute>} />
             <Route path="/admin/paper-flow" element={<PrivateRoute><AdminPaperFlow /></PrivateRoute>} />
             <Route path="/admin/extra-working-hours-paper-flow" element={<PrivateRoute><AdminExtraWorkingHoursPaperFlow /></PrivateRoute>} />
             <Route path="/admin/outdoor-work-paper-flow" element={<PrivateRoute><AdminOutdoorWorkPaperFlow /></PrivateRoute>} />

@@ -50,7 +50,34 @@ const ApprovalList = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+  const [openingId, setOpeningId] = useState(null);
   const navigate = useNavigate();
+
+  const handleView = async (app) => {
+    // 外勤工作：按下查看時即時檢測該申請者有幾多筆待批核外勤，
+    // 如多於 1 筆就自動 redirect 去批量批核頁（避免只靠當前頁資料而漏判）
+    if (app.application_type === 'outdoor_work') {
+      const applicantId = app.user_id;
+      if (applicantId) {
+        try {
+          setOpeningId(app.id);
+          const res = await axios.get(`/api/approvals/pending/outdoor-work/applicant/${applicantId}`);
+          const apps = res.data.applications || [];
+          if (apps.length > 1) {
+            navigate(`/approval/outdoor-work/bulk/${applicantId}`);
+            return;
+          }
+        } catch (e) {
+          console.error('Detect outdoor work count error:', e);
+          // 失敗就 fallback 去單筆詳情
+        } finally {
+          setOpeningId(null);
+        }
+      }
+    }
+
+    navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`);
+  };
 
   useEffect(() => {
     fetchPendingApprovals();
@@ -360,7 +387,8 @@ const ApprovalList = () => {
             fullWidth
             variant="contained"
             size="small"
-            onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
+            onClick={() => handleView(app)}
+            disabled={openingId === app.id}
             startIcon={<VisibilityIcon />}
           >
             {t('approvalList.viewDetails')}
@@ -527,7 +555,8 @@ const ApprovalList = () => {
                           <Button
                             variant="contained"
                             size="small"
-                            onClick={() => navigate(`/approval/${app.id}?type=${app.application_type || 'leave'}`)}
+                            onClick={() => handleView(app)}
+                            disabled={openingId === app.id}
                             startIcon={<VisibilityIcon />}
                           >
                             {t('approvalList.viewDetails')}

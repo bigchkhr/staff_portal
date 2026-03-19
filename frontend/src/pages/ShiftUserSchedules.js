@@ -228,8 +228,6 @@ const ShiftUserSchedules = () => {
                 <TableCell>{t('shiftUserSchedules.table.storeId')}</TableCell>
                 <TableCell>{t('shiftUserSchedules.table.startTime')}</TableCell>
                 <TableCell>{t('shiftUserSchedules.table.endTime')}</TableCell>
-                <TableCell>{t('shiftUserSchedules.table.leaveType')}</TableCell>
-                <TableCell>{t('shiftUserSchedules.table.leaveSession')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -292,18 +290,11 @@ const ShiftUserSchedules = () => {
                       inputProps={{ step: 60 }}
                     />
                   </TableCell>
-                  <TableCell>
-                    {row.store_short_name || row.store_code || row.store_id || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {row.leave_type_name_zh || row.leave_type_name || row.leave_type_code || '-'}
-                  </TableCell>
-                  <TableCell>{row.leave_session || '-'}</TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={5} align="center">
                     {t('shiftUserSchedules.messages.pleaseSearch')}
                   </TableCell>
                 </TableRow>

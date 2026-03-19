@@ -241,6 +241,7 @@ class OutdoorWorkApplication {
 
     // 過濾出當前階段輪到該用戶批核的申請
     const filteredApplications = [];
+    const currentUserId = Number(userId);
 
     for (const app of allApplications) {
       // 確定當前批核階段
@@ -257,13 +258,13 @@ class OutdoorWorkApplication {
       let canApprove = false;
 
       // 方法1：檢查是否直接設置為當前階段的批核者，且該階段尚未批核
-      if (currentStage === 'checker' && app.checker_id === userId && !app.checker_at) {
+      if (currentStage === 'checker' && Number(app.checker_id) === currentUserId && !app.checker_at) {
         canApprove = true;
-      } else if (currentStage === 'approver_1' && app.approver_1_id === userId && !app.approver_1_at) {
+      } else if (currentStage === 'approver_1' && Number(app.approver_1_id) === currentUserId && !app.approver_1_at) {
         canApprove = true;
-      } else if (currentStage === 'approver_2' && app.approver_2_id === userId && !app.approver_2_at) {
+      } else if (currentStage === 'approver_2' && Number(app.approver_2_id) === currentUserId && !app.approver_2_at) {
         canApprove = true;
-      } else if (currentStage === 'approver_3' && app.approver_3_id === userId && !app.approver_3_at) {
+      } else if (currentStage === 'approver_3' && Number(app.approver_3_id) === currentUserId && !app.approver_3_at) {
         canApprove = true;
       }
       

@@ -157,7 +157,7 @@ class OutdoorWorkController {
               const approvers = await DelegationGroup.getMembers(currentStep.delegation_group_id);
               
               if (approvers && approvers.length > 0) {
-                await emailService.sendApprovalNotification(application, approvers, currentStage);
+                await emailService.sendOutdoorWorkApprovalNotification(application, approvers, currentStage);
               }
             }
           }
@@ -304,6 +304,19 @@ class OutdoorWorkController {
         }
 
         await OutdoorWorkApplication.reject(id, req.user.id, remarks || '已拒絕');
+
+        // 發送拒絕通知給申請者（Email 發送失敗不應影響流程）
+        try {
+          const rejectedApplication = await OutdoorWorkApplication.findById(id);
+          if (rejectedApplication) {
+            await emailService.sendOutdoorWorkRejectionNotification(
+              rejectedApplication,
+              rejectedApplication.rejection_reason || remarks || '已拒絕'
+            );
+          }
+        } catch (error) {
+          console.error('[OutdoorWorkController] 發送拒絕通知失敗:', error);
+        }
         return res.json({ message: '申請已拒絕' });
       }
 
@@ -344,7 +357,7 @@ class OutdoorWorkController {
         // 發送 email 通知
         try {
           if (updatedApplication.status === 'approved') {
-            await emailService.sendApprovalCompleteNotification(updatedApplication);
+            await emailService.sendOutdoorWorkApprovalCompleteNotification(updatedApplication);
           } else if (updatedApplication.status === 'pending' && updatedApplication.current_approval_stage !== 'completed') {
             const nextStage = updatedApplication.current_approval_stage;
             const departmentGroups = await DepartmentGroup.findByUserId(updatedApplication.user_id);
@@ -357,7 +370,7 @@ class OutdoorWorkController {
               if (nextStep && nextStep.delegation_group_id) {
                 const approvers = await DelegationGroup.getMembers(nextStep.delegation_group_id);
                 if (approvers && approvers.length > 0) {
-                  await emailService.sendApprovalNotification(updatedApplication, approvers, nextStage);
+                  await emailService.sendOutdoorWorkApprovalNotification(updatedApplication, approvers, nextStage);
                 }
               }
             }

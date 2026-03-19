@@ -9,6 +9,24 @@ const emailService = require('../utils/emailService');
 const knex = require('../config/database');
 
 class ApprovalController {
+  _getCurrentApprovalStageFromApplication(application) {
+    let currentLevel = application.current_approval_stage;
+    if (!currentLevel || currentLevel === 'completed') {
+      if (!application.checker_at && application.checker_id) {
+        currentLevel = 'checker';
+      } else if (!application.approver_1_at && application.approver_1_id) {
+        currentLevel = 'approver_1';
+      } else if (!application.approver_2_at && application.approver_2_id) {
+        currentLevel = 'approver_2';
+      } else if (!application.approver_3_at && application.approver_3_id) {
+        currentLevel = 'approver_3';
+      } else {
+        currentLevel = 'completed';
+      }
+    }
+    return currentLevel;
+  }
+
   async approve(req, res) {
     try {
       const { id } = req.params;
@@ -95,10 +113,14 @@ class ApprovalController {
         try {
           const rejectedApplication = await ApplicationModel.findById(id);
           if (rejectedApplication) {
-            await emailService.sendRejectionNotification(
-              rejectedApplication, 
-              rejectedApplication.rejection_reason || remarks || '已拒絕'
-            );
+            const reason = rejectedApplication.rejection_reason || remarks || '已拒絕';
+            if (application_type === 'extra_working_hours') {
+              await emailService.sendExtraWorkingHoursRejectionNotification(rejectedApplication, reason);
+            } else if (application_type === 'outdoor_work') {
+              await emailService.sendOutdoorWorkRejectionNotification(rejectedApplication, reason);
+            } else {
+              await emailService.sendRejectionNotification(rejectedApplication, reason);
+            }
           }
         } catch (error) {
           // Email 發送失敗不應該影響拒絕流程
@@ -178,7 +200,13 @@ class ApprovalController {
         try {
           // 如果申請已完成，發送完成通知給申請者
           if (updatedApplication.status === 'approved') {
-            await emailService.sendApprovalCompleteNotification(updatedApplication);
+            if (application_type === 'extra_working_hours') {
+              await emailService.sendExtraWorkingHoursApprovalCompleteNotification(updatedApplication);
+            } else if (application_type === 'outdoor_work') {
+              await emailService.sendOutdoorWorkApprovalCompleteNotification(updatedApplication);
+            } else {
+              await emailService.sendApprovalCompleteNotification(updatedApplication);
+            }
           } 
           // 如果還有下一階段，發送通知給下一階段的批核群組成員
           else if (updatedApplication.status === 'pending' && updatedApplication.current_approval_stage !== 'completed') {
@@ -198,7 +226,13 @@ class ApprovalController {
                 
                 if (approvers && approvers.length > 0) {
                   // 發送通知給下一階段的所有批核群組成員
-                  await emailService.sendApprovalNotification(updatedApplication, approvers, nextStage);
+                  if (application_type === 'extra_working_hours') {
+                    await emailService.sendExtraWorkingHoursApprovalNotification(updatedApplication, approvers, nextStage);
+                  } else if (application_type === 'outdoor_work') {
+                    await emailService.sendOutdoorWorkApprovalNotification(updatedApplication, approvers, nextStage);
+                  } else {
+                    await emailService.sendApprovalNotification(updatedApplication, approvers, nextStage);
+                  }
                 }
               }
             }
@@ -416,6 +450,111 @@ class ApprovalController {
     } catch (error) {
       console.error('Approve error:', error);
       res.status(500).json({ message: '批核時發生錯誤', error: error.message });
+    }
+  }
+
+  async getPendingOutdoorWorkApprovalsByApplicant(req, res) {
+    try {
+      const applicantId = Number(req.params.applicantId);
+      if (!applicantId || Number.isNaN(applicantId)) {
+        return res.status(400).json({ message: '無效的申請人 ID' });
+      }
+
+      const outdoorWorkApplications = await OutdoorWorkApplication.getPendingApprovals(req.user.id);
+      const filtered = (outdoorWorkApplications || [])
+        .filter(app => Number(app.user_id) === applicantId)
+        .map(app => ({ ...app, application_type: 'outdoor_work' }));
+
+      return res.json({ applications: filtered });
+    } catch (error) {
+      console.error('Get pending outdoor work approvals by applicant error:', error);
+      return res.status(500).json({ message: '獲取待批核外勤工作申請時發生錯誤' });
+    }
+  }
+
+  async bulkApproveOutdoorWork(req, res) {
+    try {
+      const { applicant_id, ids, action, remarks } = req.body;
+      const applicantId = Number(applicant_id);
+      const idList = Array.isArray(ids) ? ids.map(n => Number(n)).filter(n => !!n && !Number.isNaN(n)) : [];
+
+      if (!applicantId || Number.isNaN(applicantId)) {
+        return res.status(400).json({ message: '無效的申請人 ID' });
+      }
+      if (!idList.length) {
+        return res.status(400).json({ message: '請選擇最少一個申請' });
+      }
+      if (action !== 'approve' && action !== 'reject') {
+        return res.status(400).json({ message: '無效的操作' });
+      }
+
+      // 只允許同一申請人
+      const applications = await Promise.all(idList.map(id => OutdoorWorkApplication.findById(id)));
+      const notFoundIds = idList.filter((id, idx) => !applications[idx]);
+      if (notFoundIds.length) {
+        return res.status(404).json({ message: `申請不存在：${notFoundIds.join(', ')}` });
+      }
+
+      const notSameApplicant = applications.filter(app => Number(app.user_id) !== applicantId).map(app => app.id);
+      if (notSameApplicant.length) {
+        return res.status(400).json({ message: '只可批量處理同一申請人之申請', ids: notSameApplicant });
+      }
+
+      const nonPending = applications.filter(app => app.status !== 'pending').map(app => app.id);
+      if (nonPending.length) {
+        return res.status(400).json({ message: '包含已處理之申請，無法批量操作', ids: nonPending });
+      }
+
+      // 權限檢查：approve 必須全部可批核；reject 允許 HR 或當前階段批核者拒絕
+      const userId = Number(req.user.id);
+      const isHRMember = await User.isHRMember(userId);
+
+      const permissionChecks = await Promise.all(applications.map(app => User.canApproveOutdoorWork(userId, app.id)));
+      if (action === 'approve') {
+        const forbiddenIds = applications.filter((app, idx) => !permissionChecks[idx]).map(app => app.id);
+        if (forbiddenIds.length) {
+          return res.status(403).json({ message: '無權限進行此操作', ids: forbiddenIds });
+        }
+      } else {
+        const forbiddenIds = applications
+          .filter((app, idx) => !permissionChecks[idx] && !isHRMember)
+          .map(app => app.id);
+        if (forbiddenIds.length) {
+          return res.status(403).json({ message: '無權限進行此操作', ids: forbiddenIds });
+        }
+      }
+
+      const results = [];
+      for (const app of applications) {
+        const currentLevel = ApprovalController.prototype._getCurrentApprovalStageFromApplication(app);
+        if (!currentLevel || currentLevel === 'completed') {
+          results.push({ id: app.id, ok: false, message: '找不到需要批核的階段' });
+          continue;
+        }
+
+        try {
+          if (action === 'approve') {
+            const updated = await OutdoorWorkApplication.approve(app.id, req.user.id, currentLevel, remarks);
+            results.push({ id: app.id, ok: true, status: updated.status, current_approval_stage: updated.current_approval_stage });
+          } else {
+            await OutdoorWorkApplication.reject(app.id, req.user.id, remarks || '已拒絕');
+            results.push({ id: app.id, ok: true, status: 'rejected' });
+          }
+        } catch (e) {
+          results.push({ id: app.id, ok: false, message: e.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.ok).length;
+      const failedCount = results.length - successCount;
+
+      return res.json({
+        message: `批量操作完成（成功 ${successCount}，失敗 ${failedCount}）`,
+        results
+      });
+    } catch (error) {
+      console.error('Bulk approve outdoor work error:', error);
+      return res.status(500).json({ message: '批量批核時發生錯誤', error: error.message });
     }
   }
 
