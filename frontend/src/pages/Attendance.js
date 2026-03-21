@@ -55,6 +55,7 @@ import timezone from 'dayjs/plugin/timezone';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
+import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -1116,6 +1117,7 @@ const Attendance = ({ noLayout = false }) => {
                         {dates.map(date => {
                           const dateStr = date.format('YYYY-MM-DD');
                           const item = userData.dates[dateStr];
+                          const outdoorApps = item?.outdoor_work || [];
                           return (
                             <TableCell 
                               key={dateStr} 
@@ -1168,6 +1170,10 @@ const Attendance = ({ noLayout = false }) => {
                                     <EditIcon fontSize="small" />
                                   </Button>
                                 )}
+                                <OutdoorWorkCalendarChip
+                                  applications={outdoorApps}
+                                  sx={{ fontSize: '0.65rem', height: '18px' }}
+                                />
                                 {item && (
                                   <>
                                     {item.schedule && (

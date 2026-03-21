@@ -383,6 +383,85 @@ class OutdoorWorkApplication {
 
     return await this.findById(applicationId);
   }
+
+  /** @returns {string|null} */
+  static normalizeCalendarDate(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(value).trim();
+    const head = s.split('T')[0].split(' ')[0];
+    return head.length >= 10 ? head.substring(0, 10) : head;
+  }
+
+  static toCalendarSummary(app) {
+    const st = app.start_time != null ? String(app.start_time) : '';
+    const et = app.end_time != null ? String(app.end_time) : '';
+    return {
+      id: app.id,
+      user_id: app.user_id,
+      transaction_id: app.transaction_id,
+      start_date: OutdoorWorkApplication.normalizeCalendarDate(app.start_date),
+      end_date: OutdoorWorkApplication.normalizeCalendarDate(app.end_date),
+      start_time: st ? st.substring(0, 8) : null,
+      end_time: et ? et.substring(0, 8) : null,
+      total_hours: app.total_hours,
+      start_location: app.start_location,
+      end_location: app.end_location,
+      transportation: app.transportation,
+      expense: app.expense,
+      purpose: app.purpose,
+      flow_type: app.flow_type
+    };
+  }
+
+  /**
+   * 已批核外勤：按「員工ID_YYYY-MM-DD」索引，供排班／考勤日曆格顯示。
+   * @param {number[]} userIds
+   * @param {string} rangeStart YYYY-MM-DD
+   * @param {string} rangeEnd YYYY-MM-DD
+   * @returns {Promise<Record<string, object[]>>}
+   */
+  static async buildApprovedOutdoorWorkCellMap(userIds, rangeStart, rangeEnd) {
+    const idSet = new Set((userIds || []).map(id => Number(id)));
+    if (idSet.size === 0 || !rangeStart || !rangeEnd) {
+      return {};
+    }
+    const applications = await this.findAll({
+      status: 'approved',
+      start_date_from: rangeStart,
+      end_date_to: rangeEnd
+    });
+    const map = {};
+    for (const app of applications) {
+      if (!idSet.has(Number(app.user_id))) continue;
+      const dStart = this.normalizeCalendarDate(app.start_date);
+      const dEnd = this.normalizeCalendarDate(app.end_date);
+      if (!dStart || !dEnd) continue;
+      const startDate = new Date(`${dStart}T00:00:00`);
+      const endDate = new Date(`${dEnd}T23:59:59`);
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        if (dateStr >= rangeStart && dateStr <= rangeEnd) {
+          const key = `${Number(app.user_id)}_${dateStr}`;
+          if (!map[key]) map[key] = [];
+          if (!map[key].some(x => x.id === app.id)) {
+            map[key].push(this.toCalendarSummary(app));
+          }
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+    return map;
+  }
 }
 
 module.exports = OutdoorWorkApplication;

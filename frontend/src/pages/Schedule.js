@@ -52,6 +52,7 @@ import timezone from 'dayjs/plugin/timezone';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
+import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -77,6 +78,7 @@ const Schedule = ({ noLayout = false }) => {
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMembers, setGroupMembers] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [outdoorWorkByCell, setOutdoorWorkByCell] = useState({});
   const [helperSchedules, setHelperSchedules] = useState([]);
   // 默認設定為當天到當月最後一天
   const [startDate, setStartDate] = useState(() => dayjs().tz('Asia/Hong_Kong'));
@@ -298,6 +300,7 @@ const Schedule = ({ noLayout = false }) => {
         }
       }
       setSchedules(schedulesData);
+      setOutdoorWorkByCell(schedulesResponse.data.outdoor_work_by_cell || {});
       setHelperSchedules(helperSchedulesData);
     } catch (error) {
       console.error('Fetch schedules error:', error);
@@ -533,6 +536,26 @@ const Schedule = ({ noLayout = false }) => {
       return matches;
     });
     return found;
+  };
+
+  const getOutdoorWorkForUserAndDate = (userId, date) => {
+    if (!date || !outdoorWorkByCell || typeof outdoorWorkByCell !== 'object') return [];
+    let dateStr;
+    try {
+      if (dayjs.isDayjs(date)) {
+        dateStr = date.format('YYYY-MM-DD');
+      } else if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        dateStr = date;
+      } else {
+        const dateObj = dayjs(date);
+        if (!dateObj.isValid()) return [];
+        dateStr = dateObj.format('YYYY-MM-DD');
+      }
+    } catch {
+      return [];
+    }
+    const key = `${Number(userId)}_${dateStr}`;
+    return outdoorWorkByCell[key] || [];
   };
 
   const handleOpenEditDialog = (userId, date) => {
@@ -1185,6 +1208,7 @@ const Schedule = ({ noLayout = false }) => {
                   </TableCell>
                   {dates.map(date => {
                     const schedule = getScheduleForUserAndDate(member.id, date);
+                    const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
                     const dateStr = date.format('YYYY-MM-DD');
                     return (
                       <TableCell
@@ -1286,6 +1310,10 @@ const Schedule = ({ noLayout = false }) => {
                                   )}
                                 </>
                               )}
+                              <OutdoorWorkCalendarChip
+                                applications={outdoorApps}
+                                sx={{ fontSize: '0.65rem', height: '20px' }}
+                              />
                             </>
                           ) : (
                             <>
@@ -1335,16 +1363,28 @@ const Schedule = ({ noLayout = false }) => {
                                       }}
                                     />
                                   )}
-                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && (
+                                  <OutdoorWorkCalendarChip
+                                    applications={outdoorApps}
+                                    sx={{ fontSize: '0.65rem', height: '20px' }}
+                                  />
+                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && outdoorApps.length === 0 && (
                                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontStyle: 'italic' }}>
                                       ---
                                     </Typography>
                                   )}
                                 </>
                               ) : (
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                                  ---
-                                </Typography>
+                                <>
+                                  <OutdoorWorkCalendarChip
+                                    applications={outdoorApps}
+                                    sx={{ fontSize: '0.65rem', height: '20px' }}
+                                  />
+                                  {outdoorApps.length === 0 && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                      ---
+                                    </Typography>
+                                  )}
+                                </>
                               )}
                             </>
                           )}
@@ -2466,6 +2506,7 @@ const Schedule = ({ noLayout = false }) => {
                       </TableCell>
                       {dates.map(date => {
                         const schedule = getScheduleForUserAndDate(member.id, date);
+                        const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
                         const dateStr = date.format('YYYY-MM-DD');
                         return (
                           <TableCell 
@@ -2587,6 +2628,10 @@ const Schedule = ({ noLayout = false }) => {
                                       ))}
                                     </>
                                   )}
+                                  <OutdoorWorkCalendarChip
+                                    applications={outdoorApps}
+                                    sx={{ fontSize: '0.7rem', height: '22px' }}
+                                  />
                                 </>
                               ) : (
                                 <>
@@ -2638,17 +2683,29 @@ const Schedule = ({ noLayout = false }) => {
                                           }}
                                         />
                                       )}
+                                      <OutdoorWorkCalendarChip
+                                        applications={outdoorApps}
+                                        sx={{ fontSize: '0.7rem', height: '22px' }}
+                                      />
                                       {/* 如果沒有任何資訊，顯示 --- */}
-                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && (
+                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && outdoorApps.length === 0 && (
                                         <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                                           ---
                                         </Typography>
                                       )}
                                     </>
                                   ) : (
-                                    <Typography variant="caption" color="text.secondary">
-                                      ---
-                                    </Typography>
+                                    <>
+                                      <OutdoorWorkCalendarChip
+                                        applications={outdoorApps}
+                                        sx={{ fontSize: '0.7rem', height: '22px' }}
+                                      />
+                                      {outdoorApps.length === 0 && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          ---
+                                        </Typography>
+                                      )}
+                                    </>
                                   )}
                                 </>
                               )}
@@ -2765,6 +2822,7 @@ const Schedule = ({ noLayout = false }) => {
                         {dates.map(date => {
                           const dateStr = date.format('YYYY-MM-DD');
                           const schedule = helperUser.schedules[dateStr];
+                          const outdoorApps = getOutdoorWorkForUserAndDate(helperUser.user_id, date);
                           return (
                             <TableCell 
                               key={dateStr} 
@@ -2809,11 +2867,23 @@ const Schedule = ({ noLayout = false }) => {
                                       }}
                                     />
                                   )}
+                                  <OutdoorWorkCalendarChip
+                                    applications={outdoorApps}
+                                    sx={{ fontSize: '0.65rem', height: '20px' }}
+                                  />
                                 </Box>
                               ) : (
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                                  ---
-                                </Typography>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
+                                  <OutdoorWorkCalendarChip
+                                    applications={outdoorApps}
+                                    sx={{ fontSize: '0.65rem', height: '20px' }}
+                                  />
+                                  {outdoorApps.length === 0 && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                                      ---
+                                    </Typography>
+                                  )}
+                                </Box>
                               )}
                             </TableCell>
                           );

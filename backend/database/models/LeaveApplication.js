@@ -279,7 +279,9 @@ class LeaveApplication {
       }
     }
 
-    if (options.leave_type_id) {
+    if (options.leave_type_ids && options.leave_type_ids.length > 0) {
+      query = query.whereIn('leave_applications.leave_type_id', options.leave_type_ids);
+    } else if (options.leave_type_id) {
       query = query.where('leave_applications.leave_type_id', options.leave_type_id);
     }
 
@@ -352,7 +354,9 @@ class LeaveApplication {
         }
       }
     }
-    if (options.leave_type_id) {
+    if (options.leave_type_ids && options.leave_type_ids.length > 0) {
+      countQuery = countQuery.whereIn('leave_applications.leave_type_id', options.leave_type_ids);
+    } else if (options.leave_type_id) {
       countQuery = countQuery.where('leave_applications.leave_type_id', options.leave_type_id);
     }
     if (options.flow_type) {

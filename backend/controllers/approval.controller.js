@@ -626,10 +626,12 @@ class ApprovalController {
       const { 
         status, 
         leave_type_id, 
+        leave_type_ids,
         flow_type, 
         year, 
         month,
         department_group_id,
+        department_group_ids,
         start_date_from, 
         end_date_to,
         application_type,
@@ -640,6 +642,44 @@ class ApprovalController {
       const pageNum = page ? parseInt(page) : 1;
       const limitNum = limit ? parseInt(limit) : 15;
       const userId = req.user.id;
+
+      const leaveTypeIdSet = new Set();
+      if (leave_type_id) {
+        const lt = parseInt(leave_type_id, 10);
+        if (!isNaN(lt) && lt > 0) leaveTypeIdSet.add(lt);
+      }
+      if (leave_type_ids) {
+        String(leave_type_ids).split(',').forEach((s) => {
+          const lt = parseInt(s.trim(), 10);
+          if (!isNaN(lt) && lt > 0) leaveTypeIdSet.add(lt);
+        });
+      }
+      const leaveTypeIdsList = Array.from(leaveTypeIdSet);
+
+      const deptGroupIdSet = new Set();
+      if (department_group_id) {
+        const n = parseInt(department_group_id, 10);
+        if (!isNaN(n) && n > 0) deptGroupIdSet.add(n);
+      }
+      if (department_group_ids) {
+        String(department_group_ids).split(',').forEach((s) => {
+          const n = parseInt(s.trim(), 10);
+          if (!isNaN(n) && n > 0) deptGroupIdSet.add(n);
+        });
+      }
+      const deptGroupIdsList = Array.from(deptGroupIdSet);
+
+      let departmentFilterUserIds = null;
+      if (deptGroupIdsList.length > 0) {
+        const uidSet = new Set();
+        for (const gid of deptGroupIdsList) {
+          const group = await DepartmentGroup.findById(gid);
+          if (group && group.user_ids && group.user_ids.length > 0) {
+            group.user_ids.forEach((uid) => uidSet.add(uid));
+          }
+        }
+        departmentFilterUserIds = Array.from(uidSet);
+      }
       
       // 獲取所有已處理的申請（不包括待批核的）
       let query = knex('leave_applications')
@@ -676,9 +716,9 @@ class ApprovalController {
         }
       }
 
-      // 假期類型篩選
-      if (leave_type_id) {
-        query = query.where('leave_applications.leave_type_id', leave_type_id);
+      // 假期類型篩選（可多選）
+      if (leaveTypeIdsList.length > 0) {
+        query = query.whereIn('leave_applications.leave_type_id', leaveTypeIdsList);
       }
 
       // 流程類型篩選
@@ -686,18 +726,12 @@ class ApprovalController {
         query = query.where('leave_applications.flow_type', flow_type);
       }
 
-      // 部門群組篩選：找到所有屬於該部門群組的用戶的申請
-      if (department_group_id) {
-        const deptGroupId = parseInt(department_group_id);
-        if (!isNaN(deptGroupId) && deptGroupId > 0) {
-          const DepartmentGroup = require('../database/models/DepartmentGroup');
-          const group = await DepartmentGroup.findById(deptGroupId);
-          if (group && group.user_ids && group.user_ids.length > 0) {
-            query = query.whereIn('leave_applications.user_id', group.user_ids);
-          } else {
-            // 如果部門群組沒有成員，返回空結果
-            query = query.where('1', '=', '0'); // 永遠為 false 的條件
-          }
+      // 部門群組篩選（可多選，聯集所屬用戶）
+      if (departmentFilterUserIds !== null) {
+        if (departmentFilterUserIds.length === 0) {
+          query = query.where('1', '=', '0');
+        } else {
+          query = query.whereIn('leave_applications.user_id', departmentFilterUserIds);
         }
       }
 
@@ -789,17 +823,11 @@ class ApprovalController {
           extraWorkingHoursQuery = extraWorkingHoursQuery.where('extra_working_hours_applications.flow_type', flow_type);
         }
 
-        // 部門群組篩選
-        if (department_group_id) {
-          const deptGroupId = parseInt(department_group_id);
-          if (!isNaN(deptGroupId) && deptGroupId > 0) {
-            const DepartmentGroup = require('../database/models/DepartmentGroup');
-            const group = await DepartmentGroup.findById(deptGroupId);
-            if (group && group.user_ids && group.user_ids.length > 0) {
-              extraWorkingHoursQuery = extraWorkingHoursQuery.whereIn('extra_working_hours_applications.user_id', group.user_ids);
-            } else {
-              extraWorkingHoursQuery = extraWorkingHoursQuery.where('1', '=', '0');
-            }
+        if (departmentFilterUserIds !== null) {
+          if (departmentFilterUserIds.length === 0) {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.where('1', '=', '0');
+          } else {
+            extraWorkingHoursQuery = extraWorkingHoursQuery.whereIn('extra_working_hours_applications.user_id', departmentFilterUserIds);
           }
         }
 
@@ -857,17 +885,11 @@ class ApprovalController {
           outdoorWorkQuery = outdoorWorkQuery.where('outdoor_work_applications.flow_type', flow_type);
         }
 
-        // 部門群組篩選
-        if (department_group_id) {
-          const deptGroupId = parseInt(department_group_id);
-          if (!isNaN(deptGroupId) && deptGroupId > 0) {
-            const DepartmentGroup = require('../database/models/DepartmentGroup');
-            const group = await DepartmentGroup.findById(deptGroupId);
-            if (group && group.user_ids && group.user_ids.length > 0) {
-              outdoorWorkQuery = outdoorWorkQuery.whereIn('outdoor_work_applications.user_id', group.user_ids);
-            } else {
-              outdoorWorkQuery = outdoorWorkQuery.where('1', '=', '0');
-            }
+        if (departmentFilterUserIds !== null) {
+          if (departmentFilterUserIds.length === 0) {
+            outdoorWorkQuery = outdoorWorkQuery.where('1', '=', '0');
+          } else {
+            outdoorWorkQuery = outdoorWorkQuery.whereIn('outdoor_work_applications.user_id', departmentFilterUserIds);
           }
         }
 
@@ -906,8 +928,6 @@ class ApprovalController {
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
       
       // 過濾出用戶批核過的申請
-      const DepartmentGroup = require('../database/models/DepartmentGroup');
-      const User = require('../database/models/User');
       const isHRMember = await User.isHRMember(userId);
       const processedApplications = [];
       

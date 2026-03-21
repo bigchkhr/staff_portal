@@ -126,13 +126,22 @@ const OutdoorWorkHistory = () => {
     return t('outdoorWorkHistory.eFlow');
   };
 
-  const formatDateTime = (date, time) => {
+  /** 日期一行、時間在下一行（無時間則只顯示日期） */
+  const renderStackedDateTime = (date, time) => {
     if (!date) return '-';
     const dateStr = formatDate(date);
-    if (time) {
-      return `${dateStr} ${time}`;
-    }
-    return dateStr;
+    return (
+      <Box sx={{ lineHeight: 1.35 }}>
+        <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap' }}>
+          {dateStr}
+        </Typography>
+        {time ? (
+          <Typography variant="body2" component="div" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+            {time}
+          </Typography>
+        ) : null}
+      </Box>
+    );
   };
 
   // 搜尋過濾
@@ -180,17 +189,13 @@ const OutdoorWorkHistory = () => {
             <Typography variant="caption" color="text.secondary" display="block">
               {t('outdoorWorkHistory.startTime')}
             </Typography>
-            <Typography variant="body2">
-              {formatDateTime(app.start_date, app.start_time)}
-            </Typography>
+            {renderStackedDateTime(app.start_date, app.start_time)}
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
               {t('outdoorWorkHistory.endTime')}
             </Typography>
-            <Typography variant="body2">
-              {formatDateTime(app.end_date, app.end_time)}
-            </Typography>
+            {renderStackedDateTime(app.end_date, app.end_time)}
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
@@ -376,50 +381,32 @@ const OutdoorWorkHistory = () => {
                 <TableCell>{t('outdoorWorkHistory.startLocation')}</TableCell>
                 <TableCell>{t('outdoorWorkHistory.endLocation')}</TableCell>
                 <TableCell>{t('outdoorWorkHistory.transportation')}</TableCell>
-                <TableCell>{t('outdoorWorkHistory.expense')}</TableCell>
                 <TableCell>{t('outdoorWorkHistory.purpose')}</TableCell>
-                <TableCell>{t('outdoorWorkHistory.flowType')}</TableCell>
                 <TableCell>{t('outdoorWorkHistory.status')}</TableCell>
-                <TableCell>{t('outdoorWorkHistory.applicationDate')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} align="center">{t('outdoorWorkHistory.noRecords')}</TableCell>
+                  <TableCell colSpan={9} align="center">{t('outdoorWorkHistory.noRecords')}</TableCell>
                 </TableRow>
               ) : (
                 applications.map((app) => (
                   <TableRow key={app.id} hover>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatDateTime(app.start_date, app.start_time)}
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatDateTime(app.end_date, app.end_time)}
-                    </TableCell>
+                    <TableCell>{renderStackedDateTime(app.start_date, app.start_time)}</TableCell>
+                    <TableCell>{renderStackedDateTime(app.end_date, app.end_time)}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.total_hours} {t('outdoorWorkHistory.hours')}</TableCell>
                     <TableCell>{app.start_location || '-'}</TableCell>
                     <TableCell>{app.end_location || '-'}</TableCell>
                     <TableCell>{app.transportation || '-'}</TableCell>
-                    <TableCell>{app.expense ? `$${parseFloat(app.expense).toFixed(2)}` : '-'}</TableCell>
                     <TableCell>{app.purpose || '-'}</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      <Chip
-                        label={getFlowTypeText(app)}
-                        color={app.is_paper_flow === true || app.flow_type === 'paper-flow' ? 'secondary' : 'primary'}
-                        size="small"
-                      />
-                    </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
                         label={getStatusText(app.status)}
                         color={getStatusColor(app.status)}
                         size="small"
                       />
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {app.application_date ? formatDate(app.application_date) : '-'}
                     </TableCell>
                   </TableRow>
                 ))

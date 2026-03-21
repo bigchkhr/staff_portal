@@ -4,6 +4,7 @@ const DepartmentGroup = require('../database/models/DepartmentGroup');
 const ClockRecord = require('../database/models/ClockRecord');
 const User = require('../database/models/User');
 const LeaveApplication = require('../database/models/LeaveApplication');
+const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
 const knex = require('../config/database');
 
 class AttendanceController {
@@ -550,6 +551,17 @@ class AttendanceController {
         // 如果獲取假期失敗，不影響其他功能，繼續執行
       }
 
+      let outdoorWorkByCell = {};
+      try {
+        outdoorWorkByCell = await OutdoorWorkApplication.buildApprovedOutdoorWorkCellMap(
+          members.map(m => m.id),
+          start_date,
+          end_date
+        );
+      } catch (owErr) {
+        console.error('Get approved outdoor work for attendance comparison error:', owErr);
+      }
+
       // 生成日期列表（避免時區轉換問題，直接使用字符串日期）
       const dates = [];
       const start = new Date(start_date + 'T00:00:00'); // 明確指定為本地時間
@@ -651,6 +663,7 @@ class AttendanceController {
           const memberId = Number(member.id);
           const leaveKey = `${memberId}_${date}`;
           const approvedLeave = approvedLeaves[leaveKey] || null;
+          const outdoorWork = outdoorWorkByCell[leaveKey] || [];
 
           // 優先使用已批准的假期信息，如果沒有則使用排班信息
           let finalSchedule = null;
@@ -689,6 +702,7 @@ class AttendanceController {
             position_name: member.position_name || null,
             position_name_zh: member.position_name_zh || null,
             attendance_date: date,
+            outdoor_work: outdoorWork,
             schedule: finalSchedule,
             attendance: (() => {
               // 從 clock_records 構建考勤信息

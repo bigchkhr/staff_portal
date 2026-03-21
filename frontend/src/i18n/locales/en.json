@@ -1098,6 +1098,11 @@
     "submitFailed": "Application failed",
     "submitError": "Error submitting application"
   },
+  "outdoorWorkCalendar": {
+    "cellLabel": "Outdoor work",
+    "detailTitle": "Outdoor work details",
+    "recordOf": "Record {{current}} of {{total}}"
+  },
   "outdoorWorkHistory": {
     "title": "Outdoor Work Application History",
     "transactionId": "Transaction ID",
@@ -1574,6 +1579,8 @@
     "leaveType": "Leave Type",
     "details": "Details",
     "noScheduleTime": "No Schedule Time",
+    "monthlySummaryTotalOccurrences": "{{count}} days",
+    "monthlySummaryLateTimesInParens": "({{count}} times)",
     "monthlyReport": "Monthly Report",
     "generateReport": "Generate Report",
     "generating": "Generating...",
@@ -1631,7 +1638,34 @@
     "employeeName": "Employee Name",
     "showingResults": "Showing",
     "of": "of",
-    "results": "results"
+    "results": "results",
+    "exportPDFFailed": "PDF export failed"
+  },
+  "monthlyReportExport": {
+    "title": "Export monthly report (CSV)",
+    "subtitle": "Select a year and month to download that month’s CSV for all employees.",
+    "downloadCsv": "Download CSV",
+    "exporting": "Exporting…",
+    "notesTitle": "Notes",
+    "noteSelectPeriod": "Choose the year and month to export.",
+    "noteClickDownload": "Click “Download CSV” to download all employees’ data for that month.",
+    "noteCsvFields": "The file includes all report columns and opens in Excel.",
+    "noteFileNamePattern": "File name: monthly_attendance_report_YYYY_MM.csv",
+    "errorSelectYearMonth": "Please select year and month",
+    "errorExportFailed": "Export failed",
+    "errorExportFailedRetry": "Export failed. Please try again later.",
+    "month1": "January",
+    "month2": "February",
+    "month3": "March",
+    "month4": "April",
+    "month5": "May",
+    "month6": "June",
+    "month7": "July",
+    "month8": "August",
+    "month9": "September",
+    "month10": "October",
+    "month11": "November",
+    "month12": "December"
   },
   "groupLeaveCalendar": {
     "title": "Group Leave Calendar",

@@ -77,14 +77,12 @@ const Login = () => {
     setError('');
     setLoading(true);
 
-    console.log('Login form submitted:', { employeeNumber, password: '***' });
+    // console.log('Login form submitted:', { employeeNumber, password: '***' });
 
     const result = await login(employeeNumber, password);
-    
-    console.log('Login result:', result);
+
     
     if (result.success) {
-      console.log('Navigating to dashboard...');
       navigate('/');
     } else {
       console.error('Login failed:', result.message);

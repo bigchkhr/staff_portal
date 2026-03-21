@@ -40,9 +40,9 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (employee_number, password) => {
     try {
-      console.log('Frontend: Attempting login with employee_number:', employee_number);
+      // console.log('Frontend: Attempting login with employee_number:', employee_number);
       const response = await axios.post('/api/auth/login', { employee_number, password });
-      console.log('Frontend: Login response received:', response.data);
+      // console.log('Frontend: Login response received:', response.data);
       const { token, user } = response.data;
       
       if (!token) {
@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
-      console.log('Frontend: Login successful');
+      // console.log('Frontend: Login successful');
       return { success: true };
     } catch (error) {
       console.error('Frontend: Login error:', error);

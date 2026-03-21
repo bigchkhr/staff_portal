@@ -2,6 +2,7 @@ const Schedule = require('../database/models/Schedule');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const User = require('../database/models/User');
 const LeaveApplication = require('../database/models/LeaveApplication');
+const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
 const knex = require('../config/database');
 const monthlyAttendanceSummaryController = require('./monthlyAttendanceSummary.controller');
 
@@ -179,9 +180,23 @@ class ScheduleController {
       const allSchedules = [...schedulesWithLeaves, ...leaveOnlySchedules];
       
       console.log(`✅ 合併後總共 ${allSchedules.length} 條記錄（${schedulesWithLeaves.length} 條排班記錄 + ${leaveOnlySchedules.length} 條假期記錄）`);
+
+      let outdoor_work_by_cell = {};
+      if (start_date && end_date && groupMembers.length > 0) {
+        try {
+          outdoor_work_by_cell = await OutdoorWorkApplication.buildApprovedOutdoorWorkCellMap(
+            groupMembers.map(m => m.id),
+            start_date,
+            end_date
+          );
+        } catch (owErr) {
+          console.error('獲取已批核外勤工作時發生錯誤:', owErr);
+        }
+      }
       
       res.json({ 
-        schedules: allSchedules
+        schedules: allSchedules,
+        outdoor_work_by_cell
       });
     } catch (error) {
       console.error('Get schedules error:', error);

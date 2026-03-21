@@ -34,6 +34,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { getSessionForDate, sessionToFlags } from '../utils/leaveSessionUtils';
+import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
 import 'dayjs/locale/zh-tw';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
@@ -59,6 +60,7 @@ const GroupLeaveCalendar = () => {
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [currentWeek, setCurrentWeek] = useState(dayjs().startOf('isoWeek'));
   const [schedules, setSchedules] = useState([]); // 存儲假期申請數據
+  const [outdoorWorkByCell, setOutdoorWorkByCell] = useState({}); // userId_YYYY-MM-DD -> 外勤摘要列表
   const [loading, setLoading] = useState(false);
   const [groupMembers, setGroupMembers] = useState({}); // { groupId: [members] }
   const [groupSelectDialogOpen, setGroupSelectDialogOpen] = useState(false);
@@ -130,6 +132,7 @@ const GroupLeaveCalendar = () => {
       
       // 為每個選中的群組獲取假期申請數據
       const allLeaveApplications = [];
+      const outdoorAccum = {};
       
       for (const groupId of selectedGroupIds) {
         const members = groupMembers[groupId] || [];
@@ -278,6 +281,59 @@ const GroupLeaveCalendar = () => {
                 }
               });
             });
+
+            const outRes = await axios.get('/api/outdoor-work', {
+              params: {
+                user_id: member.id,
+                status: 'approved',
+                start_date_from: expandedWeekStart,
+                end_date_to: expandedWeekEnd
+              }
+            });
+            const outdoorApps = (outRes.data.applications || []).filter(a => a.status === 'approved');
+            outdoorApps.forEach(app => {
+              const parseOd = (d) => {
+                if (d == null || d === '') return null;
+                const ds = String(d);
+                if (ds.includes('T') && ds.includes('Z')) {
+                  return dayjs.utc(ds).tz('Asia/Hong_Kong').startOf('day');
+                }
+                if (ds.includes('T')) {
+                  return dayjs.tz(ds, 'Asia/Hong_Kong').startOf('day');
+                }
+                return dayjs.tz(ds.split('T')[0], 'Asia/Hong_Kong').startOf('day');
+              };
+              const oStart = parseOd(app.start_date);
+              const oEnd = parseOd(app.end_date);
+              if (!oStart || !oEnd || !oStart.isValid() || !oEnd.isValid()) return;
+              let cur = oStart.clone();
+              while (cur.isSameOrBefore(oEnd, 'day')) {
+                const currentDateStr = cur.format('YYYY-MM-DD');
+                if (currentDateStr >= weekStart && currentDateStr <= weekEnd) {
+                  const key = `${member.id}_${currentDateStr}`;
+                  if (!outdoorAccum[key]) outdoorAccum[key] = [];
+                  const summary = {
+                    id: app.id,
+                    transaction_id: app.transaction_id,
+                    start_date: oStart.format('YYYY-MM-DD'),
+                    end_date: oEnd.format('YYYY-MM-DD'),
+                    start_time: app.start_time,
+                    end_time: app.end_time,
+                    total_hours: app.total_hours,
+                    start_location: app.start_location,
+                    end_location: app.end_location,
+                    transportation: app.transportation,
+                    expense: app.expense,
+                    purpose: app.purpose,
+                    flow_type: app.flow_type
+                  };
+                  if (!outdoorAccum[key].some(x => x.id === summary.id)) {
+                    outdoorAccum[key].push(summary);
+                  }
+                }
+                cur = cur.add(1, 'day').clone();
+              }
+            });
           } catch (error) {
             console.error(`Fetch leave applications error for user ${member.id}:`, {
               message: error.message,
@@ -339,8 +395,10 @@ const GroupLeaveCalendar = () => {
       });
       
       setSchedules(mergedLeaves);
+      setOutdoorWorkByCell(outdoorAccum);
     } catch (error) {
       console.error('Fetch leave applications error:', error);
+      setOutdoorWorkByCell({});
     } finally {
       setLoading(false);
     }
@@ -380,6 +438,12 @@ const GroupLeaveCalendar = () => {
       
       return sDateStr === dateStr;
     });
+  };
+
+  const getOutdoorWorkForUserAndDate = (userId, date) => {
+    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const key = `${Number(userId)}_${dateStr}`;
+    return outdoorWorkByCell[key] || [];
   };
 
   const isOnLeave = (schedule) => {
@@ -661,11 +725,12 @@ const GroupLeaveCalendar = () => {
                 const members = groupMembers[groupId] || [];
                 const groupSchedules = schedules.filter(s => Number(s.department_group_id) === Number(groupId));
                 
-                // 檢查本週是否有任何員工放假
+                // 檢查本週是否有任何員工放假或外勤
                 const hasAnyLeave = weekDates.some(date => {
                   return members.some(member => {
                     const schedule = getScheduleForUserAndDate(member.id, date);
-                    return isOnLeave(schedule);
+                    const outdoor = getOutdoorWorkForUserAndDate(member.id, date);
+                    return isOnLeave(schedule) || (outdoor && outdoor.length > 0);
                   });
                 });
 
@@ -699,10 +764,11 @@ const GroupLeaveCalendar = () => {
                         {weekDates.map((date, dateIndex) => {
                           const dateStr = date.format('YYYY-MM-DD');
                           const isToday = date.tz('Asia/Hong_Kong').isSame(dayjs().tz('Asia/Hong_Kong'), 'day');
-                          // 直接找出當天放假的員工
+                          // 當天有假期或外勤的員工
                           const dayMembersOnLeave = members.filter(member => {
                             const schedule = getScheduleForUserAndDate(member.id, date);
-                            return isOnLeave(schedule);
+                            const outdoor = getOutdoorWorkForUserAndDate(member.id, date);
+                            return isOnLeave(schedule) || (outdoor && outdoor.length > 0);
                           });
 
                           return (
@@ -734,6 +800,7 @@ const GroupLeaveCalendar = () => {
                                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                                     {dayMembersOnLeave.map(member => {
                                       const schedule = getScheduleForUserAndDate(member.id, date);
+                                      const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
                                       const leaveTypeName = getLeaveTypeName(schedule);
                                       const leavePeriodText = getLeavePeriodText(schedule);
                                       const leavePeriodColor = getLeavePeriodColor(schedule);
@@ -757,7 +824,7 @@ const GroupLeaveCalendar = () => {
                                               {memberName}
                                             </Typography>
                                           </Box>
-                                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
                                             {leaveTypeName && (
                                               <Chip 
                                                 label={leaveTypeName} 
@@ -798,6 +865,10 @@ const GroupLeaveCalendar = () => {
                                                 }}
                                               />
                                             )}
+                                            <OutdoorWorkCalendarChip
+                                              applications={outdoorApps}
+                                              sx={{ fontSize: '0.65rem', height: '18px' }}
+                                            />
                                           </Box>
                                         </Box>
                                       );

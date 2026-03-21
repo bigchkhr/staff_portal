@@ -649,8 +649,10 @@ class MonthlyAttendanceReportController {
   // 導出月報為 CSV
   async exportToCSV(req, res) {
     try {
-      const { year, month } = req.query;
+      const { year, month, lang } = req.query;
       const userId = req.user.id;
+      const langNorm = (lang || '').toString().toLowerCase();
+      const useEnglishHeaders = langNorm === 'en' || langNorm.startsWith('en-');
 
       if (!year || !month) {
         return res.status(400).json({ message: '請提供年份和月份' });
@@ -679,43 +681,80 @@ class MonthlyAttendanceReportController {
         return res.status(404).json({ message: '該月份沒有月報記錄' });
       }
 
-      // 構建 CSV 標題行
-      const headers = [
-        '員工編號',
-        '員工姓名',
-        '員工姓名(中文)',
-        '年份',
-        '月份',
-        '年假',
-        '生日假',
-        '補假',
-        '全薪病假',
-        '病假(疾病津貼)',
-        '無薪病假',
-        '工傷病假',
-        '婚假',
-        '產假',
-        '侍產假',
-        '陪審團假',
-        '恩恤假',
-        '無薪事假',
-        '特別假期',
-        '例假',
-        '累積例假',
-        '法定假期',
-        '缺勤',
-        '上班日數',
-        '遲到次數',
-        '遲到總分鐘數',
-        'FT超時工作時數',
-        'PT工作時數',
-        'Store Manager Allowance',
-        'Attendance Bonus',
-        'Location Allowance',
-        'Incentive',
-        '特別津貼',
-        '備註'
-      ];
+      // 構建 CSV 標題行：英文介面時欄位用英文，假期欄用系統代碼（與 classifyLeaveType 一致）
+      const headers = useEnglishHeaders
+        ? [
+            'Employee Number',
+            'Display Name',
+            'Name (Chinese)',
+            'Year',
+            'Month',
+            'AL',
+            'BL',
+            'CL',
+            'FPSL',
+            'SAL',
+            'NPSL',
+            'IL',
+            'MGL',
+            'MTL',
+            'PTL',
+            'JSL',
+            'CPL',
+            'NPL',
+            'SPL',
+            'R',
+            'AR',
+            'SH',
+            'ABS',
+            'Work Days',
+            'Late Count',
+            'Late Total Minutes',
+            'FT Overtime Hours',
+            'PT Work Hours',
+            'Store Manager Allowance',
+            'Attendance Bonus',
+            'Location Allowance',
+            'Incentive',
+            'Special Allowance',
+            'Remarks'
+          ]
+        : [
+            '員工編號',
+            '員工姓名',
+            '員工姓名(中文)',
+            '年份',
+            '月份',
+            '年假',
+            '生日假',
+            '補假',
+            '全薪病假',
+            '病假(疾病津貼)',
+            '無薪病假',
+            '工傷病假',
+            '婚假',
+            '產假',
+            '侍產假',
+            '陪審團假',
+            '恩恤假',
+            '無薪事假',
+            '特別假期',
+            '例假',
+            '累積例假',
+            '法定假期',
+            '缺勤',
+            '上班日數',
+            '遲到次數',
+            '遲到總分鐘數',
+            'FT超時工作時數',
+            'PT工作時數',
+            'Store Manager Allowance',
+            'Attendance Bonus',
+            'Location Allowance',
+            'Incentive',
+            '特別津貼',
+            '備註'
+          ];
 
       // 構建 CSV 數據行
       const csvRows = [headers.join(',')];

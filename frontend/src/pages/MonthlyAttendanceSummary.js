@@ -59,6 +59,63 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
+/** 與月結表主表格「考勤情況」欄一致的有效打卡記錄（供總計次數用） */
+function getValidClockRecordsForMonthlySummary(day) {
+  if (day.valid_clock_records && Array.isArray(day.valid_clock_records) && day.valid_clock_records.length > 0) {
+    return day.valid_clock_records;
+  }
+  if (day.attendance_data?.clock_records && Array.isArray(day.attendance_data.clock_records)) {
+    return day.attendance_data.clock_records
+      .filter((r) => {
+        const isValid =
+          r.is_valid === true ||
+          r.is_valid === 'true' ||
+          r.is_valid === 1 ||
+          r.is_valid === '1' ||
+          r.is_valid === 'True' ||
+          (typeof r.is_valid === 'string' && r.is_valid.toLowerCase() === 'true');
+        return isValid && r.clock_time;
+      })
+      .sort((a, b) => {
+        const timeA = a.clock_time || '';
+        const timeB = b.clock_time || '';
+        return timeA.localeCompare(timeB);
+      });
+  }
+  return [];
+}
+
+function computeMonthlySummaryFootStats(dailyData) {
+  return dailyData.reduce(
+    (acc, day) => {
+      acc.late_minutes += day.late_minutes || 0;
+      acc.break_duration += day.break_duration || 0;
+      acc.total_work_hours += day.total_work_hours || 0;
+      acc.overtime_hours += day.overtime_hours || 0;
+      acc.approved_overtime_minutes += day.approved_overtime_minutes || 0;
+
+      const schedule = day.schedule || day.attendance_data?.schedule;
+      if (schedule) acc.schedule_day_count += 1;
+      if (day.store_short_name) acc.store_day_count += 1;
+      if (getValidClockRecordsForMonthlySummary(day).length > 0) acc.attendance_day_count += 1;
+      if ((day.late_minutes ?? 0) > 0) acc.late_occurrence_count += 1;
+
+      return acc;
+    },
+    {
+      late_minutes: 0,
+      break_duration: 0,
+      total_work_hours: 0,
+      overtime_hours: 0,
+      approved_overtime_minutes: 0,
+      schedule_day_count: 0,
+      store_day_count: 0,
+      attendance_day_count: 0,
+      late_occurrence_count: 0
+    }
+  );
+}
+
 const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -661,33 +718,35 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       ];
     });
 
-    // 計算總計
-    const totals = dailyData.reduce((acc, day) => {
-      acc.late_minutes += day.late_minutes || 0;
-      acc.break_duration += day.break_duration || 0;
-      acc.total_work_hours += day.total_work_hours || 0;
-      acc.overtime_hours += day.overtime_hours || 0;
-      acc.approved_overtime_minutes += day.approved_overtime_minutes || 0;
-      return acc;
-    }, {
-      late_minutes: 0,
-      break_duration: 0,
-      total_work_hours: 0,
-      overtime_hours: 0,
-      approved_overtime_minutes: 0
-    });
+    const footStats = computeMonthlySummaryFootStats(dailyData);
+    const {
+      late_minutes: lateTotal,
+      break_duration: breakTotal,
+      total_work_hours: workTotal,
+      overtime_hours: otTotal,
+      approved_overtime_minutes: approvedOtTotal,
+      schedule_day_count: pdfScheduleCount,
+      store_day_count: pdfStoreCount,
+      attendance_day_count: pdfAttendanceCount,
+      late_occurrence_count: pdfLateCount
+    } = footStats;
 
-    // 準備總計行
+    const lateFootCell =
+      lateTotal > 0
+        ? `${formatTime(lateTotal)}${pdfLateCount > 0 ? ` (${pdfLateCount} times)` : ''}`
+        : '--';
+
+    // 準備總計行（PDF 用英文，與表頭一致）
     const totalRow = [
       'Total',
-      '--',
-      '--',
-      '--',
-      totals.late_minutes > 0 ? formatTime(totals.late_minutes) : '--',
-      totals.break_duration > 0 ? formatTime(totals.break_duration) : '--',
-      formatHoursAsTime(totals.total_work_hours),
-      formatHoursAsTime(totals.overtime_hours),
-      totals.approved_overtime_minutes > 0 ? formatTime(totals.approved_overtime_minutes) : '--'
+      `${pdfScheduleCount} days`,
+      `${pdfStoreCount} days`,
+      `${pdfAttendanceCount} days`,
+      lateFootCell,
+      breakTotal > 0 ? formatTime(breakTotal) : '--',
+      formatHoursAsTime(workTotal),
+      formatHoursAsTime(otTotal),
+      approvedOtTotal > 0 ? formatTime(approvedOtTotal) : '--'
     ];
 
     // 表格標題 - 使用英文避免字體問題（需與頁面 table 欄位一致）
@@ -772,12 +831,16 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     finalY += 7;
     
     // 應計工作時數/應計超時工作時數
-    doc.text(`${approvedOTLabel}: ${totals.approved_overtime_minutes > 0 ? formatTime(totals.approved_overtime_minutes) : '--'}`, 14, finalY);
+    doc.text(`${approvedOTLabel}: ${approvedOtTotal > 0 ? formatTime(approvedOtTotal) : '--'}`, 14, finalY);
     finalY += 6;
     
     // 總遲到分鐘數（只有 >= 10 分鐘時才顯示）
-    if (totals.late_minutes >= 10) {
-      doc.text(`Total Late Minutes: ${formatTime(totals.late_minutes)}`, 14, finalY);
+    if (lateTotal >= 10) {
+      doc.text(
+        `Total Late Minutes: ${formatTime(lateTotal)}${pdfLateCount > 0 ? ` (${pdfLateCount} times)` : ''}`,
+        14,
+        finalY
+      );
       finalY += 6;
     }
 
@@ -803,7 +866,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       });
       
       // 如果遲到 >= 10分鐘或有不符合資格的假期，顯示提示
-      if (totals.late_minutes >= 10 || hasDisqualifiedLeave) {
+      if (lateTotal >= 10 || hasDisqualifiedLeave) {
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 0, 0); // 紅色
         doc.setFontSize(9);
@@ -1388,55 +1451,53 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                     
                     {/* 總計行 */}
                     {dailyData.length > 0 && (() => {
-                      const totals = dailyData.reduce((acc, day) => {
-                        acc.late_minutes += day.late_minutes || 0;
-                        acc.break_duration += day.break_duration || 0;
-                        acc.total_work_hours += day.total_work_hours || 0;
-                        acc.overtime_hours += day.overtime_hours || 0;
-                        acc.approved_overtime_minutes += day.approved_overtime_minutes || 0;
-                        return acc;
-                      }, {
-                        late_minutes: 0,
-                        break_duration: 0,
-                        total_work_hours: 0,
-                        overtime_hours: 0,
-                        approved_overtime_minutes: 0
-                      });
+                      const foot = computeMonthlySummaryFootStats(dailyData);
 
                       return (
                         <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 600 }}>
                           <TableCell sx={{ fontWeight: 700 }}>
                             {t('common.total') || '總計'}
                           </TableCell>
-                          <TableCell>--</TableCell>
-                          <TableCell>--</TableCell>
-                          <TableCell>--</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {t('attendance.monthlySummaryTotalOccurrences', { count: foot.schedule_day_count })}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {t('attendance.monthlySummaryTotalOccurrences', { count: foot.store_day_count })}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>
+                            {t('attendance.monthlySummaryTotalOccurrences', { count: foot.attendance_day_count })}
+                          </TableCell>
                           <TableCell>
-                            {totals.late_minutes > 0 ? (
-                              <Typography
-                                sx={{
-                                  fontWeight: 700,
-                                  color: 'error.main',
-                                  display: 'inline-block'
-                                }}
+                            {foot.late_minutes > 0 ? (
+                              <Box
+                                component="span"
+                                sx={{ fontWeight: 700, color: 'error.main', display: 'inline-block' }}
                               >
-                                {formatTime(totals.late_minutes)}
-                              </Typography>
+                                {formatTime(foot.late_minutes)}
+                                {foot.late_occurrence_count > 0 ? (
+                                  <>
+                                    {' '}
+                                    {t('attendance.monthlySummaryLateTimesInParens', {
+                                      count: foot.late_occurrence_count
+                                    })}
+                                  </>
+                                ) : null}
+                              </Box>
                             ) : (
                               '--'
                             )}
                           </TableCell>
                           <TableCell>
-                            {totals.break_duration > 0 ? formatTime(totals.break_duration) : '--'}
+                            {foot.break_duration > 0 ? formatTime(foot.break_duration) : '--'}
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>
-                            {formatHoursAsTime(totals.total_work_hours)}
+                            {formatHoursAsTime(foot.total_work_hours)}
                           </TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>
-                            {formatHoursAsTime(totals.overtime_hours)}
+                            {formatHoursAsTime(foot.overtime_hours)}
                           </TableCell>
                           <TableCell>
-                            {totals.approved_overtime_minutes > 0 ? (
+                            {foot.approved_overtime_minutes > 0 ? (
                               <Typography
                                 sx={{
                                   fontWeight: 700,
@@ -1444,7 +1505,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                                   display: 'inline-block'
                                 }}
                               >
-                                {formatTime(totals.approved_overtime_minutes)}
+                                {formatTime(foot.approved_overtime_minutes)}
                               </Typography>
                             ) : (
                               '--'

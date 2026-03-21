@@ -991,6 +991,11 @@
     "submitFailed": "申请失败",
     "submitError": "提交申请时发生错误"
   },
+  "outdoorWorkCalendar": {
+    "cellLabel": "外勤工作",
+    "detailTitle": "外勤工作申请详情",
+    "recordOf": "第 {{current}} 笔／共 {{total}} 笔"
+  },
   "outdoorWorkHistory": {
     "title": "外勤工作申请历史",
     "transactionId": "交易编号",
@@ -1467,6 +1472,8 @@
     "leaveType": "假期类型",
     "details": "详情",
     "noScheduleTime": "无排班时间",
+    "monthlySummaryTotalOccurrences": "{{count}} 日",
+    "monthlySummaryLateTimesInParens": "({{count}} 次)",
     "monthlyReport": "月报",
     "generateReport": "生成月报",
     "generating": "生成中...",
@@ -1524,7 +1531,34 @@
     "employeeName": "员工姓名",
     "showingResults": "显示",
     "of": "共",
-    "results": "笔记录"
+    "results": "笔记录",
+    "exportPDFFailed": "PDF 导出失败"
+  },
+  "monthlyReportExport": {
+    "title": "导出月报（CSV）",
+    "subtitle": "选择年份与月份，下载该月份所有员工的月报 CSV。",
+    "downloadCsv": "下载 CSV",
+    "exporting": "导出中…",
+    "notesTitle": "说明",
+    "noteSelectPeriod": "选择要导出的年份与月份。",
+    "noteClickDownload": "点击「下载 CSV」即可下载该月份所有员工的月报数据。",
+    "noteCsvFields": "CSV 包含月报所有列，可用 Excel 打开。",
+    "noteFileNamePattern": "文件名格式：monthly_attendance_report_YYYY_MM.csv",
+    "errorSelectYearMonth": "请选择年份与月份",
+    "errorExportFailed": "导出失败",
+    "errorExportFailedRetry": "导出失败，请稍后再试。",
+    "month1": "一月",
+    "month2": "二月",
+    "month3": "三月",
+    "month4": "四月",
+    "month5": "五月",
+    "month6": "六月",
+    "month7": "七月",
+    "month8": "八月",
+    "month9": "九月",
+    "month10": "十月",
+    "month11": "十一月",
+    "month12": "十二月"
   },
   "groupLeaveCalendar": {
     "title": "群组假期周历",

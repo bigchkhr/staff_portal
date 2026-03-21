@@ -39,7 +39,8 @@ import {
   useTheme,
   useMediaQuery,
   CircularProgress,
-  Pagination
+  Pagination,
+  Checkbox
 } from '@mui/material';
 import { 
   Visibility as VisibilityIcon, 
@@ -146,16 +147,6 @@ const MobileCard = memo(({ app, isReversal, onViewDetails, onManageFiles, onReve
                   {app.total_hours || 0} {t('approvalHistory.hours')}
                 </Typography>
               </Grid>
-              {app.application_type === 'outdoor_work' && (
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    {t('approvalHistory.cost') || '費用'}
-                  </Typography>
-                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                    {app.expense ? `$${parseFloat(app.expense).toFixed(2)}` : '-'}
-                  </Typography>
-                </Grid>
-              )}
             </>
           ) : (
             <>
@@ -296,22 +287,22 @@ const ApprovalHistory = () => {
   
   // 進階搜尋狀態（用於 UI 顯示，用戶輸入時更新）
   const [advancedSearchExpanded, setAdvancedSearchExpanded] = useState(false);
-  const [filterLeaveType, setFilterLeaveType] = useState('');
+  const [filterLeaveTypeIds, setFilterLeaveTypeIds] = useState([]);
   const [filterFlowType, setFilterFlowType] = useState('');
   const [filterApplicationType, setFilterApplicationType] = useState('');
   const [filterYear, setFilterYear] = useState(currentYear.toString());
   const [filterMonth, setFilterMonth] = useState(currentMonth.toString());
-  const [filterDepartmentGroup, setFilterDepartmentGroup] = useState('');
+  const [filterDepartmentGroupIds, setFilterDepartmentGroupIds] = useState([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   
   // 實際用於搜尋的參數（只在按下搜尋按鈕時更新）
-  const [activeFilterLeaveType, setActiveFilterLeaveType] = useState('');
+  const [activeFilterLeaveTypeIds, setActiveFilterLeaveTypeIds] = useState([]);
   const [activeFilterFlowType, setActiveFilterFlowType] = useState('');
   const [activeFilterApplicationType, setActiveFilterApplicationType] = useState('');
   const [activeFilterYear, setActiveFilterYear] = useState(currentYear.toString());
   const [activeFilterMonth, setActiveFilterMonth] = useState(currentMonth.toString());
-  const [activeFilterDepartmentGroup, setActiveFilterDepartmentGroup] = useState('');
+  const [activeFilterDepartmentGroupIds, setActiveFilterDepartmentGroupIds] = useState([]);
   const [activeDateFrom, setActiveDateFrom] = useState('');
   const [activeDateTo, setActiveDateTo] = useState('');
   const [leaveTypes, setLeaveTypes] = useState([]);
@@ -367,19 +358,27 @@ const ApprovalHistory = () => {
       }
       
       // 進階搜尋參數（使用 overrideParams 中的參數，如果沒有則使用實際搜尋參數）
-      const currentFilterLeaveType = overrideParams.filterLeaveType !== undefined ? overrideParams.filterLeaveType : activeFilterLeaveType;
+      const currentFilterLeaveTypeIds = overrideParams.filterLeaveTypeIds !== undefined
+        ? overrideParams.filterLeaveTypeIds
+        : activeFilterLeaveTypeIds;
       const currentFilterFlowType = overrideParams.filterFlowType !== undefined ? overrideParams.filterFlowType : activeFilterFlowType;
       const currentFilterApplicationType = overrideParams.filterApplicationType !== undefined ? overrideParams.filterApplicationType : activeFilterApplicationType;
-      const currentFilterDepartmentGroup = overrideParams.filterDepartmentGroup !== undefined ? overrideParams.filterDepartmentGroup : activeFilterDepartmentGroup;
+      const currentFilterDepartmentGroupIds = overrideParams.filterDepartmentGroupIds !== undefined
+        ? overrideParams.filterDepartmentGroupIds
+        : activeFilterDepartmentGroupIds;
       const currentFilterYear = overrideParams.filterYear !== undefined ? overrideParams.filterYear : activeFilterYear;
       const currentFilterMonth = overrideParams.filterMonth !== undefined ? overrideParams.filterMonth : activeFilterMonth;
       const currentDateFrom = overrideParams.dateFrom !== undefined ? overrideParams.dateFrom : activeDateFrom;
       const currentDateTo = overrideParams.dateTo !== undefined ? overrideParams.dateTo : activeDateTo;
       
-      if (currentFilterLeaveType) params.leave_type_id = currentFilterLeaveType;
+      if (currentFilterLeaveTypeIds && currentFilterLeaveTypeIds.length > 0) {
+        params.leave_type_ids = currentFilterLeaveTypeIds.join(',');
+      }
       if (currentFilterFlowType) params.flow_type = currentFilterFlowType;
       if (currentFilterApplicationType) params.application_type = currentFilterApplicationType;
-      if (currentFilterDepartmentGroup) params.department_group_id = currentFilterDepartmentGroup;
+      if (currentFilterDepartmentGroupIds && currentFilterDepartmentGroupIds.length > 0) {
+        params.department_group_ids = currentFilterDepartmentGroupIds.join(',');
+      }
       if (currentFilterYear) {
         const yearStr = String(currentFilterYear).trim();
         if (yearStr) {
@@ -414,7 +413,7 @@ const ApprovalHistory = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, searchKeyword, activeStatusFilter, activeFilterLeaveType, activeFilterFlowType, activeFilterApplicationType, activeFilterDepartmentGroup, activeFilterYear, activeFilterMonth, activeDateFrom, activeDateTo]);
+  }, [page, limit, searchKeyword, activeStatusFilter, activeFilterLeaveTypeIds, activeFilterFlowType, activeFilterApplicationType, activeFilterDepartmentGroupIds, activeFilterYear, activeFilterMonth, activeDateFrom, activeDateTo]);
 
   useEffect(() => {
     fetchLeaveTypes();
@@ -643,12 +642,12 @@ const ApprovalHistory = () => {
     setSearchKeyword(search);
     // 將進階搜尋的內部狀態複製到實際搜尋參數
     setActiveStatusFilter(statusFilter);
-    setActiveFilterLeaveType(filterLeaveType);
+    setActiveFilterLeaveTypeIds([...filterLeaveTypeIds]);
     setActiveFilterFlowType(filterFlowType);
     setActiveFilterApplicationType(filterApplicationType);
     setActiveFilterYear(filterYear);
     setActiveFilterMonth(filterMonth);
-    setActiveFilterDepartmentGroup(filterDepartmentGroup);
+    setActiveFilterDepartmentGroupIds([...filterDepartmentGroupIds]);
     setActiveDateFrom(dateFrom);
     setActiveDateTo(dateTo);
     // 重置到第一頁並使用最新參數觸發搜尋
@@ -656,17 +655,17 @@ const ApprovalHistory = () => {
     fetchApprovalHistory({
       keyword: search,
       statusFilter,
-      filterLeaveType,
+      filterLeaveTypeIds: [...filterLeaveTypeIds],
       filterFlowType,
       filterApplicationType,
       filterYear,
       filterMonth,
-      filterDepartmentGroup,
+      filterDepartmentGroupIds: [...filterDepartmentGroupIds],
       dateFrom,
       dateTo,
       page: 1
     });
-  }, [search, statusFilter, filterLeaveType, filterFlowType, filterApplicationType, filterYear, filterMonth, filterDepartmentGroup, dateFrom, dateTo, fetchApprovalHistory]);
+  }, [search, statusFilter, filterLeaveTypeIds, filterFlowType, filterApplicationType, filterYear, filterMonth, filterDepartmentGroupIds, dateFrom, dateTo, fetchApprovalHistory]);
 
   const handleSearchKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -1004,16 +1003,33 @@ const ApprovalHistory = () => {
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('approvalHistory.leaveTypeFilter') || t('leaveHistory.leaveTypeFilter')}</InputLabel>
                   <Select
-                    value={filterLeaveType}
-                    onChange={(e) => setFilterLeaveType(e.target.value)}
+                    multiple
+                    value={filterLeaveTypeIds}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFilterLeaveTypeIds(typeof value === 'string' ? value.split(',') : value);
+                    }}
                     label={t('approvalHistory.leaveTypeFilter') || t('leaveHistory.leaveTypeFilter')}
+                    renderValue={(selected) => {
+                      if (!selected || selected.length === 0) {
+                        return t('approvalHistory.allLeaveTypes') || t('leaveHistory.allLeaveTypes');
+                      }
+                      return leaveTypes
+                        .filter((type) => selected.includes(String(type.id)))
+                        .map((type) => (i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name)))
+                        .join(', ');
+                    }}
                   >
-                    <MenuItem value="">{t('approvalHistory.allLeaveTypes') || t('leaveHistory.allLeaveTypes')}</MenuItem>
-                    {leaveTypes.map((type) => (
-                      <MenuItem key={type.id} value={type.id}>
-                        {i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name)}
-                      </MenuItem>
-                    ))}
+                    {leaveTypes.map((type) => {
+                      const tid = String(type.id);
+                      const label = i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name);
+                      return (
+                        <MenuItem key={type.id} value={tid}>
+                          <Checkbox size="small" checked={filterLeaveTypeIds.includes(tid)} />
+                          <ListItemText primary={label} />
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1053,16 +1069,33 @@ const ApprovalHistory = () => {
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('approvalHistory.departmentGroupFilter') || t('leaveHistory.departmentGroupFilter')}</InputLabel>
                   <Select
-                    value={filterDepartmentGroup}
-                    onChange={(e) => setFilterDepartmentGroup(e.target.value)}
+                    multiple
+                    value={filterDepartmentGroupIds}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFilterDepartmentGroupIds(typeof value === 'string' ? value.split(',') : value);
+                    }}
                     label={t('approvalHistory.departmentGroupFilter') || t('leaveHistory.departmentGroupFilter')}
+                    renderValue={(selected) => {
+                      if (!selected || selected.length === 0) {
+                        return t('approvalHistory.allDepartmentGroups') || t('leaveHistory.allDepartmentGroups');
+                      }
+                      return departmentGroups
+                        .filter((group) => selected.includes(String(group.id)))
+                        .map((group) => (i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name)))
+                        .join(', ');
+                    }}
                   >
-                    <MenuItem value="">{t('approvalHistory.allDepartmentGroups') || t('leaveHistory.allDepartmentGroups')}</MenuItem>
-                    {departmentGroups.map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name)}
-                      </MenuItem>
-                    ))}
+                    {departmentGroups.map((group) => {
+                      const gid = String(group.id);
+                      const label = i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name);
+                      return (
+                        <MenuItem key={group.id} value={gid}>
+                          <Checkbox size="small" checked={filterDepartmentGroupIds.includes(gid)} />
+                          <ListItemText primary={label} />
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1171,7 +1204,6 @@ const ApprovalHistory = () => {
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.startDateTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.endDateTime')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.daysHours')}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.cost') || '費用'}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.approvalStage')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.status')}</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('approvalHistory.actions')}</TableCell>
@@ -1180,7 +1212,7 @@ const ApprovalHistory = () => {
               <TableBody>
                 {filteredApplications.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} align="center">{t('approvalHistory.noRecords')}</TableCell>
+                    <TableCell colSpan={10} align="center">{t('approvalHistory.noRecords')}</TableCell>
                   </TableRow>
                 ) : (
                   filteredApplications.map((app) => (
@@ -1239,11 +1271,6 @@ const ApprovalHistory = () => {
                             : formatDate(app.end_date)}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{getApplicationDisplayValue(app)}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {app.application_type === 'outdoor_work' && app.expense
-                            ? `$${parseFloat(app.expense).toFixed(2)}`
-                            : '-'}
-                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip
                             label={getApprovalStage(app)}
@@ -1353,7 +1380,6 @@ const ApprovalHistory = () => {
                                 -{Math.abs(reversal.days)}
                               </Typography>
                             </TableCell>
-                            <TableCell sx={{ whiteSpace: 'nowrap' }}>-</TableCell>
                             <TableCell sx={{ whiteSpace: 'nowrap' }}>
                               <Chip
                                 label={t('approvalHistory.hrReversal')}

@@ -29,7 +29,9 @@ import {
   useTheme,
   useMediaQuery,
   CircularProgress,
-  Pagination
+  Pagination,
+  Checkbox,
+  ListItemText
 } from '@mui/material';
 import { Search as SearchIcon, Undo as UndoIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -62,7 +64,7 @@ const LeaveHistory = () => {
   // 進階搜尋狀態
   const [advancedSearchExpanded, setAdvancedSearchExpanded] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterLeaveType, setFilterLeaveType] = useState('');
+  const [filterLeaveTypeIds, setFilterLeaveTypeIds] = useState([]);
   const [filterFlowType, setFilterFlowType] = useState('');
   const [filterYear, setFilterYear] = useState(currentYear.toString());
   const [dateFrom, setDateFrom] = useState('');
@@ -105,7 +107,9 @@ const LeaveHistory = () => {
       
       // 進階搜尋參數
       if (filterStatus) params.status = filterStatus;
-      if (filterLeaveType) params.leave_type_id = filterLeaveType;
+      if (filterLeaveTypeIds.length > 0) {
+        params.leave_type_ids = filterLeaveTypeIds.join(',');
+      }
       if (filterFlowType) params.flow_type = filterFlowType;
       if (filterYear && filterYear.trim()) {
         const yearNum = parseInt(filterYear);
@@ -154,7 +158,7 @@ const LeaveHistory = () => {
 
   const handleClearFilter = () => {
     setFilterStatus('');
-    setFilterLeaveType('');
+    setFilterLeaveTypeIds([]);
     setFilterFlowType('');
     setFilterYear(currentYear.toString()); // 清除時重置為當前年份
     setDateFrom('');
@@ -525,16 +529,33 @@ const LeaveHistory = () => {
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('leaveHistory.leaveTypeFilter')}</InputLabel>
                   <Select
-                    value={filterLeaveType}
-                    onChange={(e) => setFilterLeaveType(e.target.value)}
+                    multiple
+                    value={filterLeaveTypeIds}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFilterLeaveTypeIds(typeof value === 'string' ? value.split(',') : value);
+                    }}
                     label={t('leaveHistory.leaveTypeFilter')}
+                    renderValue={(selected) => {
+                      if (!selected || selected.length === 0) {
+                        return t('leaveHistory.allLeaveTypes');
+                      }
+                      return leaveTypes
+                        .filter((type) => selected.includes(String(type.id)))
+                        .map((type) => (i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name)))
+                        .join(', ');
+                    }}
                   >
-                    <MenuItem value="">{t('leaveHistory.allLeaveTypes')}</MenuItem>
-                    {leaveTypes.map((type) => (
-                      <MenuItem key={type.id} value={type.id}>
-                        {i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name)}
-                      </MenuItem>
-                    ))}
+                    {leaveTypes.map((type) => {
+                      const tid = String(type.id);
+                      const label = i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name);
+                      return (
+                        <MenuItem key={type.id} value={tid}>
+                          <Checkbox size="small" checked={filterLeaveTypeIds.includes(tid)} />
+                          <ListItemText primary={label} />
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
               </Grid>

@@ -29,7 +29,9 @@ import {
   useMediaQuery,
   Tooltip,
   InputAdornment,
-  Pagination
+  Pagination,
+  Checkbox,
+  ListItemText
 } from '@mui/material';
 import { 
   CloudUpload as CloudUploadIcon, 
@@ -68,7 +70,7 @@ const HRDocumentUpload = () => {
     category: '',
     search: '',
     uploaded_by_id: '',
-    department_group_id: ''
+    department_group_ids: []
   });
   const [hasSearched, setHasSearched] = useState(false); // 追蹤是否已執行過搜尋
   const [error, setError] = useState('');
@@ -90,7 +92,7 @@ const HRDocumentUpload = () => {
 
   // 當過濾條件改變時，如果有設置過濾條件，則載入文件
   useEffect(() => {
-    if (hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_id) {
+    if (hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_ids.length > 0) {
       fetchDocuments();
     }
   }, [filters, hasSearched]);
@@ -121,7 +123,9 @@ const HRDocumentUpload = () => {
       if (filters.category) params.append('category', filters.category);
       if (filters.search) params.append('search', filters.search);
       if (filters.uploaded_by_id) params.append('uploaded_by_id', filters.uploaded_by_id);
-      if (filters.department_group_id) params.append('department_group_id', filters.department_group_id);
+      if (filters.department_group_ids.length > 0) {
+        params.append('department_group_ids', filters.department_group_ids.join(','));
+      }
 
       const response = await axios.get(`/api/documents/all?${params.toString()}`);
       setDocuments(response.data.documents || []);
@@ -389,7 +393,7 @@ const HRDocumentUpload = () => {
       category: '',
       search: '',
       uploaded_by_id: '',
-      department_group_id: ''
+      department_group_ids: []
     });
     setSearchInput('');
     setSelectedFilterUser(null);
@@ -544,18 +548,30 @@ const HRDocumentUpload = () => {
           >
             <InputLabel>{t('hrDocumentUpload.departmentGroup')}</InputLabel>
             <Select
-              value={filters.department_group_id}
+              multiple
+              value={filters.department_group_ids}
               label={t('hrDocumentUpload.departmentGroup')}
               onChange={(e) => {
-                setFilters(prev => ({ ...prev, department_group_id: e.target.value }));
+                const value = e.target.value;
+                setFilters(prev => ({ 
+                  ...prev, 
+                  department_group_ids: typeof value === 'string' ? value.split(',') : value 
+                }));
                 setHasSearched(true);
+              }}
+              renderValue={(selected) => {
+                if (!selected || selected.length === 0) return t('hrDocumentUpload.all');
+                return departmentGroups
+                  .filter(group => selected.includes(group.id.toString()))
+                  .map(group => group.name_zh || group.name)
+                  .join(', ');
               }}
               sx={{ borderRadius: 1 }}
             >
-              <MenuItem value="">{t('hrDocumentUpload.all')}</MenuItem>
               {departmentGroups.map(group => (
                 <MenuItem key={group.id} value={group.id.toString()}>
-                  {group.name_zh || group.name}
+                  <Checkbox size="small" checked={filters.department_group_ids.includes(group.id.toString())} />
+                  <ListItemText primary={group.name_zh || group.name} />
                 </MenuItem>
               ))}
             </Select>
@@ -597,7 +613,7 @@ const HRDocumentUpload = () => {
             {isMobile ? <SearchIcon /> : t('common.search')}
           </Button>
 
-          {(hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_id) && (
+          {(hasSearched || filters.user_id || filters.category || filters.search || filters.department_group_ids.length > 0) && (
             <Button
               variant="outlined"
               onClick={handleClearFilters}
@@ -614,7 +630,7 @@ const HRDocumentUpload = () => {
         </Box>
       </Paper>
 
-      {!hasSearched && !filters.user_id && !filters.category && !filters.search && !filters.department_group_id ? (
+      {!hasSearched && !filters.user_id && !filters.category && !filters.search && filters.department_group_ids.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             {t('hrDocumentUpload.pleaseSetFilter')}

@@ -460,6 +460,13 @@ const ApprovalDetail = () => {
 
   // 檢查是否為銷假交易
   const isReversalTransaction = application.is_reversal_transaction === true;
+  // 已批准、銷假申請、或已被銷假之原申請：不顯示假期餘額（僅待批核之一般申請顯示，供批核參考）
+  const showLeaveBalanceRow =
+    application.leave_type_requires_balance &&
+    application.leave_balance &&
+    application.status !== 'approved' &&
+    !isReversalTransaction &&
+    !application.is_reversed;
 
   return (
     <Box>
@@ -689,11 +696,34 @@ const ApprovalDetail = () => {
                   <ListItem>
                     <ListItemText 
                       primary={t('approvalDetail.leaveType')}
-                      secondary={i18n.language === 'en' 
-                        ? (application.leave_type_name || application.leave_type_name_zh || '')
-                        : (application.leave_type_name_zh || application.leave_type_name || '')}
+                      secondary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography component="span" variant="body1">
+                            {i18n.language === 'en' 
+                              ? (application.leave_type_name || application.leave_type_name_zh || '')
+                              : (application.leave_type_name_zh || application.leave_type_name || '')}
+                          </Typography>
+                          {isReversalTransaction && (
+                            <Box
+                              component="span"
+                              sx={{
+                                bgcolor: 'error.main',
+                                color: 'common.white',
+                                px: 1,
+                                py: 0.25,
+                                borderRadius: 0.5,
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {t('approvalDetail.reversalApplication')}
+                            </Box>
+                          )}
+                        </Box>
+                      }
                       primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
+                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
                     />
                   </ListItem>
                   <ListItem>
@@ -704,7 +734,7 @@ const ApprovalDetail = () => {
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
                   </ListItem>
-                  {application.leave_type_requires_balance && application.leave_balance && (
+                  {showLeaveBalanceRow && (
                     <ListItem>
                       <ListItemText 
                         primary={t('approvalDetail.leaveBalance')}

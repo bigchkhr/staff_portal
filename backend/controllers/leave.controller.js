@@ -393,6 +393,7 @@ class LeaveController {
       const {
         status,
         leave_type_id,
+        leave_type_ids,
         flow_type,
         user_id,
         applicant_id,
@@ -408,7 +409,20 @@ class LeaveController {
       
       const options = {};
       if (status) options.status = status;
-      if (leave_type_id) options.leave_type_id = leave_type_id;
+      const leaveTypeIdSet = new Set();
+      if (leave_type_id) {
+        const lt = parseInt(leave_type_id, 10);
+        if (!isNaN(lt) && lt > 0) leaveTypeIdSet.add(lt);
+      }
+      if (leave_type_ids) {
+        String(leave_type_ids).split(',').forEach((s) => {
+          const lt = parseInt(s.trim(), 10);
+          if (!isNaN(lt) && lt > 0) leaveTypeIdSet.add(lt);
+        });
+      }
+      if (leaveTypeIdSet.size > 0) {
+        options.leave_type_ids = Array.from(leaveTypeIdSet);
+      }
       if (flow_type) options.flow_type = flow_type;
       if (year) {
         const yearNum = parseInt(year);

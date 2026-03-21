@@ -11,9 +11,7 @@ import {
   Select,
   MenuItem,
   Alert,
-  CircularProgress,
-  useTheme,
-  useMediaQuery
+  CircularProgress
 } from '@mui/material';
 import { Download as DownloadIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -23,24 +21,17 @@ import Layout from '../components/Layout';
 import YearSelector from '../components/YearSelector';
 
 const MonthlyAttendanceReportExport = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // CSV 導出相關狀態
   const [exportYear, setExportYear] = useState(new Date().getFullYear());
   const [exportMonth, setExportMonth] = useState(new Date().getMonth() + 1);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
 
-  // 月份名稱（中文）
-  const monthNames = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
-
-  // 處理 CSV 導出
   const handleExportCSV = async () => {
     if (!exportYear || !exportMonth) {
-      setExportError('請選擇年份和月份');
+      setExportError(t('monthlyReportExport.errorSelectYearMonth'));
       return;
     }
 
@@ -51,12 +42,12 @@ const MonthlyAttendanceReportExport = () => {
       const response = await axios.get('/api/monthly-attendance-reports/export/csv', {
         params: {
           year: exportYear,
-          month: exportMonth
+          month: exportMonth,
+          lang: i18n.language || 'zh-TW'
         },
         responseType: 'blob'
       });
 
-      // 創建下載連結
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8;' }));
       const link = document.createElement('a');
       link.href = url;
@@ -68,19 +59,18 @@ const MonthlyAttendanceReportExport = () => {
     } catch (error) {
       console.error('導出 CSV 失敗:', error);
       if (error.response && error.response.data) {
-        // 嘗試解析錯誤訊息
         const reader = new FileReader();
         reader.onload = () => {
           try {
             const errorData = JSON.parse(reader.result);
-            setExportError(errorData.message || '導出失敗');
+            setExportError(errorData.message || t('monthlyReportExport.errorExportFailed'));
           } catch (e) {
-            setExportError('導出失敗，請稍後再試');
+            setExportError(t('monthlyReportExport.errorExportFailedRetry'));
           }
         };
         reader.readAsText(error.response.data);
       } else {
-        setExportError('導出失敗，請稍後再試');
+        setExportError(t('monthlyReportExport.errorExportFailedRetry'));
       }
     } finally {
       setExporting(false);
@@ -96,13 +86,13 @@ const MonthlyAttendanceReportExport = () => {
             onClick={() => navigate('/shift-management')}
             sx={{ mb: 2 }}
           >
-            返回
+            {t('common.back')}
           </Button>
           <Typography variant="h4" component="h1" gutterBottom>
-            匯出月報 CSV
+            {t('monthlyReportExport.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            選擇年份和月份，下載該月份的月報 CSV 文件
+            {t('monthlyReportExport.subtitle')}
           </Typography>
         </Box>
 
@@ -113,20 +103,20 @@ const MonthlyAttendanceReportExport = () => {
                 value={exportYear}
                 onChange={(year) => setExportYear(year)}
                 fullWidth
-                label="年份"
+                label={t('attendance.year')}
               />
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
               <FormControl fullWidth>
-                <InputLabel>月份</InputLabel>
+                <InputLabel>{t('attendance.month')}</InputLabel>
                 <Select
                   value={exportMonth}
                   onChange={(e) => setExportMonth(e.target.value)}
-                  label="月份"
+                  label={t('attendance.month')}
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
                     <MenuItem key={m} value={m}>
-                      {monthNames[m - 1]}
+                      {t(`monthlyReportExport.month${m}`)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -142,7 +132,7 @@ const MonthlyAttendanceReportExport = () => {
                 disabled={exporting || !exportYear || !exportMonth}
                 sx={{ height: '56px' }}
               >
-                {exporting ? '匯出中...' : '下載 CSV'}
+                {exporting ? t('monthlyReportExport.exporting') : t('monthlyReportExport.downloadCsv')}
               </Button>
             </Grid>
           </Grid>
@@ -155,14 +145,14 @@ const MonthlyAttendanceReportExport = () => {
 
           <Box sx={{ mt: 4, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
             <Typography variant="subtitle2" gutterBottom>
-              說明：
+              {t('monthlyReportExport.notesTitle')}
             </Typography>
             <Typography variant="body2" color="text.secondary" component="div">
               <ul style={{ margin: 0, paddingLeft: 20 }}>
-                <li>選擇要匯出的年份和月份</li>
-                <li>點擊「下載 CSV」按鈕即可下載該月份所有員工的月報數據</li>
-                <li>CSV 文件包含所有月報字段，可用 Excel 打開查看</li>
-                <li>文件名稱格式：monthly_attendance_report_YYYY_MM.csv</li>
+                <li>{t('monthlyReportExport.noteSelectPeriod')}</li>
+                <li>{t('monthlyReportExport.noteClickDownload')}</li>
+                <li>{t('monthlyReportExport.noteCsvFields')}</li>
+                <li>{t('monthlyReportExport.noteFileNamePattern')}</li>
               </ul>
             </Typography>
           </Box>
@@ -173,4 +163,3 @@ const MonthlyAttendanceReportExport = () => {
 };
 
 export default MonthlyAttendanceReportExport;
-

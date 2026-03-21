@@ -126,13 +126,26 @@ const ExtraWorkingHoursHistory = () => {
     return t('extraWorkingHoursHistory.eFlow');
   };
 
-  const formatDateTime = (date, time) => {
+  /** 日期一行、時間在下一行；時間以深灰色顯示 */
+  const renderStackedDateTime = (date, time) => {
     if (!date) return '-';
     const dateStr = formatDate(date);
-    if (time) {
-      return `${dateStr} ${time}`;
-    }
-    return dateStr;
+    return (
+      <Box sx={{ lineHeight: 1.35 }}>
+        <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap' }}>
+          {dateStr}
+        </Typography>
+        {time ? (
+          <Typography
+            variant="body2"
+            component="div"
+            sx={{ whiteSpace: 'nowrap', color: 'grey.700' }}
+          >
+            {time}
+          </Typography>
+        ) : null}
+      </Box>
+    );
   };
 
   // 搜尋過濾
@@ -178,17 +191,13 @@ const ExtraWorkingHoursHistory = () => {
             <Typography variant="caption" color="text.secondary" display="block">
               {t('extraWorkingHoursHistory.startTime')}
             </Typography>
-            <Typography variant="body2">
-              {formatDateTime(app.start_date, app.start_time)}
-            </Typography>
+            {renderStackedDateTime(app.start_date, app.start_time)}
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
               {t('extraWorkingHoursHistory.endTime')}
             </Typography>
-            <Typography variant="body2">
-              {formatDateTime(app.end_date, app.end_time)}
-            </Typography>
+            {renderStackedDateTime(app.end_date, app.end_time)}
           </Grid>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary" display="block">
@@ -346,12 +355,8 @@ const ExtraWorkingHoursHistory = () => {
                 applications.map((app) => (
                   <TableRow key={app.id} hover>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatDateTime(app.start_date, app.start_time)}
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                      {formatDateTime(app.end_date, app.end_time)}
-                    </TableCell>
+                    <TableCell>{renderStackedDateTime(app.start_date, app.start_time)}</TableCell>
+                    <TableCell>{renderStackedDateTime(app.end_date, app.end_time)}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.total_hours} {t('extraWorkingHoursHistory.hours')}</TableCell>
                     <TableCell>{app.reason || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
