@@ -1144,6 +1144,8 @@ const Schedule = ({ noLayout = false }) => {
                           fontWeight="bold"
                           component={Link}
                           to={`/monthly-attendance-summary?employee_number=${member.employee_number}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           sx={{
                             fontSize: '0.75rem',
                             overflow: 'hidden',
@@ -2474,6 +2476,8 @@ const Schedule = ({ noLayout = false }) => {
                               fontWeight="bold" 
                               component={Link}
                               to={`/monthly-attendance-summary?employee_number=${member.employee_number}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               sx={{ 
                                 color: 'primary.main', 
                                 mb: 0.5,
@@ -2773,6 +2777,8 @@ const Schedule = ({ noLayout = false }) => {
                                 fontWeight="bold" 
                                 component={Link}
                                 to={`/monthly-attendance-summary?employee_number=${helperUser.employee_number}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 sx={{ 
                                   color: 'primary.main', 
                                   mb: 0.5,

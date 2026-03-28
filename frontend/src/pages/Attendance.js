@@ -1084,6 +1084,8 @@ const Attendance = ({ noLayout = false }) => {
                                 fontWeight="bold" 
                                 component={Link}
                                 to={`/monthly-attendance-summary?employee_number=${userData.employee_number}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 sx={{ 
                                   color: 'primary.main', 
                                   mb: 0.5,

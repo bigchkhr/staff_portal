@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
 const APPROVAL_STAGE_CONFIG = [
   { level: 'checker', idField: 'checker_id', timestampField: 'checker_at' },
@@ -164,6 +165,7 @@ class LeaveApplication {
   static async findById(id) {
     const application = await knex('leave_applications')
       .leftJoin('users', 'leave_applications.user_id', 'users.id')
+      .leftJoin('positions', 'users.position_id', 'positions.id')
       .leftJoin('leave_types', 'leave_applications.leave_type_id', 'leave_types.id')
       .leftJoin('users as checker', 'leave_applications.checker_id', 'checker.id')
       .leftJoin('users as approver_1', 'leave_applications.approver_1_id', 'approver_1.id')
@@ -190,12 +192,15 @@ class LeaveApplication {
         'approver_2.display_name as approver_2_name',
         'approver_3.display_name as approver_3_name',
         'rejected_by.display_name as rejected_by_name',
-        'cancelled_by.display_name as cancelled_by_name'
+        'cancelled_by.display_name as cancelled_by_name',
+        'positions.name as applicant_position_name',
+        'positions.name_zh as applicant_position_name_zh'
       )
       .where('leave_applications.id', id)
       .first();
     
     if (application) {
+      await attachApplicantDepartmentGroups(application);
       application.documents = await knex('leave_documents')
         .where('leave_application_id', id);
       

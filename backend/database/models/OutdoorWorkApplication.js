@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
 const APPROVAL_STAGE_CONFIG = [
   { level: 'checker', idField: 'checker_id', timestampField: 'checker_at' },
@@ -77,6 +78,7 @@ class OutdoorWorkApplication {
   static async findById(id) {
     const application = await knex('outdoor_work_applications')
       .leftJoin('users', 'outdoor_work_applications.user_id', 'users.id')
+      .leftJoin('positions', 'users.position_id', 'positions.id')
       .leftJoin('users as checker', 'outdoor_work_applications.checker_id', 'checker.id')
       .leftJoin('users as approver_1', 'outdoor_work_applications.approver_1_id', 'approver_1.id')
       .leftJoin('users as approver_2', 'outdoor_work_applications.approver_2_id', 'approver_2.id')
@@ -95,11 +97,16 @@ class OutdoorWorkApplication {
         'approver_1.display_name as approver_1_name',
         'approver_2.display_name as approver_2_name',
         'approver_3.display_name as approver_3_name',
-        'rejected_by.display_name as rejected_by_name'
+        'rejected_by.display_name as rejected_by_name',
+        'positions.name as applicant_position_name',
+        'positions.name_zh as applicant_position_name_zh'
       )
       .where('outdoor_work_applications.id', id)
       .first();
     
+    if (application) {
+      await attachApplicantDepartmentGroups(application);
+    }
     return formatApplication(withResolvedApprovalStage(application));
   }
 

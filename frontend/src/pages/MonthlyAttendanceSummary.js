@@ -59,6 +59,21 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
+const EN_WEEK_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const ZH_WEEK_SHORT = ['日', '一', '二', '三', '四', '五', '六'];
+
+/** 日期底下顯示星期：英文 (Mon)、中文 (一)，按 Asia/Hong_Kong */
+function formatWeekdayShortParen(dateStr, language) {
+  if (!dateStr) return '';
+  const d = dayjs(dateStr).tz('Asia/Hong_Kong');
+  if (!d.isValid()) return '';
+  const dow = d.day();
+  if (language && String(language).toLowerCase().startsWith('en')) {
+    return `(${EN_WEEK_SHORT[dow]})`;
+  }
+  return `(${ZH_WEEK_SHORT[dow]})`;
+}
+
 /** 與月結表主表格「考勤情況」欄一致的有效打卡記錄（供總計次數用） */
 function getValidClockRecordsForMonthlySummary(day) {
   if (day.valid_clock_records && Array.isArray(day.valid_clock_records) && day.valid_clock_records.length > 0) {
@@ -1284,7 +1299,16 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                       return (
                         <React.Fragment key={day.date || index}>
                           <TableRow>
-                            <TableCell>{day.date}</TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                <Typography variant="body2" component="span">
+                                  {day.date}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" component="span" sx={{ mt: 0.25 }}>
+                                  {formatWeekdayShortParen(day.date, i18n.language)}
+                                </Typography>
+                              </Box>
+                            </TableCell>
                             <TableCell>
                               {schedule ? (
                                 <Box>

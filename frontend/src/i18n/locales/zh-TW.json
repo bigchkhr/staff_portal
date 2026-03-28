@@ -1634,6 +1634,8 @@
     "storeManagerAllowance": "Store Manager Allowance",
     "attendanceBonus": "Attendance Bonus",
     "locationAllowance": "Location Allowance",
+    "allowanceFieldHint": "可直接輸入任意金額；或按 ▼ 選擇建議值。",
+    "openAllowanceSuggestions": "開啟建議數值",
     "incentive": "Incentive",
     "specialAllowance": "特別津貼",
     "days": "天",

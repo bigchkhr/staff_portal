@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -439,6 +439,16 @@ const ApprovalDetail = () => {
     setViewingFile(null);
   };
 
+  const applicantGroupPositionSubtitle = useMemo(() => {
+    if (!application) return '';
+    const isEn = (i18n.language || '').toLowerCase().startsWith('en');
+    const grp = isEn ? application.applicant_groups_label_en : application.applicant_groups_label_zh;
+    const pos = isEn
+      ? (application.applicant_position_name || application.applicant_position_name_zh)
+      : (application.applicant_position_name_zh || application.applicant_position_name);
+    return [grp, pos].filter((p) => p != null && String(p).trim() !== '').join(' · ');
+  }, [application, i18n.language]);
+
   if (loading) {
     return <Box>{t('common.loading')}</Box>;
   }
@@ -513,14 +523,21 @@ const ApprovalDetail = () => {
                   primary={t('approvalDetail.applicant')}
                   secondary={
                     <Box>
-                      <Typography variant="body1" component="span">
-                        {application.applicant_display_name}
-                      </Typography>
-                      {(application.applicant_employee_number || application.user_employee_number) && (
-                        <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                          ({application.applicant_employee_number || application.user_employee_number})
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 0.5 }}>
+                        <Typography variant="body1" component="span">
+                          {application.applicant_display_name}
                         </Typography>
-                      )}
+                        {(application.applicant_employee_number || application.user_employee_number) && (
+                          <Typography variant="body2" color="text.secondary" component="span">
+                            ({application.applicant_employee_number || application.user_employee_number})
+                          </Typography>
+                        )}
+                      </Box>
+                      {applicantGroupPositionSubtitle ? (
+                        <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                          {applicantGroupPositionSubtitle}
+                        </Typography>
+                      ) : null}
                     </Box>
                   }
                   primaryTypographyProps={{ variant: 'caption' }}

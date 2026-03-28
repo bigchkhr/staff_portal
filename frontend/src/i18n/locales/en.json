@@ -1623,6 +1623,8 @@
     "storeManagerAllowance": "Store Manager Allowance",
     "attendanceBonus": "Attendance Bonus",
     "locationAllowance": "Location Allowance",
+    "allowanceFieldHint": "Type any amount, or use ▼ for suggested values.",
+    "openAllowanceSuggestions": "Open suggested values",
     "incentive": "Incentive",
     "specialAllowance": "Special Allowance",
     "days": "days",

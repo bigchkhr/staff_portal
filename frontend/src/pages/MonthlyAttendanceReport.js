@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -28,7 +28,9 @@ import {
   TableRow,
   Chip,
   Pagination,
-  Stack
+  Stack,
+  Menu,
+  IconButton
 } from '@mui/material';
 import { 
   Save as SaveIcon,
@@ -37,7 +39,8 @@ import {
   Search as SearchIcon,
   Visibility as VisibilityIcon,
   Clear as ClearIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  ArrowDropDown as ArrowDropDownIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -47,6 +50,9 @@ import Layout from '../components/Layout';
 import dayjs from 'dayjs';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
+
+/** Attendance Bonus / Location Allowance 共用嘅建議數值 */
+const ALLOWANCE_SUGGEST_AMOUNTS = [0, 1300];
 
 const MonthlyAttendanceReport = () => {
   const { t, i18n } = useTranslation();
@@ -73,6 +79,12 @@ const MonthlyAttendanceReport = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  /** 津貼欄位：彈出建議值選單（選項用 setFormData 寫入，仍可手動改任何數值） */
+  const [attendanceSuggestAnchor, setAttendanceSuggestAnchor] = useState(null);
+  const [locationSuggestAnchor, setLocationSuggestAnchor] = useState(null);
+  const attendanceBonusFieldRef = useRef(null);
+  const locationAllowanceFieldRef = useRef(null);
 
   // 表單數據
   const [formData, setFormData] = useState({
@@ -964,23 +976,121 @@ const MonthlyAttendanceReport = () => {
               </Grid>
               <Grid item xs={12} sm={6} md={4}>
                 <TextField
+                  ref={attendanceBonusFieldRef}
                   label={t('attendance.attendanceBonus')}
                   type="number"
                   value={formData.attendance_bonus}
-                  onChange={handleChange('attendance_bonus')}
+                  helperText={t('attendance.allowanceFieldHint')}
+                  onChange={(e) => {
+                    setAttendanceSuggestAnchor(null);
+                    handleChange('attendance_bonus')(e);
+                  }}
+                  onFocus={() => setLocationSuggestAnchor(null)}
                   fullWidth
                   inputProps={{ step: 0.01, min: 0 }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          edge="end"
+                          aria-label={t('attendance.openAllowanceSuggestions')}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocationSuggestAnchor(null);
+                            setAttendanceSuggestAnchor(attendanceBonusFieldRef.current);
+                          }}
+                        >
+                          <ArrowDropDownIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
                 />
+                <Menu
+                  anchorEl={attendanceSuggestAnchor}
+                  open={Boolean(attendanceSuggestAnchor)}
+                  onClose={() => setAttendanceSuggestAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  MenuListProps={{ onMouseDown: (ev) => ev.preventDefault() }}
+                  disableAutoFocus
+                  disableEnforceFocus
+                  disableRestoreFocus
+                >
+                  {ALLOWANCE_SUGGEST_AMOUNTS.map((amount) => (
+                    <MenuItem
+                      key={`attendance-${amount}`}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        setFormData((prev) => ({ ...prev, attendance_bonus: amount }));
+                        setAttendanceSuggestAnchor(null);
+                      }}
+                    >
+                      {amount}
+                    </MenuItem>
+                  ))}
+                </Menu>
               </Grid>
               <Grid item xs={12} sm={6} md={4}>
                 <TextField
+                  ref={locationAllowanceFieldRef}
                   label={t('attendance.locationAllowance')}
                   type="number"
                   value={formData.location_allowance}
-                  onChange={handleChange('location_allowance')}
+                  helperText={t('attendance.allowanceFieldHint')}
+                  onChange={(e) => {
+                    setLocationSuggestAnchor(null);
+                    handleChange('location_allowance')(e);
+                  }}
+                  onFocus={() => setAttendanceSuggestAnchor(null)}
                   fullWidth
                   inputProps={{ step: 0.01, min: 0 }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          edge="end"
+                          aria-label={t('attendance.openAllowanceSuggestions')}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAttendanceSuggestAnchor(null);
+                            setLocationSuggestAnchor(locationAllowanceFieldRef.current);
+                          }}
+                        >
+                          <ArrowDropDownIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
                 />
+                <Menu
+                  anchorEl={locationSuggestAnchor}
+                  open={Boolean(locationSuggestAnchor)}
+                  onClose={() => setLocationSuggestAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+                  MenuListProps={{ onMouseDown: (ev) => ev.preventDefault() }}
+                  disableAutoFocus
+                  disableEnforceFocus
+                  disableRestoreFocus
+                >
+                  {ALLOWANCE_SUGGEST_AMOUNTS.map((amount) => (
+                    <MenuItem
+                      key={`location-${amount}`}
+                      onClick={(ev) => {
+                        ev.preventDefault();
+                        setFormData((prev) => ({ ...prev, location_allowance: amount }));
+                        setLocationSuggestAnchor(null);
+                      }}
+                    >
+                      {amount}
+                    </MenuItem>
+                  ))}
+                </Menu>
               </Grid>
               <Grid item xs={12} sm={6} md={4}>
                 <TextField
