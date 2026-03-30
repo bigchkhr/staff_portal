@@ -60,8 +60,8 @@ import YearManagement from './pages/YearManagement';
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://ec2-3-1-139-29.ap-southeast-1.compute.amazonaws.com:1689';
 // axios.defaults.baseURL = 'http://localhost:1689';
-// axios.defaults.baseURL = 'http://172.31.132.45:1689';
-axios.defaults.baseURL = 'http://192.168.3.4:1689';
+axios.defaults.baseURL = 'http://172.31.132.73:1689';
+// axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
   palette: {

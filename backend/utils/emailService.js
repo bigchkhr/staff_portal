@@ -277,6 +277,19 @@ class EmailService {
     return `${base}/approval/${applicationId}${typeParam}`;
   }
 
+  /** 外勤批量批核頁（申請人 user_id；僅適用於批核者通知，批量處理同一申請人的待批項目） */
+  _getFrontendOutdoorWorkBulkApprovalUrl(applicantUserId) {
+    const base = process.env.FRONTEND_URL || '';
+    const id =
+      applicantUserId !== undefined && applicantUserId !== null
+        ? String(applicantUserId).trim()
+        : '';
+    if (!id) {
+      return `${base}/approval`;
+    }
+    return `${base}/approval/outdoor-work/bulk/${encodeURIComponent(id)}`;
+  }
+
   _escapeHtml(value) {
     if (value === null || value === undefined) return '';
     return String(value)
@@ -365,7 +378,7 @@ class EmailService {
     const applicantName = applicant?.display_name || applicant?.name_zh || application.applicant_display_name || 'Applicant';
     const staffId = applicant?.employee_number || application.applicant_employee_number || '';
     const transactionId = application.transaction_id || `ODW-${String(application.id).padStart(6, '0')}`;
-    const detailUrl = this._getFrontendApprovalUrl(application.id, 'outdoor_work');
+    const detailUrl = this._getFrontendOutdoorWorkBulkApprovalUrl(application.user_id);
 
     const html = `
       <!DOCTYPE html>

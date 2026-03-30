@@ -30,10 +30,12 @@ import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import { AddCircleOutline, DeleteOutline, ContentCopy } from '@mui/icons-material';
 
+const DEFAULT_BATCH_ROW_COUNT = 5;
+
 const OutdoorWorkApplication = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const [useBatchMode, setUseBatchMode] = useState(false);
+  const [useBatchMode, setUseBatchMode] = useState(true);
   const [formData, setFormData] = useState({
     start_date: null,
     start_time: null,
@@ -74,7 +76,33 @@ const OutdoorWorkApplication = () => {
     purpose: ''
   });
 
-  const [batchRows, setBatchRows] = useState([createEmptyRow()]);
+  const createInitialBatchRows = () =>
+    Array.from({ length: DEFAULT_BATCH_ROW_COUNT }, () => createEmptyRow());
+
+  const [batchRows, setBatchRows] = useState(createInitialBatchRows);
+
+  const isBatchRowComplete = (row) =>
+    Boolean(row.start_date && row.start_time && row.end_date && row.end_time && row.total_hours);
+
+  const isBatchRowEmpty = (row) =>
+    !row.start_date &&
+    !row.start_time &&
+    !row.end_date &&
+    !row.end_time &&
+    (row.total_hours === '' || row.total_hours == null);
+
+  const cloneRowData = (row) => ({
+    start_date: row.start_date ? row.start_date.clone() : null,
+    start_time: row.start_time ? row.start_time.clone() : null,
+    end_date: row.end_date ? row.end_date.clone() : null,
+    end_time: row.end_time ? row.end_time.clone() : null,
+    total_hours: row.total_hours,
+    start_location: row.start_location,
+    end_location: row.end_location,
+    transportation: row.transportation,
+    expense: row.expense,
+    purpose: row.purpose
+  });
 
   // 當日期或時間改變時，自動計算總時數
   React.useEffect(() => {
@@ -89,23 +117,58 @@ const OutdoorWorkApplication = () => {
     }
   }, [formData.start_date, formData.start_time, formData.end_date, formData.end_time]);
 
+  const applyStartDateTimeDefaults = (base, patch) => {
+    const merged = { ...base, ...patch };
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'start_date')) {
+      if (patch.start_date) {
+        merged.end_date = patch.start_date.clone();
+      } else {
+        merged.end_date = null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(patch, 'start_time')) {
+      if (patch.start_time) {
+        merged.end_time = patch.start_time.clone().add(1, 'hour');
+      } else {
+        merged.end_time = null;
+      }
+    }
+
+    if (merged.start_date && merged.start_time && merged.end_date && merged.end_time) {
+      const totalHours = calculateTotalHours(
+        merged.start_date,
+        merged.start_time,
+        merged.end_date,
+        merged.end_time
+      );
+      merged.total_hours = totalHours > 0 ? totalHours.toFixed(2) : '';
+    } else {
+      merged.total_hours = '';
+    }
+
+    return merged;
+  };
+
   const updateBatchRow = (rowIndex, patch) => {
     setBatchRows(prev => {
-      const next = prev.map((row, idx) => (idx === rowIndex ? { ...row, ...patch } : row));
-      const row = next[rowIndex];
-      if (row.start_date && row.start_time && row.end_date && row.end_time) {
-        const totalHours = calculateTotalHours(row.start_date, row.start_time, row.end_date, row.end_time);
-        next[rowIndex] = { ...row, total_hours: totalHours > 0 ? totalHours.toFixed(2) : '' };
-      }
+      const next = [...prev];
+      next[rowIndex] = applyStartDateTimeDefaults(prev[rowIndex], patch);
       return next;
     });
   };
 
-  const cloneBatchRowToNew = (rowIndex) => {
+  const copyBatchRowToNext = (rowIndex) => {
     setBatchRows(prev => {
       const source = prev[rowIndex] || createEmptyRow();
-      const cloned = { ...source };
-      return [...prev, cloned];
+      const cloned = cloneRowData(source);
+      const next = [...prev];
+      next.splice(rowIndex + 1, 0, cloned);
+      while (next.length < DEFAULT_BATCH_ROW_COUNT) {
+        next.push(createEmptyRow());
+      }
+      return next;
     });
   };
 
@@ -113,19 +176,34 @@ const OutdoorWorkApplication = () => {
     e.preventDefault();
     setLoading(true);
 
-    const invalidRowIndexes = batchRows
-      .map((row, idx) => {
-        const missingRequired =
-          !row.start_date || !row.start_time || !row.end_date || !row.end_time || !row.total_hours;
-        return missingRequired ? idx : null;
-      })
-      .filter(v => v !== null);
+    const partialRowIndexes = batchRows
+      .map((row, idx) => idx)
+      .filter((idx) => {
+        const row = batchRows[idx];
+        return !isBatchRowEmpty(row) && !isBatchRowComplete(row);
+      });
 
-    if (invalidRowIndexes.length > 0) {
+    if (partialRowIndexes.length > 0) {
       await Swal.fire({
         icon: 'warning',
         title: t('outdoorWorkApplication.validationFailed'),
-        text: t('outdoorWorkApplication.batchFillAllFields', { rows: invalidRowIndexes.map(i => i + 1).join(', ') }),
+        text: t('outdoorWorkApplication.batchFillAllFields', {
+          rows: partialRowIndexes.map(i => i + 1).join(', ')
+        }),
+        confirmButtonText: t('common.confirm'),
+        confirmButtonColor: '#3085d6'
+      });
+      setLoading(false);
+      return;
+    }
+
+    const rowsToSubmit = batchRows.filter(isBatchRowComplete);
+
+    if (rowsToSubmit.length === 0) {
+      await Swal.fire({
+        icon: 'warning',
+        title: t('outdoorWorkApplication.validationFailed'),
+        text: t('outdoorWorkApplication.batchNoCompleteRows'),
         confirmButtonText: t('common.confirm'),
         confirmButtonColor: '#3085d6'
       });
@@ -134,7 +212,7 @@ const OutdoorWorkApplication = () => {
     }
 
     try {
-      const payloads = batchRows.map(row => ({
+      const payloads = rowsToSubmit.map(row => ({
         user_id: user.id,
         start_date: row.start_date.format('YYYY-MM-DD'),
         start_time: row.start_time.format('HH:mm:ss'),
@@ -166,7 +244,7 @@ const OutdoorWorkApplication = () => {
           confirmButtonText: t('common.confirm'),
           confirmButtonColor: '#3085d6'
         });
-        setBatchRows([createEmptyRow()]);
+        setBatchRows(createInitialBatchRows());
       } else {
         const firstError = failures[0]?.reason?.response?.data?.message || failures[0]?.reason?.message;
         await Swal.fire({
@@ -280,7 +358,10 @@ const OutdoorWorkApplication = () => {
         />
 
         {useBatchMode ? (
-          <Box component="form" onSubmit={handleBatchSubmit}>
+          <Box component="form" onSubmit={handleBatchSubmit} noValidate>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {t('outdoorWorkApplication.batchFlexibleSubmitHint')}
+            </Typography>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
               <TableContainer sx={{ mb: 2, overflowX: 'auto' }}>
                 <Table size="small">
@@ -296,7 +377,9 @@ const OutdoorWorkApplication = () => {
                       <TableCell>{t('outdoorWorkApplication.endLocation')}</TableCell>
                       <TableCell>{t('outdoorWorkApplication.transportation')}</TableCell>
                       <TableCell>{t('outdoorWorkApplication.purpose')}</TableCell>
-                      <TableCell sx={{ width: 96 }} />
+                      <TableCell sx={{ width: 120, whiteSpace: 'nowrap' }}>
+                        {t('outdoorWorkApplication.action')}
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -308,14 +391,14 @@ const OutdoorWorkApplication = () => {
                             value={row.start_date}
                             onChange={(date) => updateBatchRow(idx, { start_date: date })}
                             format="DD/MM/YYYY"
-                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                            slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                           />
                         </TableCell>
                         <TableCell sx={{ minWidth: 190 }}>
                           <TimePicker
                             value={row.start_time}
                             onChange={(time) => updateBatchRow(idx, { start_time: time })}
-                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                            slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                           />
                         </TableCell>
                         <TableCell sx={{ minWidth: 210 }}>
@@ -324,14 +407,14 @@ const OutdoorWorkApplication = () => {
                             onChange={(date) => updateBatchRow(idx, { end_date: date })}
                             format="DD/MM/YYYY"
                             minDate={row.start_date}
-                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                            slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                           />
                         </TableCell>
                         <TableCell sx={{ minWidth: 190 }}>
                           <TimePicker
                             value={row.end_time}
                             onChange={(time) => updateBatchRow(idx, { end_time: time })}
-                            slotProps={{ textField: { fullWidth: true, required: true, size: 'small' } }}
+                            slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                           />
                         </TableCell>
                         <TableCell sx={{ minWidth: 140 }}>
@@ -340,8 +423,7 @@ const OutdoorWorkApplication = () => {
                             size="small"
                             type="number"
                             value={row.total_hours}
-                            onChange={(e) => updateBatchRow(idx, { total_hours: e.target.value })}
-                            required
+                            disabled
                             inputProps={{ min: 0, step: 0.5 }}
                           />
                         </TableCell>
@@ -388,7 +470,7 @@ const OutdoorWorkApplication = () => {
                             </IconButton>
                             <IconButton
                               size="small"
-                              onClick={() => cloneBatchRowToNew(idx)}
+                              onClick={() => copyBatchRowToNext(idx)}
                               aria-label={t('outdoorWorkApplication.copyRow')}
                             >
                               <ContentCopy fontSize="small" />
@@ -431,7 +513,9 @@ const OutdoorWorkApplication = () => {
                   <DatePicker
                     label={t('outdoorWorkApplication.startDate')}
                     value={formData.start_date}
-                    onChange={(date) => setFormData(prev => ({ ...prev, start_date: date }))}
+                    onChange={(date) =>
+                      setFormData((prev) => applyStartDateTimeDefaults(prev, { start_date: date }))
+                    }
                     format="DD/MM/YYYY"
                     slotProps={{ textField: { fullWidth: true, required: true } }}
                   />
@@ -440,7 +524,9 @@ const OutdoorWorkApplication = () => {
                   <TimePicker
                     label={t('outdoorWorkApplication.startTime')}
                     value={formData.start_time}
-                    onChange={(time) => setFormData(prev => ({ ...prev, start_time: time }))}
+                    onChange={(time) =>
+                      setFormData((prev) => applyStartDateTimeDefaults(prev, { start_time: time }))
+                    }
                     slotProps={{ textField: { fullWidth: true, required: true } }}
                   />
                 </Grid>
@@ -470,8 +556,7 @@ const OutdoorWorkApplication = () => {
               label={t('outdoorWorkApplication.totalHours')}
               type="number"
               value={formData.total_hours}
-              onChange={(e) => setFormData(prev => ({ ...prev, total_hours: e.target.value }))}
-              required
+              disabled
               sx={{ mb: 2 }}
               inputProps={{ min: 0, step: 0.5 }}
               helperText={t('outdoorWorkApplication.totalHoursHelper')}
