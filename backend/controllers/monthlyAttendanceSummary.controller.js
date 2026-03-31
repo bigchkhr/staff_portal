@@ -382,6 +382,8 @@ class MonthlyAttendanceSummaryController {
   async getMonthlySummaries(req, res) {
     try {
       const { user_id, year, month } = req.query;
+      const rangeStart = req.query.start_date || req.query.startDate;
+      const rangeEnd = req.query.end_date || req.query.endDate;
       const userId = req.user.id;
       const filters = {};
       
@@ -400,6 +402,187 @@ class MonthlyAttendanceSummaryController {
           message: filters.user_id 
             ? '無權限存取此月結記錄' 
             : '無權限存取月結表' 
+        });
+      }
+
+      // 日期區間模式：start_date/end_date 取代 year/month（最多45天）
+      // 用途：/monthly-attendance-summary 顯示指定區間的考勤並配合「生成月報」計算同一段區間。
+      if (rangeStart && rangeEnd) {
+        const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+        if (!ymdRe.test(rangeStart) || !ymdRe.test(rangeEnd)) {
+          return res.status(400).json({ message: 'start_date / end_date 格式不正確，需為 YYYY-MM-DD' });
+        }
+
+        const parseYMDToUTCms = (s) => {
+          const [y, m, d] = s.split('-').map(Number);
+          return Date.UTC(y, m - 1, d);
+        };
+        const formatUTCmsToYMD = (ms) => {
+          const dt = new Date(ms);
+          const y = dt.getUTCFullYear();
+          const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+          const d = String(dt.getUTCDate()).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        };
+
+        const startMs = parseYMDToUTCms(rangeStart);
+        const endMs = parseYMDToUTCms(rangeEnd);
+        if (startMs > endMs) {
+          return res.status(400).json({ message: 'start_date 不能晚於 end_date' });
+        }
+
+        const dayCountInclusive = Math.round((endMs - startMs) / 86400000) + 1;
+        if (dayCountInclusive > 45) {
+          return res.status(400).json({ message: '日期區間最多45天' });
+        }
+
+        if (!filters.user_id) {
+          return res.status(400).json({ message: '日期區間模式需提供 user_id' });
+        }
+
+        // 以 start_date 的年月作為回傳的 summary year/month（後續用於「生成月報」仍沿用年/月做記錄）
+        const [startYearStr, startMonthStr] = rangeStart.split('-');
+        const summaryYear = parseInt(startYearStr, 10);
+        const summaryMonth = parseInt(startMonthStr, 10);
+
+        // 取得用戶（用於 employee_number / employment_mode）
+        const summaryUser = await User.findById(filters.user_id);
+        if (!summaryUser) {
+          return res.status(404).json({ message: '找不到用戶' });
+        }
+        const employmentModeStr = (summaryUser.position_employment_mode || summaryUser.employment_mode || '')
+          .toString()
+          .trim()
+          .toUpperCase();
+
+        // 逐日列表（UTC 算天數，輸出維持 YYYY-MM-DD）
+        const dateStrList = [];
+        for (let ms = startMs; ms <= endMs; ms += 86400000) {
+          dateStrList.push(formatUTCmsToYMD(ms));
+        }
+
+        // 最新打卡記錄（含最新 is_valid）
+        const clockRecordsByDate = new Map();
+        if (summaryUser.employee_number) {
+          const freshClockRecords = await ClockRecord.findByEmployeeAndDateRange(
+            summaryUser.employee_number,
+            rangeStart,
+            rangeEnd
+          );
+          freshClockRecords.forEach(r => {
+            const rawDate = r.attendance_date;
+            const dateStr = rawDate && typeof rawDate === 'string'
+              ? (rawDate.includes('T') ? rawDate.split('T')[0] : rawDate.split(' ')[0])
+              : this.formatDateToUTC8(rawDate);
+            if (!dateStr) return;
+            if (!clockRecordsByDate.has(dateStr)) clockRecordsByDate.set(dateStr, []);
+            clockRecordsByDate.get(dateStr).push(r);
+          });
+        }
+
+        // 最新排班與已批核假期（用於構建 schedule）
+        const userSchedules = await Schedule.findAll({
+          user_id: filters.user_id,
+          start_date: rangeStart,
+          end_date: rangeEnd
+        });
+
+        const LeaveApplication = require('../database/models/LeaveApplication');
+        let approvedLeaves = [];
+        try {
+          const leaveResult = await LeaveApplication.findAll({
+            user_id: filters.user_id,
+            status: 'approved',
+            start_date_from: rangeStart,
+            end_date_to: rangeEnd
+          });
+          approvedLeaves = Array.isArray(leaveResult?.applications)
+            ? leaveResult.applications.filter(leave => !leave.is_reversed && !leave.is_reversal_transaction)
+            : [];
+        } catch (error) {
+          console.error('Get approved leaves error:', error);
+          approvedLeaves = [];
+        }
+
+        const scheduleByDate = new Map();
+        userSchedules.forEach(schedule => {
+          const scheduleDateStr = this.formatDateToUTC8(schedule.schedule_date);
+          if (!scheduleDateStr) return;
+          scheduleByDate.set(scheduleDateStr, schedule);
+        });
+
+        const leaveByDate = new Map();
+        approvedLeaves.forEach(leave => {
+          const leaveStartStr = this.formatDateToUTC8(leave.start_date);
+          const leaveEndStr = this.formatDateToUTC8(leave.end_date);
+          if (!leaveStartStr || !leaveEndStr) return;
+          const leaveStartMs = parseYMDToUTCms(leaveStartStr);
+          const leaveEndMs = parseYMDToUTCms(leaveEndStr);
+          for (let ms = Math.max(leaveStartMs, startMs); ms <= Math.min(leaveEndMs, endMs); ms += 86400000) {
+            const dateStr = formatUTCmsToYMD(ms);
+            if (!leaveByDate.has(dateStr)) leaveByDate.set(dateStr, leave);
+          }
+        });
+
+        const dailyData = [];
+        for (const dateStr of dateStrList) {
+          const scheduleRecord = scheduleByDate.get(dateStr);
+          const leaveRecord = leaveByDate.get(dateStr);
+
+          let scheduleData = null;
+          if (leaveRecord) {
+            scheduleData = {
+              id: scheduleRecord?.id || null,
+              store_id: scheduleRecord?.store_id || null,
+              start_time: scheduleRecord?.start_time || null,
+              end_time: scheduleRecord?.end_time || null,
+              leave_type_name_zh: leaveRecord.leave_type_name_zh || scheduleRecord?.leave_type_name_zh || null,
+              leave_type_name: leaveRecord.leave_type_name || scheduleRecord?.leave_type_name || null,
+              leave_type_code: leaveRecord.leave_type_code || scheduleRecord?.leave_type_code || null,
+              leave_session: LeaveApplication.getSessionForDate
+                ? LeaveApplication.getSessionForDate(leaveRecord, dateStr)
+                : scheduleRecord?.leave_session || null,
+              is_approved_leave: true
+            };
+          } else if (scheduleRecord) {
+            scheduleData = {
+              id: scheduleRecord.id || null,
+              store_id: scheduleRecord.store_id || null,
+              start_time: scheduleRecord.start_time || null,
+              end_time: scheduleRecord.end_time || null,
+              leave_type_name_zh: scheduleRecord.leave_type_name_zh || null,
+              leave_type_name: scheduleRecord.leave_type_name || null,
+              leave_type_code: scheduleRecord.leave_type_code || null,
+              leave_session: scheduleRecord.leave_session || null,
+              is_approved_leave: false
+            };
+          }
+
+          const attendanceData = {
+            attendance_date: dateStr,
+            clock_records: clockRecordsByDate.get(dateStr) || []
+          };
+
+          // 注意：即使沒有有效打卡記錄，也要計算一次，確保缺勤判斷正確（取決於 schedule.start_time）
+          const calculated = await this.calculateDailyAttendance(
+            attendanceData,
+            scheduleData || {},
+            employmentModeStr
+          );
+          dailyData.push(calculated);
+        }
+
+        // 回傳一個統計用 summary（id 可能為 null；前端計算單日會改為重新拉取）
+        return res.json({
+          summaries: [
+            {
+              id: null,
+              user_id: filters.user_id,
+              year: summaryYear,
+              month: summaryMonth,
+              daily_data: dailyData
+            }
+          ]
         });
       }
 

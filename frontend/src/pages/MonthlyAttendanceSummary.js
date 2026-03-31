@@ -141,8 +141,13 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const location = useLocation();
 
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(() => dayjs().tz('Asia/Hong_Kong').year());
-  const [selectedMonth, setSelectedMonth] = useState(() => dayjs().tz('Asia/Hong_Kong').month() + 1);
+  // 預設：本月第一天 ~ 今日（限制最多45天）
+  const [selectedStartDate, setSelectedStartDate] = useState(() =>
+    dayjs().tz('Asia/Hong_Kong').startOf('month')
+  );
+  const [selectedEndDate, setSelectedEndDate] = useState(() =>
+    dayjs().tz('Asia/Hong_Kong').startOf('day')
+  );
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
@@ -183,21 +188,21 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
   // 當選了員工/年/月 或 進入本頁（pathname）時重新拉取，確保從 /schedule 改完編更回來會拿到最新 daily_data
   useEffect(() => {
-    if (selectedUserId && selectedYear && selectedMonth) {
+    if (selectedUserId && selectedStartDate && selectedEndDate) {
       fetchSummary();
     }
-  }, [selectedUserId, selectedYear, selectedMonth, location.pathname]);
+  }, [selectedUserId, selectedStartDate, selectedEndDate, location.pathname]);
 
   // 當用戶從其他分頁返回本頁時重新拉取（例如在另一分頁改完編更後返回）
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && selectedUserId && selectedYear && selectedMonth) {
+      if (document.visibilityState === 'visible' && selectedUserId && selectedStartDate && selectedEndDate) {
         fetchSummary();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [selectedUserId, selectedYear, selectedMonth]);
+  }, [selectedUserId, selectedStartDate, selectedEndDate]);
 
   const fetchUsers = async () => {
     try {
@@ -241,6 +246,54 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     if (Number.isNaN(m)) return null;
     if (!interval || interval <= 0) return Math.floor(m);
     return Math.floor(m / interval) * interval;
+  };
+
+  const getInclusiveDayCount = (start, end) => {
+    if (!start || !end) return 0;
+    return end.startOf('day').diff(start.startOf('day'), 'day') + 1;
+  };
+
+  const handleStartDateChange = (newValue) => {
+    if (!newValue) return;
+    const nextStart = newValue.tz('Asia/Hong_Kong').startOf('day');
+    setSelectedStartDate(nextStart);
+
+    // 若起始日期晚於目前結束日期：先把結束日期同步到起始日期，再做 45 天檢查
+    const effectiveEnd = (selectedEndDate && nextStart.isAfter(selectedEndDate, 'day'))
+      ? nextStart
+      : selectedEndDate;
+
+    if (effectiveEnd) {
+      // 最長45日（含起訖）
+      if (getInclusiveDayCount(nextStart, effectiveEnd) > 45) {
+        setSelectedEndDate(nextStart.add(44, 'day').startOf('day'));
+      } else if (nextStart.isAfter(effectiveEnd, 'day')) {
+        setSelectedEndDate(nextStart);
+      }
+    }
+  };
+
+  const handleEndDateChange = (newValue) => {
+    if (!newValue) return;
+
+    let nextEnd = newValue.tz('Asia/Hong_Kong').startOf('day');
+
+    if (selectedStartDate && nextEnd.isBefore(selectedStartDate, 'day')) {
+      nextEnd = selectedStartDate;
+    }
+
+    // 最長45日（含起訖）
+    if (selectedStartDate && getInclusiveDayCount(selectedStartDate, nextEnd) > 45) {
+      const clamped = selectedStartDate.add(44, 'day').startOf('day');
+      Swal.fire({
+        icon: 'warning',
+        title: '日期區間最多45天',
+        text: '已自動調整結束日期至符合限制。'
+      });
+      nextEnd = clamped;
+    }
+
+    setSelectedEndDate(nextEnd);
   };
 
   // 計算一天的考勤數據
@@ -437,65 +490,16 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       const listResponse = await axios.get('/api/monthly-attendance-summaries', {
         params: {
           user_id: selectedUserId,
-          year: selectedYear,
-          month: selectedMonth
+          start_date: selectedStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
+          end_date: selectedEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
+          // 仍保留 year/month 方便後端維持相容（後端會以 start_date/end_date 為準）
+          year: selectedStartDate.tz('Asia/Hong_Kong').year(),
+          month: selectedStartDate.tz('Asia/Hong_Kong').month() + 1
         }
       });
 
       let summaries = listResponse.data?.summaries || [];
       let summaryData = summaries.length > 0 ? summaries[0] : null;
-
-      // 如果尚未產生該月份的月結表，則自動從考勤資料複製並計算（遲到、Break、全日上班總、超時、應計超時等都會一併計算）
-      if (!summaryData) {
-        const firstDayOfMonth = dayjs(`${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`)
-          .tz('Asia/Hong_Kong')
-          .format('YYYY-MM-DD');
-
-        try {
-          const copyResponse = await axios.post('/api/monthly-attendance-summaries/copy-from-attendance', {
-            user_id: selectedUserId,
-            year: selectedYear,
-            month: selectedMonth,
-            // 後端目前要求 body 內要有 attendance_date，實際計算會按整個月份處理
-            attendance_date: firstDayOfMonth
-          });
-
-          summaryData = copyResponse.data?.summary || null;
-        } catch (copyError) {
-          const msg = copyError.response?.data?.message || copyError.message || '從考勤複製並計算失敗';
-          Swal.fire({
-            icon: 'warning',
-            title: t('attendance.error') || '錯誤',
-            text: msg + (msg.includes('部門群組') ? '。請確認該員工已分配部門群組。' : '')
-          });
-          setSummary({
-            id: null,
-            user_id: selectedUserId,
-            year: selectedYear,
-            month: selectedMonth,
-            daily_data: [],
-            created_at: null,
-            updated_at: null
-          });
-          return;
-        }
-      }
-
-      if (!summaryData) {
-        setSummary({
-          id: null,
-          user_id: selectedUserId,
-          year: selectedYear,
-          month: selectedMonth,
-          daily_data: [],
-          created_at: null,
-          updated_at: null
-        });
-        return;
-      }
-
-      // 後端已把每日的 schedule（包含例假、已批核假期、leave_session、is_approved_leave 等）
-      // 和 valid_clock_records / attendance_data 統一計算好，前端直接使用即可
       setSummary(summaryData);
     } catch (error) {
       console.error('Fetch summary error:', error);
@@ -510,11 +514,11 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   };
 
   const handleGenerateReport = async () => {
-    if (!selectedUserId || !selectedYear || !selectedMonth) {
+    if (!selectedUserId || !selectedStartDate || !selectedEndDate) {
       Swal.fire({
         icon: 'warning',
         title: t('attendance.warning'),
-        text: t('attendance.pleaseSelectEmployeeYearMonth')
+        text: '請選擇員工與日期區間（最多45天）'
       });
       return;
     }
@@ -534,8 +538,11 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
       const response = await axios.post('/api/monthly-attendance-reports/generate', {
         user_id: selectedUserId,
-        year: selectedYear,
-        month: selectedMonth
+        // 仍保留 year/month（後端會依 start_date 推導並用作月報掛靠鍵）
+        year: selectedStartDate.tz('Asia/Hong_Kong').year(),
+        month: selectedStartDate.tz('Asia/Hong_Kong').month() + 1,
+        start_date: selectedStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
+        end_date: selectedEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
       });
 
       Swal.fire({
@@ -586,29 +593,12 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         schedule_data: dayData?.schedule || dayData?.attendance_data?.schedule || {}
       });
 
-      // 更新該天的數據
-      if (summary) {
-        const dailyData = [...(summary.daily_data || [])];
-        const index = dailyData.findIndex(d => d.date === dateStr);
-        
-        if (index >= 0) {
-          dailyData[index] = response.data.daily_data;
-        } else {
-          dailyData.push(response.data.daily_data);
-        }
-
-        // 保存更新
-        await axios.put(`/api/monthly-attendance-summaries/${summary.id}`, {
-          daily_data: dailyData
-        });
-
-        await fetchSummary();
-        Swal.fire({
-          icon: 'success',
-          title: t('attendance.success') || '成功',
-          text: t('attendance.calculateComplete') || '計算完成'
-        });
-      }
+      await fetchSummary();
+      Swal.fire({
+        icon: 'success',
+        title: t('attendance.success') || '成功',
+        text: t('attendance.calculateComplete') || '計算完成'
+      });
     } catch (error) {
       console.error('Calculate day error:', error);
       Swal.fire({
@@ -696,8 +686,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       doc.setFontSize(12);
       const employeeDisplayName = selectedUser?.display_name || selectedUser?.name_zh || selectedUser?.name || '';
       doc.text(`Employee: ${selectedUser?.employee_number || ''} - ${employeeDisplayName}`, 14, 22);
-      doc.text(`Year: ${selectedYear}`, 14, 28);
-      doc.text(`Month: ${selectedMonth}`, 14, 34);
+      doc.text(`From: ${selectedStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD')}`, 14, 28);
+      doc.text(`To: ${selectedEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD')}`, 14, 34);
 
     // 準備表格數據 - 使用英文避免字體問題
     // 注意：PDF 使用英文，避免中文顯示成亂碼（jsPDF 預設字體不支援中文）
@@ -1066,29 +1056,35 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                 />
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField
-                  label={t('attendance.year') || '年份'}
-                  type="number"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-                  fullWidth
-                />
+              <DatePicker
+                label={t('attendance.startDate') || '開始日期'}
+                value={selectedStartDate}
+                onChange={handleStartDateChange}
+                format="YYYY-MM-DD"
+                maxDate={selectedEndDate || undefined}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    sx: { bgcolor: 'background.paper', borderRadius: 1 }
+                  }
+                }}
+              />
               </Grid>
               <Grid item xs={12} md={4}>
-                <FormControl fullWidth>
-                  <InputLabel>{t('attendance.month') || '月份'}</InputLabel>
-                  <Select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
-                    label={t('attendance.month') || '月份'}
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                      <MenuItem key={m} value={m}>
-                        {t(`attendance.month${m}`) || ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1]}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+              <DatePicker
+                label={t('attendance.endDate') || '結束日期'}
+                value={selectedEndDate}
+                onChange={handleEndDateChange}
+                format="YYYY-MM-DD"
+                minDate={selectedStartDate || undefined}
+                maxDate={selectedStartDate ? selectedStartDate.add(44, 'day') : undefined}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    sx: { bgcolor: 'background.paper', borderRadius: 1 }
+                  }
+                }}
+              />
               </Grid>
             </Grid>
             
@@ -1203,7 +1199,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                   color="primary"
                   startIcon={<DescriptionIcon />}
                   onClick={handleGenerateReport}
-                  disabled={generatingReport || !selectedUserId || !selectedYear || !selectedMonth}
+                  disabled={generatingReport || !selectedUserId || !selectedStartDate || !selectedEndDate}
                   sx={{ minWidth: 200 }}
                 >
                   {generatingReport ? t('attendance.generating') : t('attendance.generateReport')}
@@ -1557,7 +1553,14 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                 {t('attendance.noMonthlySummary') || '沒有月結記錄'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 480, mx: 'auto' }}>
-                {t('attendance.noMonthlySummaryHint') || '選擇員工、年份與月份後，系統會自動從考勤複製並計算遲到、Break 時間、全日上班總時數、超時工作及應計超時工作時數，無需先生成月報。若仍無資料，請確認該員工已分配部門群組。'}
+                {(() => {
+                  const hint = t('attendance.noMonthlySummaryHint');
+                  if (!hint) {
+                    return '選擇員工與日期區間後，系統會自動從排班與打卡即時計算遲到、Break 時間、全日上班總時數、超時工作及應計超時工作時數，無需先生成月報。若仍無資料，請確認該員工已分配部門群組。';
+                  }
+                  // 原本文字包含「年份與月份」：改為「日期區間」以符合本頁需求
+                  return hint.replace('年份與月份', '日期區間').replace('年份、年份與月份', '日期區間');
+                })()}
               </Typography>
             </Card>
           )}

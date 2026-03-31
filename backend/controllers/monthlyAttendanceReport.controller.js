@@ -124,11 +124,47 @@ class MonthlyAttendanceReportController {
   // 從月結數據生成月報
   async generateReport(req, res) {
     try {
-      const { user_id, year, month } = req.body;
+      let { user_id, year, month, start_date, end_date } = req.body;
       const userId = req.user.id;
 
-      if (!user_id || !year || !month) {
-        return res.status(400).json({ message: '請提供用戶ID、年份和月份' });
+      const rangeStart = start_date || req.body.startDate;
+      const rangeEnd = end_date || req.body.endDate;
+
+      if (!user_id || (!year || !month) && !(rangeStart && rangeEnd)) {
+        return res.status(400).json({ message: '請提供用戶ID、年份/月份 或 start_date/end_date' });
+      }
+
+      // 若使用日期區間，year/month 以 start_date 推導（並限制最多45天）
+      if (rangeStart && rangeEnd) {
+        const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+        if (!ymdRe.test(rangeStart) || !ymdRe.test(rangeEnd)) {
+          return res.status(400).json({ message: 'start_date / end_date 格式不正確，需為 YYYY-MM-DD' });
+        }
+
+        const parseYMDToUTCms = (s) => {
+          const [y, m, d] = s.split('-').map(Number);
+          return Date.UTC(y, m - 1, d);
+        };
+
+        const startMs = parseYMDToUTCms(rangeStart);
+        const endMs = parseYMDToUTCms(rangeEnd);
+        if (startMs > endMs) {
+          return res.status(400).json({ message: 'start_date 不能晚於 end_date' });
+        }
+
+        const dayCountInclusive = Math.round((endMs - startMs) / 86400000) + 1;
+        if (dayCountInclusive > 45) {
+          return res.status(400).json({ message: '日期區間最多45天' });
+        }
+
+        // 推導報表掛靠的 year/month（與現有 DB 唯一鍵保持相容）
+        const [startYearStr, startMonthStr] = rangeStart.split('-');
+        year = parseInt(startYearStr, 10);
+        month = parseInt(startMonthStr, 10);
+      }
+
+      if (!year || !month) {
+        return res.status(400).json({ message: '請提供年份與月份' });
       }
 
       // 檢查權限
@@ -279,7 +315,9 @@ class MonthlyAttendanceReportController {
           query: {
             user_id,
             year,
-            month
+            month,
+            start_date: rangeStart,
+            end_date: rangeEnd
           },
           user: req.user
         };
