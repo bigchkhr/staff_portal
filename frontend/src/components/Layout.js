@@ -89,8 +89,13 @@ const Layout = ({ children }) => {
 
   const fetchPendingCount = async () => {
     try {
-      const response = await axios.get('/api/approvals/pending');
-      const count = response.data.applications?.length || 0;
+      const response = await axios.get('/api/approvals/pending', {
+        params: { page: 1, limit: 1 }
+      });
+      const count =
+        response.data.pagination?.total ??
+        response.data.applications?.length ??
+        0;
       setPendingCount(count);
     } catch (error) {
       console.error('獲取待批核數量錯誤:', error);
@@ -144,7 +149,7 @@ const Layout = ({ children }) => {
     { 
       key: 'myApprovals', 
       icon: (
-        <Badge badgeContent={pendingCount} color="error" max={99}>
+        <Badge badgeContent={pendingCount} color="error" max={99999}>
           <CheckCircleIcon />
         </Badge>
       ), 

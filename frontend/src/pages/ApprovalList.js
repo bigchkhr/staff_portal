@@ -45,8 +45,7 @@ const ApprovalList = () => {
   const [allApplications, setAllApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [limit] = useState(15); // 每頁顯示數量
-  const [total, setTotal] = useState(0);
+  const [limit] = useState(15); // 每頁顯示數量（與後端預設一致）
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
@@ -92,9 +91,8 @@ const ApprovalList = () => {
       const fetchedApplications = response.data.applications || [];
       setAllApplications(fetchedApplications);
       
-      // 更新分頁信息
+      // 更新分頁信息（以後端合併排序後的總筆數為準）
       if (response.data.pagination) {
-        setTotal(response.data.pagination.total || 0);
         setTotalPages(response.data.pagination.totalPages || 1);
       }
     } catch (error) {
@@ -152,24 +150,7 @@ const ApprovalList = () => {
     return filtered;
   }, [allApplications, search, stageFilter]);
 
-  // 當過濾後的結果改變時，更新分頁
-  useEffect(() => {
-    const filteredTotal = filteredApplications.length;
-    const filteredTotalPages = Math.ceil(filteredTotal / limit);
-    setTotal(filteredTotal);
-    setTotalPages(filteredTotalPages);
-    // 如果當前頁超過總頁數，重置到第一頁
-    if (page > filteredTotalPages && filteredTotalPages > 0) {
-      setPage(1);
-    }
-  }, [filteredApplications, limit, page]);
-
-  // 獲取當前頁的申請
-  const paginatedApplications = useMemo(() => {
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    return filteredApplications.slice(startIndex, endIndex);
-  }, [filteredApplications, page, limit]);
+  // 後端已按 page/limit 分頁；此處只做搜尋／階段篩選，勿再 slice 或用本頁筆數覆寫 totalPages（否則超過 15 筆無法翻頁）
 
   const canApprove = (application) => {
     const stage = getCurrentStage(application);
@@ -459,12 +440,12 @@ const ApprovalList = () => {
         {isMobile ? (
           // 手機版：卡片式布局
           <Box>
-            {paginatedApplications.length === 0 ? (
+            {filteredApplications.length === 0 ? (
               <Alert severity="info" sx={{ mt: 2 }}>
                 {t('approvalList.noPendingApplications')}
               </Alert>
             ) : (
-              paginatedApplications.map((app) => renderMobileCard(app))
+              filteredApplications.map((app) => renderMobileCard(app))
             )}
           </Box>
         ) : (
@@ -492,12 +473,12 @@ const ApprovalList = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {paginatedApplications.length === 0 ? (
+                {filteredApplications.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} align="center">{t('approvalList.noPendingApplications')}</TableCell>
                   </TableRow>
                 ) : (
-                  paginatedApplications.map((app) => {
+                  filteredApplications.map((app) => {
                     const stage = getCurrentStage(app);
                     const canApproveThis = canApprove(app);
                     
