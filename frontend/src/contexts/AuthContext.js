@@ -1,5 +1,8 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
+import { store } from '../store';
+import { clearMonthlyReportGeneratePreference } from '../store/slices/monthlyReportGeneratePreferenceSlice';
+import { clearMonthlyAttendanceSummaryDateRange } from '../store/slices/monthlyAttendanceSummaryDateRangeSlice';
 
 const AuthContext = createContext();
 
@@ -89,6 +92,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
     setUser(null);
+    store.dispatch(clearMonthlyReportGeneratePreference());
+    store.dispatch(clearMonthlyAttendanceSummaryDateRange());
   };
 
   const changePassword = async (currentPassword, newPassword) => {

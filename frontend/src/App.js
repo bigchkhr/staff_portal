@@ -1,8 +1,10 @@
 import React from 'react';
+import { Provider } from 'react-redux';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import axios from 'axios';
+import { store } from './store';
 import './i18n/config';
 import './utils/axiosConfig';
 import { AuthProvider } from './contexts/AuthContext';
@@ -57,9 +59,9 @@ import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 
 // 設定後端 API 地址
-// axios.defaults.baseURL = 'http://3.1.139.29:1689';
+axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://ec2-3-1-139-29.ap-southeast-1.compute.amazonaws.com:1689';
-axios.defaults.baseURL = 'http://localhost:1689';
+// axios.defaults.baseURL = 'http://localhost:1689';
 // axios.defaults.baseURL = 'http://172.31.132.73:1689';
 // axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
@@ -78,6 +80,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <Provider store={store}>
       <AuthProvider>
         <Router>
           <Routes>
@@ -134,6 +137,7 @@ function App() {
           </Routes>
         </Router>
       </AuthProvider>
+      </Provider>
     </ThemeProvider>
   );
 }

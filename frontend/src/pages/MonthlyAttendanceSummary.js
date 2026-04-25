@@ -44,12 +44,15 @@ import {
   Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import axios from 'axios';
-import { useAuth } from '../contexts/AuthContext';
+import { store } from '../store';
+import { setMonthlyReportGeneratePreference } from '../store/slices/monthlyReportGeneratePreferenceSlice';
+import { setMonthlyAttendanceSummaryDateRange } from '../store/slices/monthlyAttendanceSummaryDateRangeSlice';
 import Swal from 'sweetalert2';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
@@ -131,9 +134,39 @@ function computeMonthlySummaryFootStats(dailyData) {
   );
 }
 
+/** 從 Redux 還原月結表日期區間；無效則本月首日～今日（香港） */
+function getInitialDateRangeForMonthlySummary() {
+  try {
+    const { start_date, end_date } = store.getState().monthlyAttendanceSummaryDateRange;
+    const ymd = /^\d{4}-\d{2}-\d{2}$/;
+    if (!start_date || !end_date || !ymd.test(start_date) || !ymd.test(end_date)) {
+      const hk = dayjs().tz('Asia/Hong_Kong');
+      return { start: hk.startOf('month'), end: hk.startOf('day') };
+    }
+    const [ys, ms, ds] = start_date.split('-').map(Number);
+    const [ye, me, de] = end_date.split('-').map(Number);
+    const s = dayjs.tz({ year: ys, month: ms - 1, day: ds }, 'Asia/Hong_Kong').startOf('day');
+    const e = dayjs.tz({ year: ye, month: me - 1, day: de }, 'Asia/Hong_Kong').startOf('day');
+    if (!s.isValid() || !e.isValid() || s.isAfter(e, 'day')) {
+      const hk = dayjs().tz('Asia/Hong_Kong');
+      return { start: hk.startOf('month'), end: hk.startOf('day') };
+    }
+    const days = e.diff(s, 'day') + 1;
+    if (days < 1 || days > 45) {
+      const hk = dayjs().tz('Asia/Hong_Kong');
+      return { start: hk.startOf('month'), end: hk.startOf('day') };
+    }
+    return { start: s, end: e };
+  } catch {
+    const hk = dayjs().tz('Asia/Hong_Kong');
+    return { start: hk.startOf('month'), end: hk.startOf('day') };
+  }
+}
+
 const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const dispatch = useDispatch();
+  const monthlyReportGeneratePreference = useSelector((state) => state.monthlyReportGeneratePreference);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [searchParams, setSearchParams] = useSearchParams();
@@ -141,12 +174,12 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const location = useLocation();
 
   const [selectedUserId, setSelectedUserId] = useState(null);
-  // 預設：本月第一天 ~ 今日（限制最多45天）
-  const [selectedStartDate, setSelectedStartDate] = useState(() =>
-    dayjs().tz('Asia/Hong_Kong').startOf('month')
+  // 初始：Redux 暫存區間；無則本月首日～今日（最多 45 日）
+  const [selectedStartDate, setSelectedStartDate] = useState(
+    () => getInitialDateRangeForMonthlySummary().start
   );
-  const [selectedEndDate, setSelectedEndDate] = useState(() =>
-    dayjs().tz('Asia/Hong_Kong').startOf('day')
+  const [selectedEndDate, setSelectedEndDate] = useState(
+    () => getInitialDateRangeForMonthlySummary().end
   );
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -157,6 +190,9 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedDayDetail, setSelectedDayDetail] = useState(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [generateReportDialogOpen, setGenerateReportDialogOpen] = useState(false);
+  const [dialogReportYear, setDialogReportYear] = useState(() => dayjs().tz('Asia/Hong_Kong').year());
+  const [dialogReportMonth, setDialogReportMonth] = useState(() => dayjs().tz('Asia/Hong_Kong').month() + 1);
   const [stores, setStores] = useState([]);
 
   useEffect(() => {
@@ -185,6 +221,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       }
     }
   }, [searchParams, users]);
+
+  // 開始／結束日期寫入 Redux（登出時清除）
+  useEffect(() => {
+    if (!selectedStartDate || !selectedEndDate) return;
+    dispatch(
+      setMonthlyAttendanceSummaryDateRange({
+        start_date: selectedStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
+        end_date: selectedEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD')
+      })
+    );
+  }, [selectedStartDate, selectedEndDate, dispatch]);
 
   // 當選了員工/年/月 或 進入本頁（pathname）時重新拉取，確保從 /schedule 改完編更回來會拿到最新 daily_data
   useEffect(() => {
@@ -513,7 +560,16 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     }
   };
 
-  const handleGenerateReport = async () => {
+  const reportYearOptions = useMemo(() => {
+    const hkNow = dayjs().tz('Asia/Hong_Kong');
+    const maxY = hkNow.year() + 1;
+    const minY = 2020;
+    const list = [];
+    for (let y = minY; y <= maxY; y += 1) list.push(y);
+    return list;
+  }, []);
+
+  const openGenerateReportDialog = () => {
     if (!selectedUserId || !selectedStartDate || !selectedEndDate) {
       Swal.fire({
         icon: 'warning',
@@ -522,11 +578,77 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
       });
       return;
     }
+    const hk = selectedStartDate.tz('Asia/Hong_Kong');
+    const prefY = monthlyReportGeneratePreference.year;
+    const prefM = monthlyReportGeneratePreference.month;
+    const minY = reportYearOptions[0];
+    const maxY = reportYearOptions[reportYearOptions.length - 1];
+    let y = prefY != null ? prefY : hk.year();
+    y = Math.min(maxY, Math.max(minY, y));
+    let m = prefM != null ? prefM : hk.month() + 1;
+    m = Math.min(12, Math.max(1, m));
+    setDialogReportYear(y);
+    setDialogReportMonth(m);
+    setGenerateReportDialogOpen(true);
+  };
+
+  const performGenerateReport = async (year, month) => {
+    if (!selectedUserId) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.warning'),
+        text: '請選擇員工與日期區間（最多45天）'
+      });
+      return;
+    }
+
+    const y = Number(year);
+    const mo = Number(month);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) {
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: t('attendance.generateReportFailed')
+      });
+      return;
+    }
+
+    if (!selectedStartDate || !selectedEndDate) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.warning'),
+        text: '請選擇員工與日期區間（最多45天）'
+      });
+      return;
+    }
+
+    const hkStart = selectedStartDate.tz('Asia/Hong_Kong').startOf('day');
+    const hkEnd = selectedEndDate.tz('Asia/Hong_Kong').startOf('day');
+    if (hkStart.isAfter(hkEnd, 'day')) {
+      Swal.fire({
+        icon: 'error',
+        title: t('attendance.error'),
+        text: t('attendance.generateReportFailed')
+      });
+      return;
+    }
+    const rangeDays = hkEnd.diff(hkStart, 'day') + 1;
+    if (rangeDays > 45) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('attendance.warning'),
+        text: '日期區間最多45天'
+      });
+      return;
+    }
+
+    // 月報掛靠年／月 = 對話框；統計資料來源 = 畫面上開始／結束日期（可與掛靠月份不一致）
+    const start_date = hkStart.format('YYYY-MM-DD');
+    const end_date = hkEnd.format('YYYY-MM-DD');
 
     try {
       setGeneratingReport(true);
-      
-      // 顯示載入提示
+
       Swal.fire({
         title: t('attendance.generating'),
         text: t('attendance.generating'),
@@ -538,11 +660,10 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
       const response = await axios.post('/api/monthly-attendance-reports/generate', {
         user_id: selectedUserId,
-        // 仍保留 year/month（後端會依 start_date 推導並用作月報掛靠鍵）
-        year: selectedStartDate.tz('Asia/Hong_Kong').year(),
-        month: selectedStartDate.tz('Asia/Hong_Kong').month() + 1,
-        start_date: selectedStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
-        end_date: selectedEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD'),
+        year: y,
+        month: mo,
+        start_date,
+        end_date
       });
 
       Swal.fire({
@@ -551,12 +672,10 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         text: response.data.message || t('attendance.reportGenerated')
       });
 
-      // 導航到編輯頁面
       const reportId = response.data.report?.id;
       if (reportId) {
         navigate(`/monthly-attendance-report/${reportId}`);
       } else {
-        // 如果沒有返回 reportId，重新載入月結數據
         await fetchSummary();
       }
     } catch (error) {
@@ -569,6 +688,17 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     } finally {
       setGeneratingReport(false);
     }
+  };
+
+  const handleConfirmGenerateReportDialog = async () => {
+    dispatch(
+      setMonthlyReportGeneratePreference({
+        year: dialogReportYear,
+        month: dialogReportMonth
+      })
+    );
+    setGenerateReportDialogOpen(false);
+    await performGenerateReport(dialogReportYear, dialogReportMonth);
   };
 
   const handleCalculateDay = async (date) => {
@@ -1198,7 +1328,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
                   variant="contained"
                   color="primary"
                   startIcon={<DescriptionIcon />}
-                  onClick={handleGenerateReport}
+                  onClick={openGenerateReportDialog}
                   disabled={generatingReport || !selectedUserId || !selectedStartDate || !selectedEndDate}
                   sx={{ minWidth: 200 }}
                 >
@@ -1564,6 +1694,62 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
               </Typography>
             </Card>
           )}
+
+          {/* 生成月報：選擇年份／月份 */}
+          <Dialog
+            open={generateReportDialogOpen}
+            onClose={() => !generatingReport && setGenerateReportDialogOpen(false)}
+            maxWidth="xs"
+            fullWidth
+          >
+            <DialogTitle>{t('attendance.selectReportYearMonthTitle')}</DialogTitle>
+            <DialogContent>
+              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="generate-report-year-label">{t('attendance.reportYear')}</InputLabel>
+                    <Select
+                      labelId="generate-report-year-label"
+                      label={t('attendance.reportYear')}
+                      value={dialogReportYear}
+                      onChange={(e) => setDialogReportYear(Number(e.target.value))}
+                    >
+                      {reportYearOptions.map((y) => (
+                        <MenuItem key={y} value={y}>
+                          {y}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="generate-report-month-label">{t('attendance.reportMonth')}</InputLabel>
+                    <Select
+                      labelId="generate-report-month-label"
+                      label={t('attendance.reportMonth')}
+                      value={dialogReportMonth}
+                      onChange={(e) => setDialogReportMonth(Number(e.target.value))}
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <MenuItem key={m} value={m}>
+                          {m}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setGenerateReportDialogOpen(false)} disabled={generatingReport}>
+                {t('common.cancel')}
+              </Button>
+              <Button variant="contained" onClick={handleConfirmGenerateReportDialog} disabled={generatingReport}>
+                {t('attendance.confirmGenerateReport')}
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           {/* 詳情對話框 */}
           <Dialog

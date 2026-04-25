@@ -157,10 +157,26 @@ class MonthlyAttendanceReportController {
           return res.status(400).json({ message: '日期區間最多45天' });
         }
 
-        // 推導報表掛靠的 year/month（與現有 DB 唯一鍵保持相容）
-        const [startYearStr, startMonthStr] = rangeStart.split('-');
-        year = parseInt(startYearStr, 10);
-        month = parseInt(startMonthStr, 10);
+        // 若同時提供「月報掛靠年／月」與區間：區間只用於統計資料來源，年／月以請求為準（可與區間所在月份不一致）
+        const ymFromBody = year != null && month != null && String(year).trim() !== '' && String(month).trim() !== '';
+        const reportYear = ymFromBody ? parseInt(year, 10) : NaN;
+        const reportMonth = ymFromBody ? parseInt(month, 10) : NaN;
+        const useExplicitReportYm =
+          ymFromBody &&
+          !Number.isNaN(reportYear) &&
+          !Number.isNaN(reportMonth) &&
+          reportMonth >= 1 &&
+          reportMonth <= 12;
+
+        if (!useExplicitReportYm) {
+          // 僅區間、或年／月無效：沿用舊行為，由 start_date 推導掛靠年／月（與 DB 唯一鍵相容）
+          const [startYearStr, startMonthStr] = rangeStart.split('-');
+          year = parseInt(startYearStr, 10);
+          month = parseInt(startMonthStr, 10);
+        } else {
+          year = reportYear;
+          month = reportMonth;
+        }
       }
 
       if (!year || !month) {
