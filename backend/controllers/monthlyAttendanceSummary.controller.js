@@ -228,6 +228,7 @@ class MonthlyAttendanceSummaryController {
     // 計算總工作時數
     // 全日上班總時數 = 打卡最後時間 - 排班開始時間（如果有排班時間）
     // 如果沒有排班時間，則 = 打卡最後時間 - 當日首次打卡時間
+    let totalWorkMinutes = null;
     if (clockOutTime) {
       const end = this.parseTime(clockOutTime);
       
@@ -249,6 +250,7 @@ class MonthlyAttendanceSummaryController {
           if (result.late_minutes !== null && result.late_minutes > 0) {
             totalMinutes -= result.late_minutes;
           }
+          totalWorkMinutes = totalMinutes;
           result.total_work_hours = (totalMinutes / 60).toFixed(2);
         }
       }
@@ -256,13 +258,27 @@ class MonthlyAttendanceSummaryController {
 
     // 計算超時工作時間
     let overtimeMinutes = null;
-    if (scheduleEndTime && clockOutTime) {
-      const scheduleEnd = this.parseTime(scheduleEndTime);
-      const actualEnd = this.parseTime(clockOutTime);
-      
-      if (actualEnd !== null && scheduleEnd !== null && actualEnd > scheduleEnd) {
-        overtimeMinutes = actualEnd - scheduleEnd;
-        result.overtime_hours = (overtimeMinutes / 60).toFixed(2);
+    const modeForOvertime = employmentMode ? employmentMode.toString().trim().toUpperCase() : null;
+    if (modeForOvertime === 'FT') {
+      // FT 員工：超時工作時間以「全日上班總時數」計算，超過 9 小時先開始計
+      if (totalWorkMinutes !== null && totalWorkMinutes !== undefined) {
+        const thresholdMinutes = 9 * 60;
+        const ot = totalWorkMinutes - thresholdMinutes;
+        if (ot > 0) {
+          overtimeMinutes = ot;
+          result.overtime_hours = (overtimeMinutes / 60).toFixed(2);
+        }
+      }
+    } else {
+      // 其他：維持原本邏輯（按排班下班時間計）
+      if (scheduleEndTime && clockOutTime) {
+        const scheduleEnd = this.parseTime(scheduleEndTime);
+        const actualEnd = this.parseTime(clockOutTime);
+        
+        if (actualEnd !== null && scheduleEnd !== null && actualEnd > scheduleEnd) {
+          overtimeMinutes = actualEnd - scheduleEnd;
+          result.overtime_hours = (overtimeMinutes / 60).toFixed(2);
+        }
       }
     }
 
@@ -278,12 +294,12 @@ class MonthlyAttendanceSummaryController {
       if (mode === 'PT') {
         // PT員工：應計工作時數 = 全日上班總時數，向下取整到15分鐘
         if (result.total_work_hours !== null && result.total_work_hours !== undefined) {
-          const totalWorkMinutes = parseFloat(result.total_work_hours) * 60; // 將小時轉換為分鐘
-          result.approved_overtime_minutes = floorMinutesToInterval(totalWorkMinutes, 15);
+          const totalMinutes = parseFloat(result.total_work_hours) * 60; // 將小時轉換為分鐘
+          result.approved_overtime_minutes = floorMinutesToInterval(totalMinutes, 15);
         }
       } else if (mode === 'FT') {
-        // FT員工：只在有超時工作時計算應計工作時數，向下取整到30分鐘
-        if (overtimeMinutes !== null && overtimeMinutes >= 15) {
+        // FT員工：應計超時工作時數按超時工作時間向下取整到30分鐘（超過 9 小時先開始計）
+        if (overtimeMinutes !== null && overtimeMinutes > 0) {
           result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, 30);
         }
       }

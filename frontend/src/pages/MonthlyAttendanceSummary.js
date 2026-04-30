@@ -459,6 +459,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
     // 計算總工作時數
     // 全日上班總時數 = 打卡最後時間 - 排班開始時間（如果有排班時間）
     // 如果沒有排班時間，則 = 打卡最後時間 - 當日首次打卡時間
+    let workMinutes = null;
     if (clockOutTime) {
       const end = parseTime(clockOutTime);
       
@@ -475,7 +476,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         }
         
         if (start !== null) {
-          let workMinutes = end - start;
+          workMinutes = end - start;
           // 如果有遲到時間，需要減去
           if (result.late_minutes !== null && result.late_minutes > 0) {
             workMinutes -= result.late_minutes;
@@ -487,20 +488,33 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
 
     // 計算超時工作時間
     let overtimeMinutes = null;
-    if (scheduleEndTime && clockOutTime) {
-      const scheduleEnd = parseTime(scheduleEndTime);
-      const actualEnd = parseTime(clockOutTime);
-      
-      if (scheduleEnd !== null && actualEnd !== null && actualEnd > scheduleEnd) {
-        overtimeMinutes = actualEnd - scheduleEnd;
-        if (overtimeMinutes >= 15) {
+    const mode = (employmentMode || '').toString().trim().toUpperCase();
+    if (mode === 'FT') {
+      // FT 員工：超時工作時間以「全日上班總時數」計算，超過 9 小時就開始計
+      if (workMinutes !== null && workMinutes !== undefined) {
+        const thresholdMinutes = 9 * 60;
+        const ot = workMinutes - thresholdMinutes;
+        if (ot > 0) {
+          overtimeMinutes = ot;
           result.overtime_hours = overtimeMinutes / 60;
+        }
+      }
+    } else {
+      // 其他：維持原本邏輯（按排班下班時間計）
+      if (scheduleEndTime && clockOutTime) {
+        const scheduleEnd = parseTime(scheduleEndTime);
+        const actualEnd = parseTime(clockOutTime);
+        
+        if (scheduleEnd !== null && actualEnd !== null && actualEnd > scheduleEnd) {
+          overtimeMinutes = actualEnd - scheduleEnd;
+          if (overtimeMinutes >= 15) {
+            result.overtime_hours = overtimeMinutes / 60;
+          }
         }
       }
     }
 
     // 計算應計工作時數
-    const mode = (employmentMode || '').toString().trim().toUpperCase();
     if (mode === 'PT') {
       // PT員工：應計工作時數 = 全日上班總時數，向下取整到15分鐘
       if (result.total_work_hours !== null && result.total_work_hours !== undefined) {
@@ -508,8 +522,8 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
         result.approved_overtime_minutes = floorMinutesToInterval(totalWorkMinutes, 15);
       }
     } else {
-      // FT員工：保持現有計法（只在有超時工作時計算應計工作時數，向下取整到30分鐘）
-      if (overtimeMinutes !== null && overtimeMinutes >= 15) {
+      // FT員工：應計超時工作時數按超時工作時間向下取整到30分鐘（超過 9 小時先開始計）
+      if (overtimeMinutes !== null && overtimeMinutes > 0) {
         result.approved_overtime_minutes = floorMinutesToInterval(overtimeMinutes, 30);
       }
     }

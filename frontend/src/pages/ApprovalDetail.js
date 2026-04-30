@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -22,7 +22,13 @@ import {
   DialogActions,
   CircularProgress,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +64,24 @@ const ApprovalDetail = () => {
   const [loadingFile, setLoadingFile] = useState(false);
   const [hrRejectionReason, setHrRejectionReason] = useState('');
   const [hrRejecting, setHrRejecting] = useState(false);
+  const [imageZoom, setImageZoom] = useState(1);
+  const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
+  const [isImagePanning, setIsImagePanning] = useState(false);
+  const imagePanStartRef = useRef(null);
+
+  const resetImageTransform = () => {
+    setImageZoom(1);
+    setImagePan({ x: 0, y: 0 });
+    setIsImagePanning(false);
+    imagePanStartRef.current = null;
+  };
+
+  useEffect(() => {
+    if (fileDialogOpen && viewingFile?.file_type?.startsWith('image/')) {
+      resetImageTransform();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileDialogOpen, viewingFile?.id]);
 
   useEffect(() => {
     const type = searchParams.get('type') || 'leave';
@@ -435,6 +459,7 @@ const ApprovalDetail = () => {
       window.URL.revokeObjectURL(fileBlobUrl);
       setFileBlobUrl(null);
     }
+    resetImageTransform();
     setFileDialogOpen(false);
     setViewingFile(null);
   };
@@ -710,114 +735,212 @@ const ApprovalDetail = () => {
                 </>
               ) : (
                 <>
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.leaveType')}
-                      secondary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Typography component="span" variant="body1">
-                            {i18n.language === 'en' 
-                              ? (application.leave_type_name || application.leave_type_name_zh || '')
-                              : (application.leave_type_name_zh || application.leave_type_name || '')}
-                          </Typography>
-                          {isReversalTransaction && (
-                            <Box
-                              component="span"
-                              sx={{
-                                bgcolor: 'error.main',
-                                color: 'common.white',
-                                px: 1,
-                                py: 0.25,
-                                borderRadius: 0.5,
-                                fontSize: '0.75rem',
-                                fontWeight: 600,
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {t('approvalDetail.reversalApplication')}
-                            </Box>
-                          )}
-                        </Box>
-                      }
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.year')}
-                      secondary={application.year || (application.start_date ? new Date(application.start_date).getFullYear() : '-') + t('approvalDetail.yearSuffix')}
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
-                    />
-                  </ListItem>
-                  {showLeaveBalanceRow && (
-                    <ListItem>
-                      <ListItemText 
-                        primary={t('approvalDetail.leaveBalance')}
-                        secondary={
-                          <Box>
-                            <Typography 
-                              variant="body1" 
-                              component="span" 
-                              sx={{ 
-                                fontWeight: 'bold',
-                                color: parseFloat(application.leave_balance.balance || 0) < 0 ? 'error.main' : 'inherit'
-                              }}
-                            >
-                              {parseFloat(application.leave_balance.balance || 0).toFixed(2)} {t('approvalDetail.days')}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                              ({t('approvalDetail.totalBalance')}: {parseFloat(application.leave_balance.total || 0).toFixed(2)}, {t('approvalDetail.usedBalance')}: {parseFloat(application.leave_balance.taken || 0).toFixed(2)})
-                            </Typography>
-                          </Box>
-                        }
-                        primaryTypographyProps={{ variant: 'caption' }}
-                        secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                      />
-                    </ListItem>
-                  )}
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.applicationDate')}
-                      secondary={application.application_date ? formatDate(application.application_date) : '-'}
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.startDate')}
-                      secondary={
-                        application.start_date 
-                          ? `${formatDate(application.start_date)}${application.start_session ? ` (${application.start_session === 'AM' ? t('leaveApplication.sessionAM') : t('leaveApplication.sessionPM')})` : ''}`
-                          : '-'
-                      }
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.endDate')}
-                      secondary={
-                        application.end_date 
-                          ? `${formatDate(application.end_date)}${application.end_session ? ` (${application.end_session === 'AM' ? t('leaveApplication.sessionAM') : t('leaveApplication.sessionPM')})` : ''}`
-                          : '-'
-                      }
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemText 
-                      primary={t('approvalDetail.days')}
-                      secondary={application.days}
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1' }}
-                    />
-                  </ListItem>
+                  <ListItem
+                    sx={{
+                      display: 'inline-block',
+                      width: 'fit-content',
+                      maxWidth: '100%',
+                      px: 0,
+                    }}
+                  >
+                    {!isMobile ? (
+                      <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {t('approvalDetail.applicationDate')}
+                        </Typography>
+                        <Typography variant="body2" component="div">
+                          {application.application_date ? formatDate(application.application_date) : '-'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+                        <Typography variant="caption" color="text.secondary" component="div">
+                          {t('approvalDetail.applicationDate')}
+                        </Typography>
+                        <Typography variant="body2" component="div">
+                          {application.application_date ? formatDate(application.application_date) : '-'}
+                        </Typography>
 
+                        <Box sx={{ mt: 1 }}>
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            {t('approvalDetail.leaveType')}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Typography variant="body2" component="span">
+                              {i18n.language === 'en'
+                                ? (application.leave_type_name || application.leave_type_name_zh || '')
+                                : (application.leave_type_name_zh || application.leave_type_name || '')}
+                            </Typography>
+                            {isReversalTransaction && (
+                              <Box
+                                component="span"
+                                sx={{
+                                  bgcolor: 'error.main',
+                                  color: 'common.white',
+                                  display: 'inline-block',
+                                  px: 1,
+                                  py: 0.25,
+                                  borderRadius: 0.5,
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  lineHeight: 1.5,
+                                }}
+                              >
+                                {t('approvalDetail.reversalApplication')}
+                              </Box>
+                            )}
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                            {(application.year ||
+                              (application.start_date ? new Date(application.start_date).getFullYear() : '-')) +
+                              t('approvalDetail.yearSuffix')}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    <TableContainer
+                      sx={{
+                        overflowX: 'auto',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        display: 'inline-block',
+                        maxWidth: '100%',
+                      }}
+                    >
+                      <Table size="small" sx={{ width: 'auto', minWidth: 0, tableLayout: 'auto' }}>
+                        <TableHead>
+                          <TableRow sx={{ bgcolor: 'grey.700' }}>
+                            {!isMobile && (
+                              <TableCell
+                                sx={{
+                                  fontWeight: 600,
+                                  color: 'common.white',
+                                  maxWidth: 120,
+                                  whiteSpace: 'normal',
+                                  wordBreak: 'break-word',
+                                }}
+                              >
+                                {t('approvalDetail.leaveType')}
+                              </TableCell>
+                            )}
+                            <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'common.white' }}>
+                              {t('approvalDetail.startDate')}
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'common.white' }}>
+                              {t('approvalDetail.endDate')}
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'common.white' }}>
+                              {t('approvalDetail.days')}
+                            </TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          <TableRow>
+                            {!isMobile && (
+                              <TableCell
+                                sx={{
+                                  verticalAlign: 'top',
+                                  maxWidth: 120,
+                                  whiteSpace: 'normal',
+                                  wordBreak: 'break-word',
+                                }}
+                              >
+                                <Box>
+                                  <Typography component="div" variant="body2">
+                                    {i18n.language === 'en'
+                                      ? (application.leave_type_name || application.leave_type_name_zh || '')
+                                      : (application.leave_type_name_zh || application.leave_type_name || '')}
+                                  </Typography>
+                                  {isReversalTransaction && (
+                                    <Box
+                                      component="div"
+                                      sx={{
+                                        bgcolor: 'error.main',
+                                        color: 'common.white',
+                                        display: 'inline-block',
+                                        px: 1,
+                                        py: 0.25,
+                                        borderRadius: 0.5,
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        lineHeight: 1.5,
+                                        mt: 0.5,
+                                      }}
+                                    >
+                                      {t('approvalDetail.reversalApplication')}
+                                    </Box>
+                                  )}
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+                                  {(application.year ||
+                                    (application.start_date ? new Date(application.start_date).getFullYear() : '-')) +
+                                    t('approvalDetail.yearSuffix')}
+                                </Typography>
+                              </TableCell>
+                            )}
+                            <TableCell sx={{ verticalAlign: 'top' }}>
+                              {application.start_date ? (
+                                application.start_session ? (
+                                  <Box>
+                                    <Typography variant="body2" component="div">
+                                      {formatDate(application.start_date)}
+                                    </Typography>
+                                    <Typography variant="body2" component="div" color="text.secondary">
+                                      {application.start_session === 'AM'
+                                        ? t('leaveApplication.sessionAM')
+                                        : t('leaveApplication.sessionPM')}
+                                    </Typography>
+                                  </Box>
+                                ) : (
+                                  formatDate(application.start_date)
+                                )
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ verticalAlign: 'top' }}>
+                              {application.end_date ? (
+                                application.end_session ? (
+                                  <Box>
+                                    <Typography variant="body2" component="div">
+                                      {formatDate(application.end_date)}
+                                    </Typography>
+                                    <Typography variant="body2" component="div" color="text.secondary">
+                                      {application.end_session === 'AM'
+                                        ? t('leaveApplication.sessionAM')
+                                        : t('leaveApplication.sessionPM')}
+                                    </Typography>
+                                  </Box>
+                                ) : (
+                                  formatDate(application.end_date)
+                                )
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                              <Box>
+                                <Typography variant="body2" component="div" sx={{ fontWeight: 700 }}>
+                                  {application.days}
+                                </Typography>
+                                {showLeaveBalanceRow && (
+                                  <Box sx={{ mt: 0.5 }}>
+                                    <Typography variant="caption" color="text.secondary" component="div">
+                                      {t('approvalDetail.totalBalance')}: {parseFloat(application.leave_balance.total || 0).toFixed(2)}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" component="div">
+                                      {t('approvalDetail.usedBalance')}: {parseFloat(application.leave_balance.taken || 0).toFixed(2)}
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </ListItem>
                 </>
               )}
               <ListItem>
@@ -845,6 +968,52 @@ const ApprovalDetail = () => {
                 </ListItem>
               )}
             </List>
+
+            {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (
+              <>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  {t('approvalDetail.attachments')}
+                </Typography>
+                <List dense>
+                  {documents.map((doc) => (
+                    <ListItem
+                      key={doc.id}
+                      secondaryAction={
+                        <IconButton
+                          edge="end"
+                          aria-label={t('approvalDetail.view')}
+                          onClick={async () => {
+                            await handleOpenFile(doc);
+                          }}
+                        >
+                          <VisibilityIcon />
+                        </IconButton>
+                      }
+                    >
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {getFileIcon(doc.file_type, doc.file_name)}
+                            <Link
+                              component="button"
+                              variant="body2"
+                              onClick={async () => {
+                                await handleOpenFile(doc);
+                              }}
+                              sx={{ textDecoration: 'none', cursor: 'pointer' }}
+                            >
+                              {doc.file_name}
+                            </Link>
+                          </Box>
+                        }
+                        secondary={doc.file_size ? formatFileSize(doc.file_size) : ''}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </>
+            )}
 
             <Divider sx={{ my: 2 }} />
 
@@ -999,52 +1168,6 @@ const ApprovalDetail = () => {
                   </ListItem>
                 )}
               </List>
-            )}
-
-            {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (
-              <>
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  {t('approvalDetail.attachments')}
-                </Typography>
-                <List dense>
-                  {documents.map((doc) => (
-                    <ListItem
-                      key={doc.id}
-                      secondaryAction={
-                        <IconButton
-                          edge="end"
-                          aria-label={t('approvalDetail.view')}
-                          onClick={async () => {
-                            await handleOpenFile(doc);
-                          }}
-                        >
-                          <VisibilityIcon />
-                        </IconButton>
-                      }
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {getFileIcon(doc.file_type, doc.file_name)}
-                            <Link
-                              component="button"
-                              variant="body2"
-                              onClick={async () => {
-                                await handleOpenFile(doc);
-                              }}
-                              sx={{ textDecoration: 'none', cursor: 'pointer' }}
-                            >
-                              {doc.file_name}
-                            </Link>
-                          </Box>
-                        }
-                        secondary={doc.file_size ? formatFileSize(doc.file_size) : ''}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </>
             )}
 
             {application.reversal_transactions && application.reversal_transactions.length > 0 && (
@@ -1255,15 +1378,63 @@ const ApprovalDetail = () => {
           ) : fileBlobUrl && viewingFile ? (
             <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               {viewingFile.file_type?.startsWith('image/') ? (
-                <img
-                  src={fileBlobUrl}
-                  alt={viewingFile.file_name}
-                  style={{
-                    maxWidth: '100%',
+                <Box
+                  sx={{
+                    width: '100%',
                     maxHeight: '80vh',
-                    objectFit: 'contain'
+                    overflow: 'hidden',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    cursor: isImagePanning ? 'grabbing' : 'grab',
+                    userSelect: 'none',
                   }}
-                />
+                  onWheel={(e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY;
+                    const factor = delta < 0 ? 1.1 : 0.9;
+                    setImageZoom((z) => Math.min(5, Math.max(0.5, z * factor)));
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setIsImagePanning(true);
+                    imagePanStartRef.current = {
+                      x: e.clientX,
+                      y: e.clientY,
+                      panX: imagePan.x,
+                      panY: imagePan.y,
+                    };
+                  }}
+                  onMouseMove={(e) => {
+                    if (!isImagePanning || !imagePanStartRef.current) return;
+                    const dx = e.clientX - imagePanStartRef.current.x;
+                    const dy = e.clientY - imagePanStartRef.current.y;
+                    setImagePan({ x: imagePanStartRef.current.panX + dx, y: imagePanStartRef.current.panY + dy });
+                  }}
+                  onMouseUp={() => {
+                    setIsImagePanning(false);
+                    imagePanStartRef.current = null;
+                  }}
+                  onMouseLeave={() => {
+                    setIsImagePanning(false);
+                    imagePanStartRef.current = null;
+                  }}
+                  onDoubleClick={() => resetImageTransform()}
+                >
+                  <img
+                    src={fileBlobUrl}
+                    alt={viewingFile.file_name}
+                    draggable={false}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '80vh',
+                      objectFit: 'contain',
+                      transform: `translate(${imagePan.x}px, ${imagePan.y}px) scale(${imageZoom})`,
+                      transformOrigin: 'center center',
+                      transition: isImagePanning ? 'none' : 'transform 80ms linear',
+                    }}
+                  />
+                </Box>
               ) : viewingFile.file_type === 'application/pdf' || viewingFile.file_name?.toLowerCase().endsWith('.pdf') ? (
                 <iframe
                   src={fileBlobUrl}
