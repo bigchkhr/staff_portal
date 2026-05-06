@@ -34,6 +34,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
     department_id: '',
     position_id: '',
     hire_date: '',
+    termination_date: '',
     deactivated: false,
     force_password_change: false
   });
@@ -60,6 +61,9 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           department_id: initialData.department_id || '',
           position_id: initialData.position_id || '',
           hire_date: initialData.hire_date ? initialData.hire_date.split('T')[0] : '',
+          termination_date: initialData.termination_date
+            ? initialData.termination_date.split('T')[0]
+            : '',
           deactivated: !!initialData.deactivated,
           force_password_change: !!initialData.force_password_change
         });
@@ -76,6 +80,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           department_id: '',
           position_id: '',
           hire_date: '',
+          termination_date: '',
           deactivated: false,
           force_password_change: false
         });
@@ -104,7 +109,10 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
   const handleSubmit = async () => {
     try {
       const submitData = { ...formData };
-      
+      if (!submitData.termination_date || !String(submitData.termination_date).trim()) {
+        submitData.termination_date = null;
+      }
+
       if (!editing && !submitData.password) {
         alert(t('adminUsers.enterPassword'));
         return;
@@ -303,6 +311,16 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             InputLabelProps={{
               shrink: true
             }}
+          />
+          <TextField
+            label={t('adminUsers.terminationDate')}
+            type="date"
+            value={formData.termination_date}
+            onChange={handleChange('termination_date')}
+            InputLabelProps={{
+              shrink: true
+            }}
+            helperText={t('adminUsers.terminationDateHint')}
           />
           <FormControlLabel
             control={(

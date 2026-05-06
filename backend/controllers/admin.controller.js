@@ -21,6 +21,7 @@ class AdminController {
         department_id,
         position_id,
         hire_date,
+        termination_date,
         deactivated,
         force_password_change
       } = req.body;
@@ -57,6 +58,10 @@ class AdminController {
         department_id: department_id || null,
         position_id: position_id || null,
         hire_date: hire_date || null,
+        termination_date:
+          termination_date && String(termination_date).trim()
+            ? String(termination_date).trim().split('T')[0]
+            : null,
         // 帳戶是否停用（預設為未停用，可由 HR/System Admin 指定）
         deactivated: deactivated !== undefined ? !!deactivated : false,
         // 是否強制首次登入更改密碼（預設為 false，可由 HR/System Admin 指定）
@@ -78,7 +83,13 @@ class AdminController {
   async updateUser(req, res) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const updateData = { ...req.body };
+
+      if (Object.prototype.hasOwnProperty.call(updateData, 'termination_date')) {
+        const td = updateData.termination_date;
+        updateData.termination_date =
+          td && String(td).trim() ? String(td).trim().split('T')[0] : null;
+      }
 
       if (updateData.password) {
         updateData.password_hash = await hashPassword(updateData.password);

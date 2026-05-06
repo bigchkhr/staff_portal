@@ -56,6 +56,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
+import { getRosterDurationMinutes } from '../utils/rosterDuration';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -235,6 +236,70 @@ const Attendance = ({ noLayout = false }) => {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
     }
+  };
+
+  const canViewEmployeeTerminationDate = () => {
+    if (user?.is_system_admin) return true;
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    if (!group) return false;
+    const userDelegationGroupIds = (user.delegation_groups || []).map((g) => Number(g.id));
+    const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
+    const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+    const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+    const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+    return isChecker || isApprover1 || isApprover2 || isApprover3;
+  };
+
+  const getRosterTotalHoursLabel = (startTime, endTime) => {
+    const mins = getRosterDurationMinutes(startTime, endTime);
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (m === 0) return t('schedule.rosterTotalHours', { hours: h });
+    return t('schedule.rosterTotalHoursMinutes', { hours: h, minutes: m });
+  };
+
+  const renderTerminationDateBelowPosition = (terminationDate, fontSizeRem) => {
+    if (!canViewEmployeeTerminationDate() || !terminationDate) return null;
+    const d = dayjs(terminationDate);
+    if (!d.isValid()) return null;
+    const dateStr =
+      i18n.language === 'en' ? d.format('MMM D, YYYY') : d.format('YYYY-MM-DD');
+    return (
+      <Typography
+        variant="caption"
+        sx={{
+          display: 'block',
+          fontSize: fontSizeRem,
+          color: '#4a4944',
+          fontWeight: 500,
+          mt: 0.25,
+          lineHeight: 1.2,
+        }}
+      >
+        {t('schedule.terminationDateLabel', { date: dateStr })}
+      </Typography>
+    );
+  };
+
+  const renderRosterTotalHoursCaption = (startTime, endTime, fontSizeRem = '0.65rem') => {
+    const label = getRosterTotalHoursLabel(startTime, endTime);
+    if (!label) return null;
+    return (
+      <Typography
+        variant="caption"
+        component="div"
+        sx={{
+          fontSize: fontSizeRem,
+          color: '#4a4944',
+          fontWeight: 400,
+          mt: 0.25,
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </Typography>
+    );
   };
 
   const fetchAttendanceComparison = async () => {
@@ -1114,6 +1179,7 @@ const Attendance = ({ noLayout = false }) => {
                                   : (userData.position_name_zh || userData.position_name))}
                               </Typography>
                             ) : null}
+                            {renderTerminationDateBelowPosition(member.termination_date, '0.75rem')}
                           </Box>
                         </TableCell>
                         {dates.map(date => {
@@ -1182,17 +1248,20 @@ const Attendance = ({ noLayout = false }) => {
                                       <Box sx={{ mb: 0.5 }}>
                                         {/* 只有在有開始時間或結束時間時才顯示排班時間 */}
                                         {(item.schedule.start_time || item.schedule.end_time) && (
-                                          <Box
-                                            component="div"
-                                            sx={{
-                                              display: 'inline-block',
-                                              fontSize: '0.7rem',
-                                              fontWeight: 600,
-                                              color: '#1565c0', // 深藍色文字
-                                              padding: '2px 6px'
-                                            }}
-                                          >
-                                            {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
+                                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25 }}>
+                                            <Box
+                                              component="div"
+                                              sx={{
+                                                display: 'inline-block',
+                                                fontSize: '0.7rem',
+                                                fontWeight: 600,
+                                                color: '#1565c0',
+                                                padding: '2px 6px',
+                                              }}
+                                            >
+                                              {item.schedule.start_time ? item.schedule.start_time.substring(0, 5) : '--:--'} - {item.schedule.end_time ? item.schedule.end_time.substring(0, 5) : '--:--'}
+                                            </Box>
+                                            {renderRosterTotalHoursCaption(item.schedule.start_time, item.schedule.end_time, '0.65rem')}
                                           </Box>
                                         )}
                                         {/* 顯示假期類型（包括已批准的假期和排班中的假期） */}

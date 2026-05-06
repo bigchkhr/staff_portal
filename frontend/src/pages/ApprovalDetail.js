@@ -921,16 +921,31 @@ const ApprovalDetail = () => {
                             </TableCell>
                             <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                               <Box>
-                                <Typography variant="body2" component="div" sx={{ fontWeight: 700 }}>
+                                <Typography
+                                  variant="body2"
+                                  component="div"
+                                  sx={{
+                                    fontWeight: 700,
+                                    color: '#8B1532',
+                                    fontSize: '1rem',
+                                    lineHeight: 1.35,
+                                  }}
+                                >
                                   {application.days}
                                 </Typography>
                                 {showLeaveBalanceRow && (
                                   <Box sx={{ mt: 0.5 }}>
                                     <Typography variant="caption" color="text.secondary" component="div">
-                                      {t('approvalDetail.totalBalance')}: {parseFloat(application.leave_balance.total || 0).toFixed(2)}
+                                      {t('approvalDetail.remainingBalance')}:{' '}
+                                      {parseFloat(application.leave_balance.balance || 0).toFixed(2)}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary" component="div">
-                                      {t('approvalDetail.usedBalance')}: {parseFloat(application.leave_balance.taken || 0).toFixed(2)}
+                                      {t('approvalDetail.totalBalance')}:{' '}
+                                      {parseFloat(application.leave_balance.total || 0).toFixed(2)}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" component="div">
+                                      {t('approvalDetail.usedBalance')}:{' '}
+                                      {parseFloat(application.leave_balance.taken || 0).toFixed(2)}
                                     </Typography>
                                   </Box>
                                 )}
@@ -942,6 +957,16 @@ const ApprovalDetail = () => {
                     </TableContainer>
                   </ListItem>
                 </>
+              )}
+              {applicationType !== 'extra_working_hours' && application.reason && (
+                <ListItem>
+                  <ListItemText
+                    primary={t('approvalDetail.reason')}
+                    secondary={application.reason}
+                    primaryTypographyProps={{ variant: 'caption' }}
+                    secondaryTypographyProps={{ variant: 'body1' }}
+                  />
+                </ListItem>
               )}
               <ListItem>
                 <ListItemText 
@@ -957,16 +982,6 @@ const ApprovalDetail = () => {
                   secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
                 />
               </ListItem>
-              {applicationType !== 'extra_working_hours' && application.reason && (
-                <ListItem>
-                <ListItemText 
-                  primary={t('approvalDetail.reason')}
-                  secondary={application.reason}
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1' }}
-                  />
-                </ListItem>
-              )}
             </List>
 
             {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (

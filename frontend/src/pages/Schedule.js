@@ -53,6 +53,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
+import { getRosterDurationMinutes } from '../utils/rosterDuration';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -388,6 +389,52 @@ const Schedule = ({ noLayout = false }) => {
     const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
 
     return isChecker || isApprover1 || isApprover2 || isApprover3;
+  };
+
+  const renderTerminationDateBelowPosition = (terminationDate, fontSizeRem) => {
+    if (!canViewLeaveTypeDetail() || !terminationDate) return null;
+    const d = dayjs(terminationDate);
+    if (!d.isValid()) return null;
+    const dateStr =
+      i18n.language === 'en' ? d.format('MMM D, YYYY') : d.format('YYYY-MM-DD');
+    return (
+      <Typography
+        variant="caption"
+        sx={{
+          display: 'block',
+          fontSize: fontSizeRem,
+          color: '#4a4944',
+          fontWeight: 500,
+          mt: 0.25,
+          lineHeight: 1.2,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {t('schedule.terminationDateLabel', { date: dateStr })}
+      </Typography>
+    );
+  };
+
+  const renderRosterTotalHoursCaption = (startTime, endTime, fontSizeRem = '0.65rem') => {
+    const label = getRosterTotalHoursLabel(startTime, endTime);
+    if (!label) return null;
+    return (
+      <Typography
+        variant="caption"
+        component="div"
+        sx={{
+          fontSize: fontSizeRem,
+          color: '#4a4944',
+          fontWeight: 400,
+          mt: 0.25,
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </Typography>
+    );
   };
 
   // 將 API 回傳的日期（可能為 YYYY-MM-DD 或 ISO）統一解讀為 UTC+8 香港日曆的 YYYY-MM-DD
@@ -1042,6 +1089,15 @@ const Schedule = ({ noLayout = false }) => {
     return endTime.toString().substring(0, 5);
   };
 
+  const getRosterTotalHoursLabel = (startTime, endTime) => {
+    const mins = getRosterDurationMinutes(startTime, endTime);
+    if (mins == null) return null;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (m === 0) return t('schedule.rosterTotalHours', { hours: h });
+    return t('schedule.rosterTotalHoursMinutes', { hours: h, minutes: m });
+  };
+
   // 取得假期顯示文字（簡化：只顯示假期類型，不區分上下午）
   const getLeaveDisplayText = (schedule) => {
     if (!schedule) return null;
@@ -1206,6 +1262,7 @@ const Schedule = ({ noLayout = false }) => {
                             : (member.position_name_zh || member.position_name))}
                         </Typography>
                       ) : null}
+                      {renderTerminationDateBelowPosition(member.termination_date, '0.6rem')}
                     </Box>
                   </TableCell>
                   {dates.map(date => {
@@ -1257,18 +1314,21 @@ const Schedule = ({ noLayout = false }) => {
                               {schedule && (
                                 <>
                                   {(schedule.start_time || schedule.end_time) && (
-                                    <Typography 
-                                      variant="caption" 
-                                      display="block" 
-                                      sx={{ 
-                                        fontSize: '0.7rem', 
-                                        mb: 0.5, 
-                                        color: '#1565c0',
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                    </Typography>
+                                    <>
+                                      <Typography 
+                                        variant="caption" 
+                                        display="block" 
+                                        sx={{ 
+                                          fontSize: '0.7rem', 
+                                          mb: 0.5, 
+                                          color: '#1565c0',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                      </Typography>
+                                      {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
+                                    </>
                                   )}
                                   {getLeaveTypeDisplayText(schedule) && (
                                     <Chip
@@ -1322,18 +1382,21 @@ const Schedule = ({ noLayout = false }) => {
                               {schedule ? (
                                 <>
                                   {(schedule.start_time || schedule.end_time) && (
-                                    <Typography 
-                                      variant="caption" 
-                                      display="block" 
-                                      sx={{ 
-                                        fontSize: '0.7rem', 
-                                        mb: 0.5, 
-                                        color: '#1565c0',
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                    </Typography>
+                                    <>
+                                      <Typography 
+                                        variant="caption" 
+                                        display="block" 
+                                        sx={{ 
+                                          fontSize: '0.7rem', 
+                                          mb: 0.5, 
+                                          color: '#1565c0',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                      </Typography>
+                                      {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
+                                    </>
                                   )}
                                   {getLeaveTypeDisplayText(schedule) && (
                                     <Chip
@@ -2506,6 +2569,7 @@ const Schedule = ({ noLayout = false }) => {
                                 : (member.position_name_zh || member.position_name))}
                             </Typography>
                           ) : null}
+                          {renderTerminationDateBelowPosition(member.termination_date, '0.75rem')}
                         </Box>
                       </TableCell>
                       {dates.map(date => {
@@ -2561,18 +2625,21 @@ const Schedule = ({ noLayout = false }) => {
                                     <>
                                       {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
                                       {(schedule.start_time || schedule.end_time) && (
-                                        <Typography 
-                                          variant="caption" 
-                                          display="block" 
-                                          sx={{ 
-                                            mb: 0.5, 
-                                            color: '#1565c0',
-                                            fontWeight: 600,
-                                            fontSize: '0.75rem',
-                                          }}
-                                        >
-                                          {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                        </Typography>
+                                        <>
+                                          <Typography 
+                                            variant="caption" 
+                                            display="block" 
+                                            sx={{ 
+                                              mb: 0.5, 
+                                              color: '#1565c0',
+                                              fontWeight: 600,
+                                              fontSize: '0.75rem',
+                                            }}
+                                          >
+                                            {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                          </Typography>
+                                          {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.7rem')}
+                                        </>
                                       )}
                                       {/* 顯示假期類型 */}
                                       {getLeaveTypeDisplayText(schedule) && (
@@ -2643,18 +2710,21 @@ const Schedule = ({ noLayout = false }) => {
                                     <>
                                       {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
                                       {(schedule.start_time || schedule.end_time) && (
-                                        <Typography 
-                                          variant="caption" 
-                                          display="block" 
-                                          sx={{ 
-                                            mb: 0.5, 
-                                            color: '#1565c0',
-                                            fontWeight: 600,
-                                            fontSize: '0.75rem',
-                                          }}
-                                        >
-                                          {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                        </Typography>
+                                        <>
+                                          <Typography 
+                                            variant="caption" 
+                                            display="block" 
+                                            sx={{ 
+                                              mb: 0.5, 
+                                              color: '#1565c0',
+                                              fontWeight: 600,
+                                              fontSize: '0.75rem',
+                                            }}
+                                          >
+                                            {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
+                                          </Typography>
+                                          {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.7rem')}
+                                        </>
                                       )}
                                       {/* 顯示假期類型 */}
                                       {getLeaveTypeDisplayText(schedule) && (
@@ -2749,6 +2819,7 @@ const Schedule = ({ noLayout = false }) => {
                           group_name: helper.group_name_zh || helper.group_name || '',
                           position_name: helper.position_name,
                           position_name_zh: helper.position_name_zh,
+                          termination_date: helper.user_termination_date || null,
                           schedules: {}
                         };
                       }
@@ -2807,6 +2878,7 @@ const Schedule = ({ noLayout = false }) => {
                                   : (helperUser.position_name_zh || helperUser.position_name)}
                               </Typography>
                             ) : null}
+                            {renderTerminationDateBelowPosition(helperUser.termination_date, '0.75rem')}
                             <Typography 
                               variant="caption" 
                               sx={{ 
@@ -2845,18 +2917,21 @@ const Schedule = ({ noLayout = false }) => {
                               {schedule ? (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
                                   {(schedule.start_time || schedule.end_time) && (
-                                    <Typography 
-                                      variant="caption" 
-                                      display="block" 
-                                      sx={{ 
-                                        fontSize: '0.7rem', 
-                                        mb: 0.5, 
-                                        color: '#1565c0',
-                                        fontWeight: 600,
-                                      }}
-                                    >
-                                      {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? (schedule.end_time.length > 5 ? schedule.end_time.substring(0, 5) : schedule.end_time) : '--:--'}
-                                    </Typography>
+                                    <>
+                                      <Typography 
+                                        variant="caption" 
+                                        display="block" 
+                                        sx={{ 
+                                          fontSize: '0.7rem', 
+                                          mb: 0.5, 
+                                          color: '#1565c0',
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? (schedule.end_time.length > 5 ? schedule.end_time.substring(0, 5) : schedule.end_time) : '--:--'}
+                                      </Typography>
+                                      {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
+                                    </>
                                   )}
                                   {schedule.store_short_name && (
                                     <Chip 

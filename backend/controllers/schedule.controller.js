@@ -473,6 +473,7 @@ class ScheduleController {
           'users.display_name as user_name',
           'users.name_zh as user_name_zh',
           'users.employee_number',
+          'users.termination_date as user_termination_date',
           'positions.employment_mode as position_employment_mode',
           'positions.name as position_name',
           'positions.name_zh as position_name_zh',
