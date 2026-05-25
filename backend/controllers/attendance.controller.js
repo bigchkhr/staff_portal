@@ -914,7 +914,7 @@ class AttendanceController {
           attendance_date: attendanceDate,
           clock_time: clockTime,
           in_out: row.in_out.toString().trim().toUpperCase(),
-          is_valid: false,
+          is_valid: true,
           created_by_id: userId,
           updated_by_id: userId
         });
