@@ -250,6 +250,21 @@ const Attendance = ({ noLayout = false }) => {
     return isChecker || isApprover1 || isApprover2 || isApprover3;
   };
 
+  const canViewScheduleRemarks = () => {
+    if (user?.is_system_admin) return true;
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    if (!group) return false;
+    const userDelegationGroupIds = (user.delegation_groups || []).map((g) => Number(g.id));
+    const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
+    const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
+    const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
+    const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+    if (isChecker) {
+      return group.allow_checker_edit !== false;
+    }
+    return isApprover1 || isApprover2 || isApprover3;
+  };
+
   const getRosterTotalHoursLabel = (startTime, endTime) => {
     const mins = getRosterDurationMinutes(startTime, endTime);
     if (mins == null) return null;
@@ -599,7 +614,7 @@ const Attendance = ({ noLayout = false }) => {
       if (editingAttendance.schedule?.id) {
         const originalStoreId = editingAttendance.schedule?.store_id || null;
         const storeIdToSave = editStoreId || null;
-        
+
         if (storeIdToSave !== originalStoreId) {
           await axios.put(`/api/schedules/${editingAttendance.schedule.id}`, {
             store_id: storeIdToSave
@@ -1504,6 +1519,11 @@ const Attendance = ({ noLayout = false }) => {
                     {editingAttendance.schedule && (editingAttendance.schedule.start_time || editingAttendance.schedule.end_time) && (
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         {t('attendance.roster')}: {editingAttendance.schedule.start_time ? editingAttendance.schedule.start_time.substring(0, 5) : '--:--'} - {editingAttendance.schedule.end_time ? editingAttendance.schedule.end_time.substring(0, 5) : '--:--'}
+                      </Typography>
+                    )}
+                    {canViewScheduleRemarks() && editingAttendance.schedule?.remarks && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        {t('schedule.remarks')}: {editingAttendance.schedule.remarks}
                       </Typography>
                     )}
                   </Box>

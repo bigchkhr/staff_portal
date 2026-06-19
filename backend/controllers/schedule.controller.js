@@ -181,6 +181,9 @@ class ScheduleController {
       
       console.log(`✅ 合併後總共 ${allSchedules.length} 條記錄（${schedulesWithLeaves.length} 條排班記錄 + ${leaveOnlySchedules.length} 條假期記錄）`);
 
+      const canViewRemarks = await Schedule.canViewScheduleRemarks(req.user.id, groupId, req.user.is_system_admin);
+      const sanitizedSchedules = allSchedules.map(s => this._sanitizeScheduleRemarks(s, canViewRemarks));
+
       let outdoor_work_by_cell = {};
       if (start_date && end_date && groupMembers.length > 0) {
         try {
@@ -195,7 +198,7 @@ class ScheduleController {
       }
       
       res.json({ 
-        schedules: allSchedules,
+        schedules: sanitizedSchedules,
         outdoor_work_by_cell
       });
     } catch (error) {
@@ -359,7 +362,8 @@ class ScheduleController {
       // 為沒有排班記錄但有假期嘅日期創建記錄
       const userMember = await User.findById(userId);
       if (!userMember) {
-        return res.json({ schedules: schedulesWithLeaves });
+        const sanitized = schedulesWithLeaves.map(s => this._sanitizeScheduleRemarks(s, false));
+        return res.json({ schedules: sanitized });
       }
       
       const member = {
@@ -408,7 +412,7 @@ class ScheduleController {
       
       // 將 schedule_date 格式化為 YYYY-MM-DD 字串（UTC+8），確保前端不受伺服器時區影響
       const formattedSchedules = allSchedules.map(s => ({
-        ...s,
+        ...this._sanitizeScheduleRemarks(s, false),
         schedule_date: this.formatDateToUTC8(s.schedule_date) || s.schedule_date
       }));
       
@@ -514,9 +518,14 @@ class ScheduleController {
       });
       
       console.log(`Found ${helperSchedules.length} helper schedules for store ${storeId} and group ${groupId}`);
+
+      const canViewRemarks = await Schedule.canViewScheduleRemarks(userId, groupId, req.user.is_system_admin);
+      const sanitizedHelperSchedules = helperSchedules.map(s =>
+        this._sanitizeScheduleRemarks(s, canViewRemarks)
+      );
       
       res.json({ 
-        helperSchedules: helperSchedules
+        helperSchedules: sanitizedHelperSchedules
       });
     } catch (error) {
       console.error('Get helper schedules error:', error);
@@ -766,7 +775,13 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限查看此排班記錄' });
       }
 
-      res.json({ schedule });
+      const canViewRemarks = await Schedule.canViewScheduleRemarks(
+        userId,
+        schedule.department_group_id,
+        req.user.is_system_admin
+      );
+
+      res.json({ schedule: this._sanitizeScheduleRemarks(schedule, canViewRemarks) });
     } catch (error) {
       console.error('Get schedule error:', error);
       res.status(500).json({ message: '取得排班記錄失敗', error: error.message });
@@ -776,7 +791,7 @@ class ScheduleController {
   // 建立排班記錄（單筆）
   async createSchedule(req, res) {
     try {
-      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, leave_session, store_id } = req.body;
+      const { user_id, department_group_id, schedule_date, start_time, end_time, leave_type_id, leave_session, store_id, remarks } = req.body;
       const userId = req.user.id;
 
       // 驗證必填欄位
@@ -836,6 +851,7 @@ class ScheduleController {
         leave_type_id: leave_type_id || null,
         leave_session: leave_session || null,
         store_id: validStoreId,
+        remarks: remarks !== undefined && remarks !== null && String(remarks).trim() !== '' ? String(remarks).trim() : null,
         created_by_id: userId,
         updated_by_id: userId
       };
@@ -945,7 +961,7 @@ class ScheduleController {
   async updateSchedule(req, res) {
     try {
       const { id } = req.params;
-      const { start_time, end_time, leave_type_id, leave_session, store_id, department_group_id } = req.body;
+      const { start_time, end_time, leave_type_id, leave_session, store_id, department_group_id, remarks } = req.body;
       const userId = req.user.id;
 
       const schedule = await Schedule.findById(id);
@@ -1004,6 +1020,9 @@ class ScheduleController {
       if (store_id !== undefined) updateData.store_id = validStoreId;
       if (department_group_id !== undefined && department_group_id !== null && department_group_id !== '') {
         updateData.department_group_id = Number(department_group_id);
+      }
+      if (remarks !== undefined) {
+        updateData.remarks = remarks !== null && String(remarks).trim() !== '' ? String(remarks).trim() : null;
       }
 
       const updatedSchedule = await Schedule.update(id, updateData);
@@ -1207,6 +1226,14 @@ class ScheduleController {
     }
 
     return false;
+  }
+
+  _sanitizeScheduleRemarks(schedule, canViewRemarks) {
+    if (!schedule || canViewRemarks) {
+      return schedule;
+    }
+    const { remarks, ...rest } = schedule;
+    return rest;
   }
 
   // 將 DB 的 DATE 欄位格式為 YYYY-MM-DD 再回傳。node-pg 在 UTC+8 會回傳當地午夜（即 UTC 前一日），

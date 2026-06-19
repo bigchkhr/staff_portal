@@ -678,6 +678,7 @@ class AttendanceController {
               end_time: schedule?.end_time || null,
               leave_type_name_zh: leave.leave_type_name_zh || schedule?.leave_type_name_zh || null,
               leave_session: leave.leave_session || schedule?.leave_session || null,
+              remarks: schedule?.remarks || null,
               is_approved_leave: true // 標記這是已批准的假期
             };
             console.log(`Found approved leave for user ${member.id} (${member.employee_number}) on ${date}: ${leave.leave_type_name_zh}`);
@@ -690,6 +691,7 @@ class AttendanceController {
               end_time: schedule.end_time,
               leave_type_name_zh: schedule.leave_type_name_zh,
               leave_session: schedule.leave_session,
+              remarks: schedule.remarks || null,
               is_approved_leave: false
             };
           }
@@ -794,7 +796,20 @@ class AttendanceController {
         }
       }
 
-      res.json({ comparison });
+      const canViewScheduleRemarks = await Schedule.canViewScheduleRemarks(
+        userId,
+        department_group_id,
+        isSystemAdmin
+      );
+      const sanitizedComparison = comparison.map(item => {
+        if (!item.schedule || canViewScheduleRemarks) {
+          return item;
+        }
+        const { remarks, ...restSchedule } = item.schedule;
+        return { ...item, schedule: restSchedule };
+      });
+
+      res.json({ comparison: sanitizedComparison });
     } catch (error) {
       console.error('Get attendance comparison error:', error);
       res.status(500).json({ message: '獲取考勤對比失敗', error: error.message });

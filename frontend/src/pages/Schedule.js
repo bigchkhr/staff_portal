@@ -30,6 +30,7 @@ import {
   Card,
   CardContent,
   Divider,
+  Collapse,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -42,7 +43,9 @@ import {
   Save as SaveIcon,
   Cancel as CancelIcon,
   CalendarToday as CalendarIcon,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -103,6 +106,7 @@ const Schedule = ({ noLayout = false }) => {
   const [editLeaveTypeId, setEditLeaveTypeId] = useState(null);
   const [editLeaveSession, setEditLeaveSession] = useState(null);
   const [editStoreId, setEditStoreId] = useState(null);
+  const [editRemarks, setEditRemarks] = useState('');
   const [stores, setStores] = useState([]);
   const [selectedDefaultStoreId, setSelectedDefaultStoreId] = useState(null); // 控制面板選擇的店舖（不存到資料庫）
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
@@ -114,6 +118,7 @@ const Schedule = ({ noLayout = false }) => {
   const [isApprover, setIsApprover] = useState(false); // 當前用戶是否為 approver（不包括 checker）
   const [checkerEditableStartDate, setCheckerEditableStartDate] = useState(null); // Checker 可編輯範圍開始（UTC+8）
   const [checkerEditableEndDate, setCheckerEditableEndDate] = useState(null); // Checker 可編輯範圍結束（UTC+8）
+  const [checkerSectionExpanded, setCheckerSectionExpanded] = useState(false);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -688,6 +693,7 @@ const Schedule = ({ noLayout = false }) => {
       setEditLeaveSession(existingSchedule.leave_session || null);
       // 設置店舖 - 如果有現有值則使用，否則為 null
       setEditStoreId(existingSchedule.store_id || null);
+      setEditRemarks(existingSchedule.remarks || '');
       
     } else {
       // 獲取該員工所屬的群組作為默認值
@@ -706,6 +712,7 @@ const Schedule = ({ noLayout = false }) => {
       setEditLeaveSession(null);
       // 設置店舖默認值為 null
       setEditStoreId(null);
+      setEditRemarks('');
     }
     setEditDialogOpen(true);
   };
@@ -1041,7 +1048,8 @@ const Schedule = ({ noLayout = false }) => {
         end_time: endTimeValue,
         leave_type_id: editLeaveTypeId || null,
         leave_session: editLeaveSession || null,
-        store_id: editStoreId || null
+        store_id: editStoreId || null,
+        remarks: editRemarks.trim() || null
       };
 
       if (editingSchedule.id) {
@@ -1059,6 +1067,7 @@ const Schedule = ({ noLayout = false }) => {
       setEditLeaveTypeId(null);
       setEditLeaveSession(null);
       setEditStoreId(null);
+      setEditRemarks('');
       
       // 等待數據刷新完成
       await fetchSchedules();
@@ -2334,24 +2343,6 @@ const Schedule = ({ noLayout = false }) => {
                       {editMode ? t('schedule.exitEdit') : t('schedule.edit')}
                     </Button>
                   )}
-                  {canControlCheckerEdit && (
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={allowCheckerEdit}
-                          onChange={handleToggleCheckerEdit}
-                          color="primary"
-                          size="small"
-                        />
-                      }
-                      label={
-                        <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                          {t('schedule.allowCheckerEdit')}
-                        </Typography>
-                      }
-                      sx={{ ml: 0, mr: 0 }}
-                    />
-                  )}
                   {canEdit && editMode && (
                     <Button
                       variant="contained"
@@ -2375,91 +2366,127 @@ const Schedule = ({ noLayout = false }) => {
                   )}
                 </Box>
               </Grid>
-              {/* 批量修改 checker 權限 與 Checker 可編輯日期範圍（同一 Div，UTC+8） */}
+              {/* Checker 排班設定（橫線下，可摺疊，預設收起） */}
               {canControlCheckerEdit && (
                 <>
                   <Grid item xs={12}>
                     <Divider sx={{ my: 1 }} />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {t('schedule.batchControl')}
+                    <Box
+                      onClick={() => setCheckerSectionExpanded((prev) => !prev)}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        py: 0.5,
+                        userSelect: 'none',
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {t('schedule.checkerSettings')}
                       </Typography>
-                      <Button
-                        variant="outlined"
-                        color="success"
-                        size="small"
-                        onClick={() => handleBatchUpdateCheckerEdit(true)}
-                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                      >
-                        {t('schedule.enableAll')}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        size="small"
-                        onClick={() => handleBatchUpdateCheckerEdit(false)}
-                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                      >
-                        {t('schedule.disableAll')}
-                      </Button>
-                      <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
-                        {t('schedule.checkerEditableRange')}
-                      </Typography>
-                      <DatePicker
-                        label={t('schedule.checkerEditableRangeStart')}
-                        value={checkerEditableStartDate}
-                        onChange={(newVal) => {
-                          if (!newVal || !newVal.isValid()) {
-                            setCheckerEditableStartDate(null);
-                            const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-                            axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: null, checker_editable_end_date: endStr }).then(() => {
-                              setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: null, checker_editable_end_date: endStr })));
-                            }).catch(() => {});
-                            return;
-                          }
-                          const startStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-                          const normalizedStart = dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
-                          setCheckerEditableStartDate(normalizedStart);
-                          const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-                          axios.put('/api/schedules/groups/batch-checker-edit-permission', {
-                            checker_editable_start_date: startStr,
-                            checker_editable_end_date: endStr
-                          }).then(() => {
-                            setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
-                          }).catch(() => {});
-                        }}
-                        format="DD/MM/YYYY"
-                        slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
-                      />
-                      <DatePicker
-                        label={t('schedule.checkerEditableRangeEnd')}
-                        value={checkerEditableEndDate}
-                        onChange={(newVal) => {
-                          if (!newVal || !newVal.isValid()) {
-                            setCheckerEditableEndDate(null);
-                            const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-                            axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: startStr, checker_editable_end_date: null }).then(() => {
-                              setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: null })));
-                            }).catch(() => {});
-                            return;
-                          }
-                          const endStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-                          const normalizedEnd = dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
-                          setCheckerEditableEndDate(normalizedEnd);
-                          const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-                          axios.put('/api/schedules/groups/batch-checker-edit-permission', {
-                            checker_editable_start_date: startStr,
-                            checker_editable_end_date: endStr
-                          }).then(() => {
-                            setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
-                          }).catch(() => {});
-                        }}
-                        format="DD/MM/YYYY"
-                        slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
-                      />
+                      <IconButton size="small" aria-label={checkerSectionExpanded ? 'collapse' : 'expand'}>
+                        {checkerSectionExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </IconButton>
                     </Box>
+                    <Collapse in={checkerSectionExpanded}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1, pb: 0.5 }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={allowCheckerEdit}
+                              onChange={handleToggleCheckerEdit}
+                              color="primary"
+                              size="small"
+                            />
+                          }
+                          label={
+                            <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                              {t('schedule.allowCheckerEdit')}
+                            </Typography>
+                          }
+                          sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
+                        />
+                        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {t('schedule.batchControl')}
+                          </Typography>
+                          <Button
+                            variant="outlined"
+                            color="success"
+                            size="small"
+                            onClick={() => handleBatchUpdateCheckerEdit(true)}
+                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                          >
+                            {t('schedule.enableAll')}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            size="small"
+                            onClick={() => handleBatchUpdateCheckerEdit(false)}
+                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                          >
+                            {t('schedule.disableAll')}
+                          </Button>
+                          <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
+                            {t('schedule.checkerEditableRange')}
+                          </Typography>
+                          <DatePicker
+                            label={t('schedule.checkerEditableRangeStart')}
+                            value={checkerEditableStartDate}
+                            onChange={(newVal) => {
+                              if (!newVal || !newVal.isValid()) {
+                                setCheckerEditableStartDate(null);
+                                const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                                axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: null, checker_editable_end_date: endStr }).then(() => {
+                                  setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: null, checker_editable_end_date: endStr })));
+                                }).catch(() => {});
+                                return;
+                              }
+                              const startStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                              const normalizedStart = dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
+                              setCheckerEditableStartDate(normalizedStart);
+                              const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                              axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+                                checker_editable_start_date: startStr,
+                                checker_editable_end_date: endStr
+                              }).then(() => {
+                                setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
+                              }).catch(() => {});
+                            }}
+                            format="DD/MM/YYYY"
+                            slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
+                          />
+                          <DatePicker
+                            label={t('schedule.checkerEditableRangeEnd')}
+                            value={checkerEditableEndDate}
+                            onChange={(newVal) => {
+                              if (!newVal || !newVal.isValid()) {
+                                setCheckerEditableEndDate(null);
+                                const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                                axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: startStr, checker_editable_end_date: null }).then(() => {
+                                  setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: null })));
+                                }).catch(() => {});
+                                return;
+                              }
+                              const endStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                              const normalizedEnd = dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
+                              setCheckerEditableEndDate(normalizedEnd);
+                              const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                              axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+                                checker_editable_start_date: startStr,
+                                checker_editable_end_date: endStr
+                              }).then(() => {
+                                setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: endStr })));
+                              }).catch(() => {});
+                            }}
+                            format="DD/MM/YYYY"
+                            slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
+                          />
+                        </Box>
+                      </Box>
+                    </Collapse>
                   </Grid>
                 </>
               )}
@@ -3094,6 +3121,7 @@ const Schedule = ({ noLayout = false }) => {
             setEditLeaveTypeId(null);
             setEditLeaveSession(null);
             setEditStoreId(null);
+            setEditRemarks('');
           }}
           maxWidth="sm"
           fullWidth
@@ -3242,6 +3270,20 @@ const Schedule = ({ noLayout = false }) => {
                     </Select>
                   </FormControl>
                 </Grid>
+                {canEdit && (
+                  <Grid item xs={12}>
+                    <TextField
+                      label={t('schedule.remarks')}
+                      value={editRemarks}
+                      onChange={(e) => setEditRemarks(e.target.value)}
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      maxRows={4}
+                      placeholder={t('schedule.remarksPlaceholder')}
+                    />
+                  </Grid>
+                )}
               </Grid>
             </Box>
           </DialogContent>
@@ -3255,6 +3297,7 @@ const Schedule = ({ noLayout = false }) => {
                 setEditLeaveTypeId(null);
                 setEditLeaveSession(null);
                 setEditStoreId(null);
+                setEditRemarks('');
               }}
               sx={{
                 borderRadius: 2,

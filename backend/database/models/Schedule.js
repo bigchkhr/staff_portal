@@ -163,6 +163,7 @@ class Schedule {
           leave_type_id: scheduleData.leave_type_id !== undefined ? scheduleData.leave_type_id : null,
           leave_session: scheduleData.leave_session !== undefined ? scheduleData.leave_session : null,
           store_id: scheduleData.store_id !== undefined ? scheduleData.store_id : null,
+          remarks: scheduleData.remarks !== undefined ? scheduleData.remarks : null,
           updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,
           updated_at: knex.fn.now()
         });
@@ -202,6 +203,7 @@ class Schedule {
             leave_type_id: scheduleData.leave_type_id !== undefined ? scheduleData.leave_type_id : null,
             leave_session: scheduleData.leave_session !== undefined ? scheduleData.leave_session : null,
             store_id: scheduleData.store_id !== undefined ? scheduleData.store_id : null,
+            remarks: scheduleData.remarks !== undefined ? scheduleData.remarks : null,
             updated_by_id: scheduleData.updated_by_id || scheduleData.created_by_id,
             updated_at: knex.fn.now()
           });
@@ -326,6 +328,38 @@ class Schedule {
     }
 
     // approver1, approver2, approver3 可以直接編輯
+    return isApprover1 || isApprover2 || isApprover3;
+  }
+
+  // 檢查用戶是否可查看排班備註（checker、approver_1/2/3；checker 須 allow_checker_edit）
+  static async canViewScheduleRemarks(userId, departmentGroupId, isSystemAdmin = false) {
+    if (isSystemAdmin) {
+      return true;
+    }
+
+    const group = await knex('department_groups')
+      .where('id', departmentGroupId)
+      .first();
+
+    if (!group) {
+      return false;
+    }
+
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+
+    const delegationGroupIds = delegationGroups.map(g => Number(g.id));
+
+    const isChecker = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
+    const isApprover1 = group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id));
+    const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
+    const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
+
+    if (isChecker) {
+      return group.allow_checker_edit !== false;
+    }
+
     return isApprover1 || isApprover2 || isApprover3;
   }
 }
