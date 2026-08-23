@@ -48,7 +48,8 @@ class AttendanceController {
         time_off_start,
         time_off_end,
         remarks,
-        branch_code: body_branch_code
+        branch_code: body_branch_code,
+        in_out: body_in_out
       } = req.body;
 
       console.log('createAttendance - req.body:', req.body);
@@ -108,13 +109,15 @@ class AttendanceController {
       const createRemarks = remarks != null ? String(remarks) : null;
 
         if (clock_in_time) {
+          const normalizedInOut = String(body_in_out || 'IN1').toUpperCase().replace(/\s+/g, '');
+          const inOut = /^(IN|OUT)\d+$/.test(normalizedInOut) ? normalizedInOut : 'IN1';
           clockRecords.push({
             employee_number: user.employee_number,
             name: user.display_name || user.name_zh || user.name || '',
             branch_code: createBranchCode || '',
             attendance_date: finalAttendanceDate,
             clock_time: clock_in_time,
-            in_out: 'IN1',
+            in_out: inOut,
             is_valid: true,
             remarks: createRemarks,
             created_by_id: userId,
@@ -1240,7 +1243,7 @@ class AttendanceController {
   // 更新打卡記錄的詳細信息（時間、branch_code、remarks）
   async updateClockRecordsDetails(req, res) {
     try {
-      const { clock_records } = req.body; // [{id, clock_time?, branch_code?, remarks?}, ...]
+      const { clock_records } = req.body; // [{id, clock_time?, branch_code?, remarks?, in_out?}, ...]
 
       console.log('updateClockRecordsDetails - received data:', clock_records);
 
@@ -1320,6 +1323,15 @@ class AttendanceController {
           updateData.remarks = record.remarks || null;
         }
 
+        if (record.in_out !== undefined) {
+          const normalizedInOut = String(record.in_out || '').toUpperCase().replace(/\s+/g, '');
+          if (!/^(IN|OUT)\d+$/.test(normalizedInOut)) {
+            errors.push(`進出類型不正確: id=${record.id}, in_out=${record.in_out}，應為 IN1、OUT1、IN2 等`);
+            continue;
+          }
+          updateData.in_out = normalizedInOut;
+        }
+
         // 如果沒有要更新的字段，跳過
         if (Object.keys(updateData).length <= 2) { // 只有 updated_by_id 和 updated_at
           continue;
@@ -1342,6 +1354,9 @@ class AttendanceController {
             }
             if (record.remarks !== undefined) {
               updateResult.remarks = record.remarks || null;
+            }
+            if (record.in_out !== undefined) {
+              updateResult.in_out = record.in_out || null;
             }
             updates.push(updateResult);
           } else {

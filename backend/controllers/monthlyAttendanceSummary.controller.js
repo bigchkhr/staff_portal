@@ -318,6 +318,123 @@ class MonthlyAttendanceSummaryController {
     return result;
   }
 
+  isClockRecordValid(record) {
+    if (!record || !record.clock_time) return false;
+    const isValid = record.is_valid === true ||
+      record.is_valid === 'true' ||
+      record.is_valid === 1 ||
+      record.is_valid === '1' ||
+      (typeof record.is_valid === 'string' && record.is_valid.toLowerCase() === 'true');
+    return !!isValid;
+  }
+
+  getValidClockRecords(clockRecords) {
+    return (clockRecords || [])
+      .filter((record) => this.isClockRecordValid(record))
+      .sort((a, b) => String(a.clock_time || '').localeCompare(String(b.clock_time || '')));
+  }
+
+  normalizeInOut(value) {
+    return String(value || '').toUpperCase().replace(/\s+/g, '');
+  }
+
+  isIn1Record(record) {
+    return this.normalizeInOut(record?.in_out) === 'IN1';
+  }
+
+  normalizeStoreCode(value) {
+    return String(value || '').trim();
+  }
+
+  collectGroupNameStoreCodes(group, storeRows) {
+    const codes = new Set();
+    const tokens = new Set(
+      `${group?.name || ''} ${group?.name_zh || ''}`
+        .toUpperCase()
+        .split(/[^A-Z0-9]+/)
+        .filter((token) => token.length >= 2)
+    );
+    (storeRows || []).forEach((store) => {
+      const shortName = String(store.store_short_name_ || '').trim().toUpperCase();
+      const storeCode = this.normalizeStoreCode(store.store_code);
+      if ((shortName && tokens.has(shortName)) || (storeCode && tokens.has(storeCode))) {
+        if (storeCode) codes.add(storeCode);
+      }
+    });
+    return codes;
+  }
+
+  normalizeLeaveSession(value) {
+    const session = String(value || '').trim().toUpperCase();
+    if (session === 'AM' || session === 'MORNING') return 'AM';
+    if (session === 'PM' || session === 'AFTERNOON') return 'PM';
+    return null;
+  }
+
+  eachDateString(startDate, endDate, callback) {
+    const start = this.toDateString(startDate);
+    const end = this.toDateString(endDate);
+    if (!start || !end || start > end) return;
+    const startMs = Date.UTC(...start.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+    const endMs = Date.UTC(...end.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+    for (let ms = startMs; ms <= endMs; ms += 86400000) {
+      const dt = new Date(ms);
+      const y = dt.getUTCFullYear();
+      const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dt.getUTCDate()).padStart(2, '0');
+      callback(`${y}-${m}-${d}`);
+    }
+  }
+
+  setLeaveDay(map, userId, dateStr, leaveInfo) {
+    if (!userId || !dateStr || !leaveInfo) return;
+    const key = `${userId}__${dateStr}`;
+    if (map.has(key) && map.get(key).from_schedule) return;
+    map.set(key, leaveInfo);
+  }
+
+  // 根據有效打卡記錄計算應計時數：全日工時 = 最後一次打卡 - 首次打卡
+  computeAccruedMinutesFromClocks(validRecords, employmentMode) {
+    const clockIn = validRecords[0] ? this.formatTimeValue(validRecords[0].clock_time) : null;
+    const clockOut = validRecords.length > 0
+      ? this.formatTimeValue(validRecords[validRecords.length - 1].clock_time)
+      : null;
+
+    if (validRecords.length < 2) {
+      return { minutes: null, clockIn, clockOut, totalWorkMinutes: null, overtimeMinutes: null };
+    }
+
+    const start = this.parseTime(clockIn);
+    const end = this.parseTime(clockOut);
+    if (start == null || end == null || end <= start) {
+      return { minutes: null, clockIn, clockOut, totalWorkMinutes: null, overtimeMinutes: null };
+    }
+
+    const totalWorkMinutes = end - start;
+    const floorTo = (value, interval) => Math.floor(value / interval) * interval;
+    const mode = (employmentMode || 'FT').toString().trim().toUpperCase();
+
+    if (mode === 'PT') {
+      return {
+        minutes: floorTo(totalWorkMinutes, 15),
+        clockIn,
+        clockOut,
+        totalWorkMinutes,
+        overtimeMinutes: null
+      };
+    }
+
+    const overtimeMinutes = totalWorkMinutes - (9 * 60);
+    const accruedOvertime = overtimeMinutes > 0 ? floorTo(overtimeMinutes, 30) : 0;
+    return {
+      minutes: accruedOvertime,
+      clockIn,
+      clockOut,
+      totalWorkMinutes,
+      overtimeMinutes: overtimeMinutes > 0 ? overtimeMinutes : 0
+    };
+  }
+
   // 解析時間字符串（HH:mm 或 HH:mm:ss）並返回分鐘數（從當天00:00開始）
   parseTime(timeStr) {
     if (!timeStr) return null;
@@ -1511,6 +1628,751 @@ class MonthlyAttendanceSummaryController {
       await MonthlyAttendanceSummary.update(summary.id, { daily_data: dailyData });
     } catch (error) {
       console.error('[syncScheduleToMonthlySummary] error:', error);
+    }
+  }
+
+  formatTimeValue(val) {
+    if (val == null || val === '') return null;
+    if (typeof val === 'string') {
+      const parts = val.split(':');
+      if (parts.length >= 2) {
+        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+      }
+      return val.substring(0, 5);
+    }
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      const h = String(val.getHours()).padStart(2, '0');
+      const m = String(val.getMinutes()).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+    return null;
+  }
+
+  toDateString(val) {
+    if (val == null || val === '') return null;
+    if (typeof val === 'string') {
+      const dateStr = val.split('T')[0].split(' ')[0];
+      return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : this.formatDateToUTC8(val);
+    }
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return this.formatDateToUTC8(val);
+  }
+
+  // 群組每日超時工作及兼職員工工作時數報表（篩選方式與編更表相同）
+  async getStoreHoursReport(req, res) {
+    try {
+      const userId = req.user.id;
+      const { department_group_id, start_date, end_date } = req.query;
+      const Schedule = require('../database/models/Schedule');
+      const DepartmentGroup = require('../database/models/DepartmentGroup');
+
+      if (!department_group_id || !start_date || !end_date) {
+        return res.status(400).json({ message: '請提供群組、開始日期和結束日期' });
+      }
+
+      const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (!ymdRe.test(start_date) || !ymdRe.test(end_date)) {
+        return res.status(400).json({ message: '日期格式不正確，需為 YYYY-MM-DD' });
+      }
+      if (start_date > end_date) {
+        return res.status(400).json({ message: '開始日期不能晚於結束日期' });
+      }
+
+      const startMs = Date.UTC(...start_date.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+      const endMs = Date.UTC(...end_date.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+      const dayCount = Math.round((endMs - startMs) / 86400000) + 1;
+      if (dayCount > 45) {
+        return res.status(400).json({ message: '日期區間最多45天' });
+      }
+
+      const groupId = parseInt(department_group_id, 10);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ message: '無效的群組ID' });
+      }
+
+      const group = await DepartmentGroup.findById(groupId);
+      if (!group || group.closed) {
+        return res.status(404).json({ message: '找不到群組' });
+      }
+
+      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.isApprover123(userId, groupId);
+      if (!canViewGroup) {
+        return res.status(403).json({ message: '無權限查看此群組的報表' });
+      }
+
+      const members = await DepartmentGroup.getMembers(groupId);
+      const memberIds = (members || []).map((m) => Number(m.id)).filter((id) => id > 0);
+
+      if (memberIds.length === 0) {
+        return res.json({
+          group: {
+            id: group.id,
+            name: group.name,
+            name_zh: group.name_zh
+          },
+          start_date,
+          end_date,
+          employees: []
+        });
+      }
+
+      const scheduleRows = await knex('schedules')
+        .leftJoin('users', 'schedules.user_id', 'users.id')
+        .leftJoin('positions', 'users.position_id', 'positions.id')
+        .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
+        .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+        .where('schedules.department_group_id', groupId)
+        .whereIn('schedules.user_id', memberIds)
+        .where('schedules.schedule_date', '>=', start_date)
+        .where('schedules.schedule_date', '<=', end_date)
+        .where(function () {
+          this.whereNotNull('schedules.start_time').orWhereNotNull('schedules.end_time');
+        })
+        .select(
+          'schedules.id as schedule_id',
+          'schedules.user_id',
+          'schedules.schedule_date',
+          'schedules.start_time',
+          'schedules.end_time',
+          'schedules.store_id',
+          'schedules.leave_type_id',
+          'schedules.leave_session',
+          'users.employee_number',
+          'users.display_name',
+          'users.name_zh',
+          'users.surname',
+          'users.given_name',
+          'users.termination_date',
+          'positions.employment_mode as position_employment_mode',
+          'positions.name as position_name',
+          'positions.name_zh as position_name_zh',
+          'positions.display_order as position_display_order',
+          'department_groups.name as group_name',
+          'department_groups.name_zh as group_name_zh',
+          'leave_types.name as leave_type_name',
+          'leave_types.name_zh as leave_type_name_zh',
+          'leave_types.code as leave_type_code'
+        )
+        .orderBy('positions.display_order', 'asc')
+        .orderBy('users.employee_number', 'asc')
+        .orderBy('schedules.schedule_date', 'asc');
+
+      const employeeMap = new Map();
+      const employeeNumbers = new Set();
+      const schedulesByUserDate = new Map();
+
+      (members || []).forEach((member) => {
+        const userIdKey = Number(member.id);
+        if (!userIdKey) return;
+        employeeMap.set(userIdKey, {
+          user_id: userIdKey,
+          employee_number: member.employee_number,
+          display_name: member.display_name,
+          name_zh: member.name_zh,
+          surname: member.surname,
+          given_name: member.given_name,
+          termination_date: member.termination_date || null,
+          employment_mode: (member.position_employment_mode || '').toString().trim().toUpperCase(),
+          position_name: member.position_name,
+          position_name_zh: member.position_name_zh,
+          position_display_order: member.position_display_order == null ? 9999 : Number(member.position_display_order),
+          group_name: group.name,
+          group_name_zh: group.name_zh
+        });
+        if (member.employee_number) employeeNumbers.add(member.employee_number);
+      });
+
+      for (const row of scheduleRows) {
+        const userIdKey = Number(row.user_id);
+        const dateStr = this.toDateString(row.schedule_date);
+        if (!userIdKey || !dateStr) continue;
+
+        if (!employeeMap.has(userIdKey)) {
+          employeeMap.set(userIdKey, {
+            user_id: userIdKey,
+            employee_number: row.employee_number,
+            display_name: row.display_name,
+            name_zh: row.name_zh,
+            surname: row.surname,
+            given_name: row.given_name,
+            termination_date: row.termination_date || null,
+            employment_mode: (row.position_employment_mode || '').toString().trim().toUpperCase(),
+            position_name: row.position_name,
+            position_name_zh: row.position_name_zh,
+            position_display_order: row.position_display_order == null ? 9999 : Number(row.position_display_order),
+            group_name: row.group_name,
+            group_name_zh: row.group_name_zh
+          });
+        }
+        if (row.employee_number) employeeNumbers.add(row.employee_number);
+
+        const scheduleData = {
+          id: row.schedule_id,
+          store_id: row.store_id,
+          start_time: this.formatTimeValue(row.start_time),
+          end_time: this.formatTimeValue(row.end_time),
+          leave_type_name_zh: row.leave_type_name_zh,
+          leave_type_name: row.leave_type_name,
+          leave_type_code: row.leave_type_code,
+          leave_session: row.leave_session,
+          is_approved_leave: false
+        };
+        schedulesByUserDate.set(`${userIdKey}_${dateStr}`, scheduleData);
+      }
+
+      const clocksByEmpDate = new Map();
+      const empNos = Array.from(employeeNumbers);
+      if (empNos.length > 0) {
+        const clockRows = await knex('clock_records')
+          .whereIn('employee_number', empNos)
+          .where('attendance_date', '>=', start_date)
+          .where('attendance_date', '<=', end_date)
+          .orderBy('attendance_date', 'asc')
+          .orderBy('clock_time', 'asc');
+
+        for (const rec of clockRows) {
+          const dateStr = this.toDateString(rec.attendance_date);
+          if (!dateStr || !rec.employee_number) continue;
+          const key = `${rec.employee_number}__${dateStr}`;
+          if (!clocksByEmpDate.has(key)) clocksByEmpDate.set(key, []);
+          clocksByEmpDate.get(key).push({
+            ...rec,
+            attendance_date: dateStr,
+            clock_time: this.formatTimeValue(rec.clock_time) || rec.clock_time
+          });
+        }
+      }
+
+      const dateStrList = [];
+      for (let ms = startMs; ms <= endMs; ms += 86400000) {
+        const dt = new Date(ms);
+        const y = dt.getUTCFullYear();
+        const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(dt.getUTCDate()).padStart(2, '0');
+        dateStrList.push(`${y}-${m}-${d}`);
+      }
+
+      const employees = Array.from(employeeMap.values()).sort((a, b) => {
+        if (a.position_display_order !== b.position_display_order) {
+          return a.position_display_order - b.position_display_order;
+        }
+        return String(a.employee_number || '').localeCompare(String(b.employee_number || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        });
+      });
+
+      for (const emp of employees) {
+        const mode = emp.employment_mode === 'PT' ? 'PT' : 'FT';
+        emp.employment_mode = mode;
+        emp.days = {};
+        for (const dateStr of dateStrList) {
+          const scheduleData = schedulesByUserDate.get(`${emp.user_id}_${dateStr}`) || null;
+          const clockRecords = clocksByEmpDate.get(`${emp.employee_number}__${dateStr}`) || [];
+          const validRecords = this.getValidClockRecords(clockRecords);
+
+          if (!scheduleData && validRecords.length === 0) continue;
+
+          const accrued = this.computeAccruedMinutesFromClocks(validRecords, mode);
+
+          emp.days[dateStr] = {
+            schedule_start_time: scheduleData?.start_time || null,
+            schedule_end_time: scheduleData?.end_time || null,
+            clock_start_time: accrued.clockIn,
+            clock_end_time: accrued.clockOut,
+            hours_type: mode === 'PT' ? 'work' : 'overtime',
+            minutes: accrued.minutes != null && !Number.isNaN(accrued.minutes) ? accrued.minutes : null,
+            overtime_hours: accrued.overtimeMinutes != null
+              ? Number((accrued.overtimeMinutes / 60).toFixed(2))
+              : null,
+            total_work_hours: accrued.totalWorkMinutes != null
+              ? Number((accrued.totalWorkMinutes / 60).toFixed(2))
+              : null,
+            is_absent: !!scheduleData?.start_time && validRecords.length === 0
+          };
+        }
+      }
+
+      res.json({
+        group: {
+          id: group.id,
+          name: group.name,
+          name_zh: group.name_zh
+        },
+        start_date,
+        end_date,
+        employees
+      });
+    } catch (error) {
+      console.error('Get store hours report error:', error);
+      res.status(500).json({ message: '取得工時報表失敗', error: error.message });
+    }
+  }
+
+  // 店舖工資成本報表：選群組，工時按當日有效 IN1 打卡店舖歸屬
+  async getStoreWageCostReport(req, res) {
+    try {
+      const userId = req.user.id;
+      const { department_group_id, start_date, end_date } = req.query;
+      const Schedule = require('../database/models/Schedule');
+      const DepartmentGroup = require('../database/models/DepartmentGroup');
+
+      if (!department_group_id || !start_date || !end_date) {
+        return res.status(400).json({ message: '請提供群組、開始日期和結束日期' });
+      }
+
+      const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (!ymdRe.test(start_date) || !ymdRe.test(end_date)) {
+        return res.status(400).json({ message: '日期格式不正確，需為 YYYY-MM-DD' });
+      }
+      if (start_date > end_date) {
+        return res.status(400).json({ message: '開始日期不能晚於結束日期' });
+      }
+
+      const startMs = Date.UTC(...start_date.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+      const endMs = Date.UTC(...end_date.split('-').map((v, i) => (i === 1 ? Number(v) - 1 : Number(v))));
+      const dayCount = Math.round((endMs - startMs) / 86400000) + 1;
+      if (dayCount > 45) {
+        return res.status(400).json({ message: '日期區間最多45天' });
+      }
+
+      const groupId = parseInt(department_group_id, 10);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ message: '無效的群組ID' });
+      }
+
+      const group = await DepartmentGroup.findById(groupId);
+      if (!group || group.closed) {
+        return res.status(404).json({ message: '找不到群組' });
+      }
+
+      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.isApprover123(userId, groupId);
+      if (!canViewGroup) {
+        return res.status(403).json({ message: '無權限查看此群組的報表' });
+      }
+
+      const members = await DepartmentGroup.getMembers(groupId);
+      const employeeMap = new Map();
+      const employeeNumbers = new Set();
+
+      (members || []).forEach((member) => {
+        const userIdKey = Number(member.id);
+        if (!userIdKey) return;
+        employeeMap.set(userIdKey, {
+          user_id: userIdKey,
+          employee_number: member.employee_number,
+          display_name: member.display_name,
+          name_zh: member.name_zh,
+          surname: member.surname,
+          given_name: member.given_name,
+          termination_date: member.termination_date || null,
+          employment_mode: (member.position_employment_mode || '').toString().trim().toUpperCase(),
+          position_name: member.position_name,
+          position_name_zh: member.position_name_zh,
+          position_display_order: member.position_display_order == null ? 9999 : Number(member.position_display_order),
+          is_group_member: true
+        });
+        if (member.employee_number) employeeNumbers.add(String(member.employee_number));
+      });
+
+      const memberUserIds = Array.from(employeeMap.keys()).filter((id) => Number.isInteger(Number(id)));
+
+      if (employeeMap.size === 0) {
+        return res.json({
+          group: {
+            id: group.id,
+            name: group.name,
+            name_zh: group.name_zh
+          },
+          start_date,
+          end_date,
+          employees: []
+        });
+      }
+
+      const storeRows = await knex('stores').select('id', 'store_code', 'store_short_name_');
+      const storeByCode = new Map();
+      storeRows.forEach((s) => {
+        const code = this.normalizeStoreCode(s.store_code);
+        if (code) storeByCode.set(code, s);
+      });
+
+      // 只認群組自己嘅店舖（名稱對應，例如 SP1 → 83044），唔計更表上其他舖
+      const targetStoreCodes = new Set();
+      this.collectGroupNameStoreCodes(group, storeRows).forEach((code) => targetStoreCodes.add(code));
+
+      if (targetStoreCodes.size === 0) {
+        const historicalStores = await knex('schedules')
+          .join('stores', 'schedules.store_id', 'stores.id')
+          .where('schedules.department_group_id', groupId)
+          .whereNotNull('schedules.store_id')
+          .select('stores.store_code')
+          .count('* as cnt')
+          .groupBy('stores.store_code')
+          .orderBy('cnt', 'desc')
+          .limit(1);
+        const histCode = this.normalizeStoreCode(historicalStores[0]?.store_code);
+        if (histCode) targetStoreCodes.add(histCode);
+      }
+
+      const groupHomeStoreCodes = this.collectGroupNameStoreCodes(group, storeRows);
+      const homeStoreByUserId = new Map();
+      if (memberUserIds.length > 0) {
+        const homeStoreRows = await knex('schedules')
+          .join('stores', 'schedules.store_id', 'stores.id')
+          .where('schedules.department_group_id', groupId)
+          .whereIn('schedules.user_id', memberUserIds)
+          .whereNotNull('schedules.store_id')
+          .select('schedules.user_id', 'stores.store_code')
+          .count('* as cnt')
+          .groupBy('schedules.user_id', 'stores.store_code');
+        homeStoreRows.forEach((row) => {
+          const userIdKey = Number(row.user_id);
+          const code = this.normalizeStoreCode(row.store_code);
+          const cnt = Number(row.cnt) || 0;
+          if (!userIdKey || !code) return;
+          const prev = homeStoreByUserId.get(userIdKey);
+          if (!prev || cnt > prev.cnt) {
+            homeStoreByUserId.set(userIdKey, { code, cnt });
+          }
+        });
+      }
+
+      const pickHomeStoreCode = (userIdKey) => {
+        if (groupHomeStoreCodes.size === 1) return Array.from(groupHomeStoreCodes)[0];
+        const freqCode = homeStoreByUserId.get(Number(userIdKey))?.code || null;
+        if (groupHomeStoreCodes.size > 1) {
+          if (freqCode && groupHomeStoreCodes.has(freqCode)) return freqCode;
+          return Array.from(groupHomeStoreCodes)[0];
+        }
+        if (freqCode && targetStoreCodes.has(freqCode)) return freqCode;
+        if (freqCode) return freqCode;
+        if (targetStoreCodes.size === 1) return Array.from(targetStoreCodes)[0];
+        return null;
+      };
+
+      const leaveByUserDate = new Map();
+      if (memberUserIds.length > 0) {
+        const leaveScheduleRows = await knex('schedules')
+          .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+          .where('schedules.department_group_id', groupId)
+          .whereIn('schedules.user_id', memberUserIds)
+          .where('schedules.schedule_date', '>=', start_date)
+          .where('schedules.schedule_date', '<=', end_date)
+          .whereNotNull('schedules.leave_type_id')
+          .select(
+            'schedules.user_id',
+            'schedules.schedule_date',
+            'schedules.leave_session',
+            'leave_types.code as leave_type_code',
+            'leave_types.name as leave_type_name',
+            'leave_types.name_zh as leave_type_name_zh'
+          );
+
+        leaveScheduleRows.forEach((row) => {
+          const dateStr = this.toDateString(row.schedule_date);
+          this.setLeaveDay(leaveByUserDate, Number(row.user_id), dateStr, {
+            leave_type_code: row.leave_type_code || null,
+            leave_type_name: row.leave_type_name || null,
+            leave_type_name_zh: row.leave_type_name_zh || null,
+            leave_session: this.normalizeLeaveSession(row.leave_session),
+            from_schedule: true
+          });
+        });
+
+        const leaveApps = await knex('leave_applications')
+          .leftJoin('leave_types', 'leave_applications.leave_type_id', 'leave_types.id')
+          .whereIn('leave_applications.user_id', memberUserIds)
+          .where('leave_applications.status', 'approved')
+          .where('leave_applications.start_date', '<=', end_date)
+          .where('leave_applications.end_date', '>=', start_date)
+          .where(function () {
+            this.whereNull('leave_applications.is_cancellation_request').orWhere('leave_applications.is_cancellation_request', false);
+          })
+          .where(function () {
+            this.whereNull('leave_applications.is_reversed').orWhere('leave_applications.is_reversed', false);
+          })
+          .where(function () {
+            this.whereNull('leave_applications.is_reversal_transaction').orWhere('leave_applications.is_reversal_transaction', false);
+          })
+          .select(
+            'leave_applications.user_id',
+            'leave_applications.start_date',
+            'leave_applications.end_date',
+            'leave_applications.start_session',
+            'leave_applications.end_session',
+            'leave_types.code as leave_type_code',
+            'leave_types.name as leave_type_name',
+            'leave_types.name_zh as leave_type_name_zh'
+          );
+
+        leaveApps.forEach((app) => {
+          const appStart = this.toDateString(app.start_date);
+          const appEnd = this.toDateString(app.end_date);
+          if (!appStart || !appEnd) return;
+          const rangeStart = appStart > start_date ? appStart : start_date;
+          const rangeEnd = appEnd < end_date ? appEnd : end_date;
+          this.eachDateString(rangeStart, rangeEnd, (dateStr) => {
+            let session = null;
+            if (dateStr === appStart && dateStr === appEnd) {
+              session = this.normalizeLeaveSession(app.start_session || app.end_session);
+            } else if (dateStr === appStart) {
+              session = this.normalizeLeaveSession(app.start_session);
+            } else if (dateStr === appEnd) {
+              session = this.normalizeLeaveSession(app.end_session);
+            }
+            this.setLeaveDay(leaveByUserDate, Number(app.user_id), dateStr, {
+              leave_type_code: app.leave_type_code || null,
+              leave_type_name: app.leave_type_name || null,
+              leave_type_name_zh: app.leave_type_name_zh || null,
+              leave_session: session,
+              from_schedule: false
+            });
+          });
+        });
+      }
+
+      const scheduleByUserDate = new Map();
+      if (memberUserIds.length > 0) {
+        const scheduleRows = await knex('schedules')
+          .leftJoin('stores', 'schedules.store_id', 'stores.id')
+          .where('schedules.department_group_id', groupId)
+          .whereIn('schedules.user_id', memberUserIds)
+          .where('schedules.schedule_date', '>=', start_date)
+          .where('schedules.schedule_date', '<=', end_date)
+          .where(function () {
+            this.whereNotNull('schedules.start_time').orWhereNotNull('schedules.end_time');
+          })
+          .select(
+            'schedules.user_id',
+            'schedules.schedule_date',
+            'schedules.start_time',
+            'schedules.end_time',
+            'stores.store_code'
+          );
+
+        scheduleRows.forEach((row) => {
+          const dateStr = this.toDateString(row.schedule_date);
+          const userIdKey = Number(row.user_id);
+          if (!dateStr || !userIdKey) return;
+          const schedStoreCode = this.normalizeStoreCode(row.store_code);
+          // 有填店舖就必須係本舖；更表 store_id 空白就當本群組舖
+          const belongsToTarget = schedStoreCode
+            ? targetStoreCodes.has(schedStoreCode)
+            : targetStoreCodes.size > 0;
+          if (!belongsToTarget) return;
+          scheduleByUserDate.set(`${userIdKey}__${dateStr}`, {
+            start_time: this.formatTimeValue(row.start_time),
+            end_time: this.formatTimeValue(row.end_time),
+            store_code: schedStoreCode || null
+          });
+        });
+      }
+
+      const memberEmpNos = Array.from(employeeNumbers);
+      const memberClockRows = memberEmpNos.length > 0
+        ? await knex('clock_records')
+          .whereIn('employee_number', memberEmpNos)
+          .where('attendance_date', '>=', start_date)
+          .where('attendance_date', '<=', end_date)
+          .orderBy('attendance_date', 'asc')
+          .orderBy('clock_time', 'asc')
+        : [];
+
+      const clocksByEmpDate = new Map();
+      const addClockRow = (rec) => {
+        const dateStr = this.toDateString(rec.attendance_date);
+        if (!dateStr || !rec.employee_number) return;
+        const key = `${rec.employee_number}__${dateStr}`;
+        if (!clocksByEmpDate.has(key)) clocksByEmpDate.set(key, []);
+        clocksByEmpDate.get(key).push({
+          ...rec,
+          attendance_date: dateStr,
+          clock_time: this.formatTimeValue(rec.clock_time) || rec.clock_time
+        });
+      };
+
+      memberClockRows.forEach((rec) => {
+        addClockRow(rec);
+      });
+
+      if (targetStoreCodes.size > 0) {
+        const helperCodes = Array.from(targetStoreCodes);
+        const helperIn1Rows = await knex('clock_records')
+          .where('attendance_date', '>=', start_date)
+          .where('attendance_date', '<=', end_date)
+          .whereRaw("REPLACE(UPPER(TRIM(COALESCE(in_out, ''))), ' ', '') = 'IN1'")
+          .whereRaw(
+            `TRIM(COALESCE(branch_code, '')) IN (${helperCodes.map(() => '?').join(',')})`,
+            helperCodes
+          );
+
+        const helperEmpNos = new Set();
+        helperIn1Rows.forEach((row) => {
+          if (!this.isClockRecordValid(row) || !row.employee_number) return;
+          if (employeeNumbers.has(String(row.employee_number))) return;
+          helperEmpNos.add(String(row.employee_number));
+        });
+
+        if (helperEmpNos.size > 0) {
+          const helperUserRows = await knex('users')
+            .leftJoin('positions', 'users.position_id', 'positions.id')
+            .whereIn('users.employee_number', Array.from(helperEmpNos))
+            .select(
+              'users.id',
+              'users.employee_number',
+              'users.display_name',
+              'users.name_zh',
+              'users.surname',
+              'users.given_name',
+              'users.termination_date',
+              'positions.employment_mode as position_employment_mode',
+              'positions.name as position_name',
+              'positions.name_zh as position_name_zh',
+              'positions.display_order as position_display_order'
+            );
+
+          const helperUserByEmpNo = new Map();
+          helperUserRows.forEach((user) => {
+            helperUserByEmpNo.set(String(user.employee_number), user);
+          });
+
+          helperEmpNos.forEach((empNo) => {
+            const user = helperUserByEmpNo.get(empNo);
+            const userIdKey = user ? Number(user.id) : null;
+            const mapKey = userIdKey || `helper_${empNo}`;
+            if (userIdKey && employeeMap.has(userIdKey)) return;
+            employeeMap.set(mapKey, {
+              user_id: userIdKey,
+              employee_number: empNo,
+              display_name: user?.display_name || empNo,
+              name_zh: user?.name_zh || null,
+              surname: user?.surname || null,
+              given_name: user?.given_name || null,
+              termination_date: user?.termination_date || null,
+              employment_mode: (user?.position_employment_mode || '').toString().trim().toUpperCase(),
+              position_name: user?.position_name || null,
+              position_name_zh: user?.position_name_zh || null,
+              position_display_order: user?.position_display_order == null ? 9999 : Number(user.position_display_order),
+              is_group_member: false
+            });
+            employeeNumbers.add(empNo);
+          });
+
+          const helperClockRows = await knex('clock_records')
+            .whereIn('employee_number', Array.from(helperEmpNos))
+            .where('attendance_date', '>=', start_date)
+            .where('attendance_date', '<=', end_date)
+            .orderBy('attendance_date', 'asc')
+            .orderBy('clock_time', 'asc');
+          helperClockRows.forEach(addClockRow);
+        }
+      }
+
+      const dateStrList = [];
+      for (let ms = startMs; ms <= endMs; ms += 86400000) {
+        const dt = new Date(ms);
+        const y = dt.getUTCFullYear();
+        const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(dt.getUTCDate()).padStart(2, '0');
+        dateStrList.push(`${y}-${m}-${d}`);
+      }
+
+      const employees = Array.from(employeeMap.values()).sort((a, b) => {
+        if (Boolean(a.is_group_member) !== Boolean(b.is_group_member)) {
+          return a.is_group_member ? -1 : 1;
+        }
+        if (a.position_display_order !== b.position_display_order) {
+          return a.position_display_order - b.position_display_order;
+        }
+        return String(a.employee_number || '').localeCompare(String(b.employee_number || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        });
+      });
+
+      for (const emp of employees) {
+        const mode = emp.employment_mode === 'PT' ? 'PT' : 'FT';
+        emp.employment_mode = mode;
+        emp.days = {};
+        for (const dateStr of dateStrList) {
+          const clockRecords = clocksByEmpDate.get(`${emp.employee_number}__${dateStr}`) || [];
+          const validRecords = this.getValidClockRecords(clockRecords);
+          const in1Record = validRecords.find((record) => this.isIn1Record(record));
+          const leaveInfo = leaveByUserDate.get(`${emp.user_id}__${dateStr}`) || null;
+          const scheduleInfo = emp.user_id
+            ? (scheduleByUserDate.get(`${emp.user_id}__${dateStr}`) || null)
+            : null;
+
+          let storeCode = null;
+          let accrued = { minutes: null, clockIn: null, clockOut: null, overtimeMinutes: null, totalWorkMinutes: null };
+
+          if (in1Record) {
+            const in1StoreCode = this.normalizeStoreCode(in1Record.branch_code);
+            // 當日有 IN1：只顯示打卡店舖屬於本群組嘅日；去咗其他舖就完全唔出（包括假期）
+            if (!in1StoreCode || !targetStoreCodes.has(in1StoreCode)) continue;
+            storeCode = in1StoreCode;
+            accrued = this.computeAccruedMinutesFromClocks(validRecords, mode);
+          } else if (leaveInfo) {
+            // 全日假、冇打卡：先歸駐守舖
+            const homeStoreCode = pickHomeStoreCode(emp.user_id);
+            if (homeStoreCode && targetStoreCodes.has(homeStoreCode)) {
+              storeCode = homeStoreCode;
+            }
+          } else if (scheduleInfo) {
+            // 未打卡但已編更：顯示編更
+            storeCode = scheduleInfo.store_code || pickHomeStoreCode(emp.user_id);
+            if (!storeCode || !targetStoreCodes.has(storeCode)) continue;
+          }
+
+          if (!storeCode) continue;
+
+          const store = storeByCode.get(storeCode) || null;
+          emp.days[dateStr] = {
+            clock_start_time: accrued.clockIn,
+            clock_end_time: accrued.clockOut,
+            schedule_start_time: scheduleInfo?.start_time || null,
+            schedule_end_time: scheduleInfo?.end_time || null,
+            hours_type: mode === 'PT' ? 'work' : 'overtime',
+            minutes: accrued.minutes != null && !Number.isNaN(accrued.minutes) ? accrued.minutes : null,
+            overtime_hours: accrued.overtimeMinutes != null
+              ? Number((accrued.overtimeMinutes / 60).toFixed(2))
+              : null,
+            total_work_hours: accrued.totalWorkMinutes != null
+              ? Number((accrued.totalWorkMinutes / 60).toFixed(2))
+              : null,
+            store_id: store?.id || null,
+            store_code: store?.store_code || storeCode || null,
+            store_short_name_: store?.store_short_name_ || null,
+            is_leave: !!leaveInfo,
+            leave_type_code: leaveInfo?.leave_type_code || null,
+            leave_type_name: leaveInfo?.leave_type_name || null,
+            leave_type_name_zh: leaveInfo?.leave_type_name_zh || null,
+            leave_session: leaveInfo?.leave_session || null
+          };
+        }
+      }
+
+      const employeesWithTargetStoreDays = employees.filter((emp) => Object.keys(emp.days || {}).length > 0);
+
+      res.json({
+        group: {
+          id: group.id,
+          name: group.name,
+          name_zh: group.name_zh
+        },
+        start_date,
+        end_date,
+        employees: employeesWithTargetStoreDays
+      });
+    } catch (error) {
+      console.error('Get store wage cost report error:', error);
+      res.status(500).json({ message: '取得店舖工資成本報表失敗', error: error.message });
     }
   }
 }

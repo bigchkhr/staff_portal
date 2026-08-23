@@ -65,6 +65,13 @@ dayjs.extend(timezone);
 // 設置默認時區為香港（UTC+8）
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
+const CLOCK_IN_OUT_OPTIONS = ['IN1', 'OUT1', 'IN2', 'OUT2', 'IN3', 'OUT3'];
+
+const normalizeInOut = (value) => {
+  const normalized = String(value || '').toUpperCase().replace(/\s+/g, '');
+  return /^(IN|OUT)\d+$/.test(normalized) ? normalized : '';
+};
+
 const Attendance = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -405,6 +412,7 @@ const Attendance = ({ noLayout = false }) => {
       remarks: getRemarks(record),
       is_valid: record.is_valid === true || record.is_valid === 1 || record.is_valid === 'true',
       editableTime: record.clock_time ? (typeof record.clock_time === 'string' ? record.clock_time.substring(0, 5) : record.clock_time) : '',
+      editableInOut: normalizeInOut(record.in_out) || 'IN1',
       editableBranchCode: getBranchCode(record),
       editableRemarks: getRemarks(record)
     })));
@@ -452,6 +460,7 @@ const Attendance = ({ noLayout = false }) => {
       in_out: 'IN1',
       is_valid: true,
       editableTime: '', // 可編輯的時間字符串
+      editableInOut: 'IN1',
       editableBranchCode: '', // 可編輯的分行代碼
       editableRemarks: '', // 可編輯的備註
       created_by_id: null,
@@ -539,8 +548,14 @@ const Attendance = ({ noLayout = false }) => {
             : (record.remarks != null ? String(record.remarks).trim() : '');
 
           // 每筆有 id 的記錄：必定組裝一筆含 id + branch_code + remarks 的更新；有打卡時間則一併含 clock_time
+          const editableInOut = normalizeInOut(record.editableInOut || record.in_out);
+          if (!editableInOut) {
+            throw new Error(t('attendance.invalidInOut'));
+          }
+
           const updateItem = {
             id: record.id,
+            in_out: editableInOut,
             branch_code: editableBranchCode || null,
             remarks: editableRemarks || null
           };
@@ -566,12 +581,14 @@ const Attendance = ({ noLayout = false }) => {
             const timeStr = record.editableTime + ':00';
             const editableBranchCode = record.editableBranchCode !== undefined ? record.editableBranchCode : '';
             const editableRemarks = record.editableRemarks !== undefined ? record.editableRemarks : '';
+            const editableInOut = normalizeInOut(record.editableInOut || record.in_out) || 'IN1';
             creates.push({
               employee_number: editingAttendance.employee_number,
               user_id: editingAttendance.user_id,
               department_group_id: selectedGroupId,
               attendance_date: editingAttendance.attendance_date,
               clock_time: timeStr,
+              in_out: editableInOut,
               branch_code: editableBranchCode || null,
               remarks: editableRemarks || null
             });
@@ -604,6 +621,7 @@ const Attendance = ({ noLayout = false }) => {
             clock_out_time: null,
             time_off_start: null,
             time_off_end: null,
+            in_out: createData.in_out || 'IN1',
             branch_code: createData.branch_code ?? null,
             remarks: createData.remarks ?? null
           });
@@ -1486,7 +1504,7 @@ const Attendance = ({ noLayout = false }) => {
       setEditClockRecords([]);
       setEditClockTimes([]);
           }}
-          maxWidth="sm"
+          maxWidth="md"
           fullWidth
           PaperProps={{
             sx: {
@@ -1623,7 +1641,7 @@ const Attendance = ({ noLayout = false }) => {
                               }}
                             >
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', flexWrap: 'wrap' }}>
                                   <Checkbox
                                     checked={isValid}
                                     disabled={!canEdit}
@@ -1708,6 +1726,38 @@ const Attendance = ({ noLayout = false }) => {
                                       maxLength: 5
                                     }}
                                   />
+                                  <FormControl size="small" sx={{ minWidth: 100 }} disabled={!canEdit}>
+                                    <InputLabel>{t('attendance.inOut')}</InputLabel>
+                                    <Select
+                                      value={normalizeInOut(record.editableInOut || record.in_out) || 'IN1'}
+                                      label={t('attendance.inOut')}
+                                      onChange={(e) => {
+                                        if (!canEdit) return;
+                                        const updated = editClockRecords.map(r => {
+                                          if (record.id) {
+                                            if (r.id === record.id) {
+                                              return { ...r, editableInOut: e.target.value, in_out: e.target.value };
+                                            }
+                                          } else if (record.tempId) {
+                                            if (r.tempId === record.tempId) {
+                                              return { ...r, editableInOut: e.target.value, in_out: e.target.value };
+                                            }
+                                          }
+                                          return r;
+                                        });
+                                        setEditClockRecords(updated);
+                                      }}
+                                    >
+                                      {CLOCK_IN_OUT_OPTIONS.map((option) => (
+                                        <MenuItem key={option} value={option}>{option}</MenuItem>
+                                      ))}
+                                      {!CLOCK_IN_OUT_OPTIONS.includes(normalizeInOut(record.editableInOut || record.in_out)) && normalizeInOut(record.editableInOut || record.in_out) && (
+                                        <MenuItem value={normalizeInOut(record.editableInOut || record.in_out)}>
+                                          {normalizeInOut(record.editableInOut || record.in_out)}
+                                        </MenuItem>
+                                      )}
+                                    </Select>
+                                  </FormControl>
                                   <TextField
                                     label={t('attendance.branchCode') || '分行代碼'}
                                     value={(record.editableBranchCode !== undefined && record.editableBranchCode !== null) ? record.editableBranchCode : (record.branch_code != null ? String(record.branch_code) : '')}

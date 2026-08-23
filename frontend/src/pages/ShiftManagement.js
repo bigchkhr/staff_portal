@@ -16,7 +16,9 @@ import {
   EventNote as EventNoteIcon,
   Assessment as AssessmentIcon,
   Description as DescriptionIcon,
-  FileDownload as FileDownloadIcon
+  FileDownload as FileDownloadIcon,
+  TableChart as TableChartIcon,
+  AttachMoney as AttachMoneyIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -144,6 +146,20 @@ const ShiftManagement = () => {
       path: '/attendance',
       translationKey: 'attendance',
       show: canViewAttendanceManagement
+    },
+    {
+      key: 'storeHoursReport',
+      icon: <TableChartIcon sx={{ fontSize: 48 }} />,
+      path: '/shift-management/store-hours-report',
+      translationKey: 'storeHoursReport',
+      show: canViewApproverFeatures
+    },
+    {
+      key: 'storeWageCostReport',
+      icon: <AttachMoneyIcon sx={{ fontSize: 48 }} />,
+      path: '/shift-management/store-wage-cost',
+      translationKey: 'storeWageCostReport',
+      show: canViewApproverFeatures
     },
     {
       key: 'groupLeaveCalendar',

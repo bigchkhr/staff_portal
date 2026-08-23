@@ -296,6 +296,32 @@ class DepartmentGroup {
     return !!isInAnyDelegationGroup;
   }
 
+  // 是否為該部門群組的 approver1 / approver2 / approver3（不包括 checker）
+  static async isApprover123(userId, departmentGroupId) {
+    const group = await knex('department_groups')
+      .where('id', departmentGroupId)
+      .first();
+
+    if (!group) {
+      return false;
+    }
+
+    const approverIds = [group.approver_1_id, group.approver_2_id, group.approver_3_id]
+      .filter((id) => id !== null && id !== undefined)
+      .map((id) => Number(id));
+
+    if (approverIds.length === 0) {
+      return false;
+    }
+
+    const match = await knex('delegation_groups')
+      .whereIn('id', approverIds)
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .first();
+
+    return !!match;
+  }
+
   // 獲取用戶有權限發布消息的部門群組（用戶所屬的 delegation group 是該部門群組的 checker/approver）
   static async getAccessibleForNews(userId, closedFilter = false) {
     // 獲取用戶所屬的授權群組

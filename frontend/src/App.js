@@ -57,6 +57,8 @@ import MonthlyAttendanceReport from './pages/MonthlyAttendanceReport';
 import MonthlyAttendanceReportExport from './pages/MonthlyAttendanceReportExport';
 import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
+import StoreHoursReport from './pages/StoreHoursReport';
+import StoreWageCostReport from './pages/StoreWageCostReport';
 
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
@@ -124,6 +126,8 @@ function App() {
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
             <Route path="/shift-management/user-schedules" element={<PrivateRoute><ShiftUserSchedules /></PrivateRoute>} />
+            <Route path="/shift-management/store-hours-report" element={<PrivateRoute><StoreHoursReport /></PrivateRoute>} />
+            <Route path="/shift-management/store-wage-cost" element={<PrivateRoute><StoreWageCostReport /></PrivateRoute>} />
             <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />
             <Route path="/my-attendance" element={<PrivateRoute><MyAttendance /></PrivateRoute>} />
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />
