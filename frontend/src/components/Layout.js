@@ -242,7 +242,11 @@ const Layout = ({ children }) => {
         {menuItems.filter(item => item.show).map((item) => (
           <ListItem key={item.path} disablePadding>
             <ListItemButton
-              selected={location.pathname === item.path}
+              selected={
+                item.path === '/'
+                  ? location.pathname === '/'
+                  : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+              }
               onClick={() => {
                 navigate(item.path);
                 if (isMobile) setMobileOpen(false);
@@ -256,7 +260,11 @@ const Layout = ({ children }) => {
             >
               <ListItemIcon 
                 sx={{ 
-                  color: location.pathname === item.path ? 'primary.main' : 'inherit',
+                  color: (
+                    item.path === '/'
+                      ? location.pathname === '/'
+                      : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+                  ) ? 'primary.main' : 'inherit',
                   minWidth: (!isMobile && !desktopDrawerOpen) ? 'auto' : 40,
                   justifyContent: 'center'
                 }}

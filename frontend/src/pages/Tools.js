@@ -14,7 +14,8 @@ import {
   Description as DescriptionIcon,
   Link as LinkIcon,
   Contacts as ContactsIcon,
-  Storefront as StorefrontIcon
+  Storefront as StorefrontIcon,
+  Payments as PaymentsIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -49,6 +50,12 @@ const Tools = () => {
       icon: <StorefrontIcon sx={{ fontSize: 48 }} />,
       path: '/tools/stores',
       translationKey: 'storeDirectory'
+    },
+    {
+      key: 'cashSettlement',
+      icon: <PaymentsIcon sx={{ fontSize: 48 }} />,
+      path: '/tools/cash-settlement',
+      translationKey: 'cashSettlement'
     }
   ];
 

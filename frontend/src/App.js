@@ -44,6 +44,7 @@ import ManualApproval from './pages/ManualApproval';
 import PublicHolidayManagement from './pages/PublicHolidayManagement';
 import ExternalLinks from './pages/ExternalLinks';
 import Tools from './pages/Tools';
+import CashSettlement from './pages/CashSettlement';
 import Schedule from './pages/Schedule';
 import GroupLeaveCalendar from './pages/GroupLeaveCalendar';
 import Attendance from './pages/Attendance';
@@ -117,6 +118,7 @@ function App() {
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
             <Route path="/tools" element={<PrivateRoute><Tools /></PrivateRoute>} />
+            <Route path="/tools/cash-settlement" element={<PrivateRoute><CashSettlement /></PrivateRoute>} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
