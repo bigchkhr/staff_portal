@@ -118,7 +118,8 @@ function App() {
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
             <Route path="/documents/my" element={<PrivateRoute><EmployeeDocuments /></PrivateRoute>} />
             <Route path="/tools" element={<PrivateRoute><Tools /></PrivateRoute>} />
-            <Route path="/tools/cash-settlement" element={<PrivateRoute><CashSettlement /></PrivateRoute>} />
+            <Route path="/tools/transaction-settlement" element={<PrivateRoute><CashSettlement /></PrivateRoute>} />
+            <Route path="/tools/cash-settlement" element={<Navigate to="/tools/transaction-settlement" replace />} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
             <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />

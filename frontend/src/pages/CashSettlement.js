@@ -60,6 +60,8 @@ const emptyCounts = () => ({
 
 const emptyCoinLumpsum = () => ({ HKD: null, CNY: null });
 
+const emptyDrawer = () => ({ HKD: null, CNY: null });
+
 const emptyPayments = () => ({
   HKD: Object.fromEntries(PAYMENT_METHODS.map((key) => [key, 0])),
   CNY: Object.fromEntries(PAYMENT_METHODS.map((key) => [key, 0]))
@@ -120,6 +122,7 @@ const CashSettlement = () => {
   const [currencyTab, setCurrencyTab] = useState('HKD');
   const [counts, setCounts] = useState(emptyCounts);
   const [coinLumpsum, setCoinLumpsum] = useState(emptyCoinLumpsum);
+  const [drawer, setDrawer] = useState(emptyDrawer);
   const [payments, setPayments] = useState(emptyPayments);
   const [draft, setDraft] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -175,12 +178,19 @@ const CashSettlement = () => {
         0
       );
       const cashAmount = notes.amount + coinsAmount;
+      const drawerAmount = drawer[currency];
+      const hasDrawer = drawerAmount != null;
+      const varianceCents = hasDrawer ? toCents(cashAmount) - toCents(drawerAmount) : null;
       return {
         notes,
         coinsCounted,
         coinsAmount,
         coinsLumpsum: lumpsum != null,
         cashAmount,
+        drawerAmount,
+        hasDrawer,
+        varianceCents,
+        variance: varianceCents == null ? null : varianceCents / 100,
         paymentTotal,
         totalAmount: cashAmount + paymentTotal
       };
@@ -190,7 +200,7 @@ const CashSettlement = () => {
       HKD: build('HKD'),
       CNY: build('CNY')
     };
-  }, [counts, coinLumpsum, payments]);
+  }, [counts, coinLumpsum, drawer, payments]);
 
   const displayQty = (currency, kind, denom) => {
     if (
@@ -246,6 +256,15 @@ const CashSettlement = () => {
     return Number(amount).toFixed(2);
   };
 
+  const displayDrawer = (currency) => {
+    if (draft && draft.type === 'drawer' && draft.currency === currency) {
+      return draft.value;
+    }
+    const amount = drawer[currency];
+    if (amount == null) return '';
+    return Number(amount).toFixed(2);
+  };
+
   const handleQtyChange = (currency, kind, denom, raw) => {
     setDraft({ type: 'denom', currency, kind, denom, field: 'qty', value: raw });
     if (kind === 'coins') {
@@ -282,12 +301,22 @@ const CashSettlement = () => {
     }));
   };
 
+  const handleDrawerChange = (currency, raw) => {
+    setDraft({ type: 'drawer', currency, value: raw });
+    if (raw === '') {
+      setDrawer((prev) => ({ ...prev, [currency]: null }));
+      return;
+    }
+    setDrawer((prev) => ({ ...prev, [currency]: parseAmount(raw) }));
+  };
+
   const handleBlur = () => setDraft(null);
 
   const handleReset = () => {
     setDraft(null);
     setCounts(emptyCounts());
     setCoinLumpsum(emptyCoinLumpsum());
+    setDrawer(emptyDrawer());
     setPayments(emptyPayments());
   };
 
@@ -520,6 +549,21 @@ const CashSettlement = () => {
 
   const active = sectionTotals[currencyTab];
   const exportedAt = dayjs().format('YYYY-MM-DD HH:mm');
+  const varianceTone = (varianceCents) => {
+    if (varianceCents == null) return null;
+    if (varianceCents === 0) return 'success';
+    if (varianceCents > 0) return 'warning';
+    return 'error';
+  };
+  const varianceLabelFor = (code, totals) => {
+    if (!totals.hasDrawer) return '—';
+    if (totals.varianceCents === 0) return t('cashSettlement.matched');
+    const prefix = totals.varianceCents > 0
+      ? t('cashSettlement.overBy')
+      : t('cashSettlement.shortBy');
+    return `${prefix} ${formatMoney(Math.abs(totals.variance), code)}`;
+  };
+  const activeTone = varianceTone(active.varianceCents);
 
   return (
     <Layout>
@@ -614,13 +658,21 @@ const CashSettlement = () => {
         </Grid>
 
         <Paper elevation={2} sx={{ borderRadius: 2, overflow: 'hidden', mt: 2 }}>
+          <Box sx={{ px: 2, py: 1.5, bgcolor: 'success.dark', color: 'white' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, fontSize: { xs: '1rem', sm: '1.15rem' } }}>
+              {t('cashSettlement.countedCash')}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.25 }}>
+              {t('cashSettlement.drawerHint')}
+            </Typography>
+          </Box>
           <TableContainer>
             <Table size="small">
               <TableBody>
                 <TableRow
                   sx={{
                     bgcolor: 'grey.100',
-                    '& .MuiTableCell-root': { fontWeight: 700, borderBottom: 0 }
+                    '& .MuiTableCell-root': { fontWeight: 700 }
                   }}
                 >
                   <TableCell>{t('cashSettlement.cashSubtotal')}</TableCell>
@@ -628,9 +680,48 @@ const CashSettlement = () => {
                     {formatMoney(active.cashAmount, currencyTab)}
                   </TableCell>
                 </TableRow>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>
+                    {t('cashSettlement.drawerAmount')}
+                  </TableCell>
+                  <TableCell align="right" sx={{ py: 0.75, width: { xs: 140, sm: 220 } }}>
+                    {renderAmountField({
+                      value: displayDrawer(currencyTab),
+                      onChange: (raw) => handleDrawerChange(currencyTab, raw)
+                    })}
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </TableContainer>
+          <Box
+            sx={{
+              px: 2,
+              py: 1.75,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+              bgcolor: activeTone === 'success'
+                ? 'success.main'
+                : activeTone === 'warning'
+                  ? 'warning.main'
+                  : activeTone === 'error'
+                    ? 'error.main'
+                    : 'grey.200',
+              color: activeTone ? 'white' : 'text.primary'
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              {t('cashSettlement.difference')}
+            </Typography>
+            <Typography
+              variant={isMobile ? 'h6' : 'h5'}
+              sx={{ fontWeight: 700, textAlign: 'right' }}
+            >
+              {varianceLabelFor(currencyTab, active)}
+            </Typography>
+          </Box>
         </Paper>
 
         <Paper elevation={2} sx={{ borderRadius: 2, overflow: 'hidden', mt: 2 }}>
@@ -762,6 +853,28 @@ const CashSettlement = () => {
                       <td style={{ padding: '6px 10px', border: '1px solid #ddd' }}>{t('cashSettlement.cashSubtotal')}</td>
                       <td style={{ padding: '6px 10px', border: '1px solid #ddd', textAlign: 'right', width: 160 }}>
                         {formatMoney(totals.cashAmount, code)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '6px 10px', border: '1px solid #ddd' }}>{t('cashSettlement.drawerAmount')}</td>
+                      <td style={{ padding: '6px 10px', border: '1px solid #ddd', textAlign: 'right' }}>
+                        {totals.hasDrawer ? formatMoney(totals.drawerAmount, code) : '—'}
+                      </td>
+                    </tr>
+                    <tr style={{
+                      background: totals.varianceCents == null
+                        ? '#eeeeee'
+                        : totals.varianceCents === 0
+                          ? '#2e7d32'
+                          : totals.varianceCents > 0
+                            ? '#ed6c02'
+                            : '#d32f2f',
+                      color: totals.varianceCents == null ? '#111' : '#fff',
+                      fontWeight: 700
+                    }}>
+                      <td style={{ padding: '8px 10px', border: '1px solid #ddd' }}>{t('cashSettlement.difference')}</td>
+                      <td style={{ padding: '8px 10px', border: '1px solid #ddd', textAlign: 'right' }}>
+                        {varianceLabelFor(code, totals)}
                       </td>
                     </tr>
                   </tbody>

@@ -52,10 +52,10 @@ const Tools = () => {
       translationKey: 'storeDirectory'
     },
     {
-      key: 'cashSettlement',
+      key: 'transactionSettlement',
       icon: <PaymentsIcon sx={{ fontSize: 48 }} />,
-      path: '/tools/cash-settlement',
-      translationKey: 'cashSettlement'
+      path: '/tools/transaction-settlement',
+      translationKey: 'transactionSettlement'
     }
   ];
 

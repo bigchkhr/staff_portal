@@ -805,7 +805,7 @@
     "externalLinks": "External Links",
     "myContacts": "My Contacts",
     "storeDirectory": "Store Directory",
-    "cashSettlement": "Transaction Settlement"
+    "transactionSettlement": "Transaction Settlement"
   },
   "cashSettlement": {
     "title": "Transaction Settlement",
@@ -821,6 +821,13 @@
     "notesSubtotal": "Notes subtotal",
     "coinsSubtotal": "Coins subtotal",
     "cashSubtotal": "Cash subtotal",
+    "countedCash": "Cash counted",
+    "drawerAmount": "Drawer amount",
+    "drawerHint": "Enter the actual drawer amount to compare with the cash count",
+    "difference": "Difference",
+    "overBy": "Over",
+    "shortBy": "Short",
+    "matched": "Balanced",
     "otherPayments": "Other payment methods",
     "paymentMethod": "Payment method",
     "paymentsSubtotal": "E-payments subtotal",
@@ -1544,7 +1551,12 @@
     "summary": "Summary",
     "selectStoreForHelper": "Select Store (View Helper Staff)",
     "scheduledEmployee": "Scheduled Employee",
-    "scheduleDate": "Schedule Date"
+    "scheduleDate": "Schedule Date",
+    "exportCsv": "Export CSV",
+    "position": "Position",
+    "weekday": "Weekday",
+    "hours": "Hours",
+    "noDataToExport": "No data to export. Please select a group first."
   },
   "attendance": {
     "title": "Attendance Management",
@@ -1588,6 +1600,12 @@
     "clickAddToCreate": "Click \"Add Time\" button to create clock records",
     "autoSelectEarliest": "Auto Select Earliest 4",
     "importCSV": "Import CSV",
+    "exportCsv": "Export CSV",
+    "position": "Position",
+    "weekday": "Weekday",
+    "hours": "Hours",
+    "clockTimes": "Clock Times",
+    "noDataToExport": "No data to export. Please select a group first.",
     "selectCSVFile": "Select CSV File",
     "import": "Import",
     "importing": "Importing...",

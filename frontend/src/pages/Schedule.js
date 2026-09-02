@@ -45,7 +45,8 @@ import {
   CalendarToday as CalendarIcon,
   Upload as UploadIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon
+  ExpandLess as ExpandLessIcon,
+  FileDownload as FileDownloadIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -2200,6 +2201,158 @@ const Schedule = ({ noLayout = false }) => {
 
   const dates = generateDateRange();
 
+  const downloadCsvFile = (headers, rows, filename) => {
+    const csv = [headers, ...rows]
+      .map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const formatCsvTime = (time) => {
+    if (!time) return '';
+    return typeof time === 'string' ? time.substring(0, 5) : String(time).substring(0, 5);
+  };
+
+  const formatCsvHours = (startTime, endTime) => {
+    const mins = getRosterDurationMinutes(startTime, endTime);
+    if (mins == null) return '';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h}:${String(m).padStart(2, '0')}`;
+  };
+
+  const formatOutdoorWorkCsv = (apps) => {
+    if (!apps || apps.length === 0) return '';
+    return apps.map((app) => {
+      const start = formatCsvTime(app.start_time);
+      const end = formatCsvTime(app.end_time);
+      const label = t('outdoorWorkCalendar.cellLabel');
+      if (start || end) return `${label} ${start || '--:--'}-${end || '--:--'}`;
+      return label;
+    }).join('; ');
+  };
+
+  const getMemberPositionLabel = (member) => {
+    return member.position_code || (i18n.language === 'en'
+      ? (member.position_name || member.position_name_zh)
+      : (member.position_name_zh || member.position_name)) || '';
+  };
+
+  const getHelperUsersForExport = () => {
+    const selectedStore = selectedDefaultStoreId
+      ? stores.find((s) => Number(s.id) === Number(selectedDefaultStoreId))
+      : null;
+    const selectedStoreShortName = selectedStore?.store_short_name_ || null;
+    if (!selectedStoreShortName) return [];
+
+    const helperByUser = {};
+    helperSchedules.forEach((helper) => {
+      if (helper.store_short_name !== selectedStoreShortName) return;
+      const userId = helper.user_id;
+      if (!helperByUser[userId]) {
+        helperByUser[userId] = {
+          user_id: userId,
+          employee_number: helper.employee_number,
+          display_name: helper.user_name || helper.user_name_zh || '',
+          position_code: helper.position_code,
+          position_name: helper.position_name,
+          position_name_zh: helper.position_name_zh,
+          position_employment_mode: helper.position_employment_mode,
+          employment_mode: helper.employment_mode,
+          schedules: {}
+        };
+      }
+      const dateStr = typeof helper.schedule_date === 'string'
+        ? helper.schedule_date.split('T')[0]
+        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+      helperByUser[userId].schedules[dateStr] = helper;
+    });
+    return Object.values(helperByUser);
+  };
+
+  const handleExportCsv = () => {
+    if (!selectedGroupId || groupMembers.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.noDataToExport')
+      });
+      return;
+    }
+
+    const includeRemarks = canViewLeaveTypeDetail();
+    const headers = [
+      t('common.employeeNumber'),
+      t('schedule.employee'),
+      t('schedule.position'),
+      'FT/PT',
+      t('schedule.scheduleDate'),
+      t('schedule.weekday'),
+      t('schedule.startTime'),
+      t('schedule.endTime'),
+      t('schedule.hours'),
+      t('schedule.leaveType'),
+      t('schedule.store'),
+      t('outdoorWorkCalendar.cellLabel'),
+      ...(includeRemarks ? [t('schedule.remarks')] : []),
+      t('schedule.helper')
+    ];
+
+    const buildRow = (member, date, schedule, isHelper) => {
+      const outdoorApps = getOutdoorWorkForUserAndDate(isHelper ? member.user_id : member.id, date);
+      const row = [
+        member.employee_number || '',
+        member.display_name || member.name_zh || member.name || '',
+        getMemberPositionLabel(member),
+        member.position_employment_mode || member.employment_mode || '',
+        date.format('YYYY-MM-DD'),
+        date.format('ddd'),
+        schedule?.start_time ? formatCsvTime(schedule.start_time) : '',
+        schedule?.end_time ? formatEndTimeForDisplay(schedule.end_time) : '',
+        formatCsvHours(schedule?.start_time, schedule?.end_time),
+        getLeaveTypeDisplayText(schedule) || '',
+        schedule?.store_short_name || schedule?.store_code || '',
+        formatOutdoorWorkCsv(outdoorApps)
+      ];
+      if (includeRemarks) {
+        row.push(schedule?.remarks || '');
+      }
+      row.push(isHelper ? t('schedule.helper') : '');
+      return row;
+    };
+
+    const rows = [];
+    groupMembers.forEach((member) => {
+      dates.forEach((date) => {
+        rows.push(buildRow(member, date, getScheduleForUserAndDate(member.id, date), false));
+      });
+    });
+    getHelperUsersForExport().forEach((helperUser) => {
+      dates.forEach((date) => {
+        const dateStr = date.format('YYYY-MM-DD');
+        rows.push(buildRow(helperUser, date, helperUser.schedules[dateStr] || null, true));
+      });
+    });
+
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
+    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
+    const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
+    downloadCsvFile(
+      headers,
+      rows,
+      `schedule-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`
+    );
+  };
+
   const content = (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Container maxWidth="xl" sx={noLayout ? { mt: 0, mb: 0 } : { mt: 4, mb: 4 }}>
@@ -2364,6 +2517,25 @@ const Schedule = ({ noLayout = false }) => {
                       {t('schedule.batchEdit')}
                     </Button>
                   )}
+                  <Button
+                    variant="outlined"
+                    onClick={handleExportCsv}
+                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
+                    startIcon={<FileDownloadIcon />}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      bgcolor: 'background.paper',
+                      '&:hover': {
+                        boxShadow: 3,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s',
+                      },
+                    }}
+                  >
+                    {t('schedule.exportCsv')}
+                  </Button>
                 </Box>
               </Grid>
               {/* Checker 排班設定（橫線下，可摺疊，預設收起） */}

@@ -801,7 +801,7 @@
     "externalLinks": "外部链接",
     "myContacts": "我的联系人",
     "storeDirectory": "店铺资讯",
-    "cashSettlement": "交易结算"
+    "transactionSettlement": "交易结算"
   },
   "cashSettlement": {
     "title": "交易结算",
@@ -817,6 +817,13 @@
     "notesSubtotal": "纸币小计",
     "coinsSubtotal": "硬币小计",
     "cashSubtotal": "现金小计",
+    "countedCash": "现金结算（点算）",
+    "drawerAmount": "Drawer 金额",
+    "drawerHint": "输入钱箱实际金额，与点算结果对账",
+    "difference": "差额",
+    "overBy": "多出",
+    "shortBy": "短缺",
+    "matched": "相符",
     "otherPayments": "其他收款方式",
     "paymentMethod": "收款方式",
     "paymentsSubtotal": "电子支付小计",
@@ -1435,7 +1442,12 @@
     "summary": "统计",
     "selectStoreForHelper": "选择店铺（查看幫舖员工）",
     "scheduledEmployee": "被编班员工",
-    "scheduleDate": "排班日期"
+    "scheduleDate": "排班日期",
+    "exportCsv": "导出 CSV",
+    "position": "职位",
+    "weekday": "星期",
+    "hours": "工时",
+    "noDataToExport": "没有可导出的资料，请先选择群组"
   },
   "attendance": {
     "title": "考勤管理",
@@ -1479,6 +1491,12 @@
     "clickAddToCreate": "点击「新增时间」按钮来新增打卡记录",
     "autoSelectEarliest": "自动选取最早4个",
     "importCSV": "导入CSV",
+    "exportCsv": "导出 CSV",
+    "position": "职位",
+    "weekday": "星期",
+    "hours": "工时",
+    "clockTimes": "打卡时间",
+    "noDataToExport": "没有可导出的资料，请先选择群组",
     "selectCSVFile": "选择CSV文件",
     "import": "导入",
     "importing": "导入中...",
