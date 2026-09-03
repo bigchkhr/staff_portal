@@ -2278,15 +2278,50 @@ const Schedule = ({ noLayout = false }) => {
     return Object.values(helperByUser);
   };
 
-  const handleExportCsv = () => {
+  const getExportGroupFilenamePrefix = (prefix) => {
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
+    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
+    const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
+    return `${prefix}-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`;
+  };
+
+  const ensureExportReady = () => {
     if (!selectedGroupId || groupMembers.length === 0) {
       Swal.fire({
         icon: 'warning',
         title: t('schedule.warning'),
         text: t('schedule.noDataToExport')
       });
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const buildScheduleCellText = (member, date, schedule, isHelper) => {
+    const outdoorApps = getOutdoorWorkForUserAndDate(isHelper ? member.user_id : member.id, date);
+    const parts = [];
+    if (schedule?.start_time || schedule?.end_time) {
+      parts.push(
+        `${schedule?.start_time ? formatCsvTime(schedule.start_time) : '--:--'}-${schedule?.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}`
+      );
+      const hours = formatCsvHours(schedule?.start_time, schedule?.end_time);
+      if (hours) parts.push(hours);
+    }
+    const leaveText = getLeaveTypeDisplayText(schedule);
+    if (leaveText) parts.push(leaveText);
+    const storeLabel = schedule?.store_short_name || schedule?.store_code;
+    if (storeLabel) parts.push(storeLabel);
+    const outdoorText = formatOutdoorWorkCsv(outdoorApps);
+    if (outdoorText) parts.push(outdoorText);
+    if (canViewLeaveTypeDetail() && schedule?.remarks) {
+      parts.push(schedule.remarks);
+    }
+    return parts.join('\n');
+  };
+
+  const handleExportCsv = () => {
+    if (!ensureExportReady()) return;
 
     const includeRemarks = canViewLeaveTypeDetail();
     const headers = [
@@ -2342,15 +2377,45 @@ const Schedule = ({ noLayout = false }) => {
       });
     });
 
-    const group = departmentGroups.find((g) => g.id === selectedGroupId);
-    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
-    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
-    const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
-    downloadCsvFile(
-      headers,
-      rows,
-      `schedule-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`
-    );
+    downloadCsvFile(headers, rows, getExportGroupFilenamePrefix('schedule-detail'));
+  };
+
+  const handleExportMatrixCsv = () => {
+    if (!ensureExportReady()) return;
+
+    const dateHeaders = dates.map((date) => formatDateDisplay(date));
+    const headers = [
+      t('common.employeeNumber'),
+      t('schedule.employee'),
+      t('schedule.position'),
+      'FT/PT',
+      t('schedule.helper'),
+      ...dateHeaders
+    ];
+
+    const buildMatrixRow = (member, isHelper) => {
+      const dateCells = dates.map((date) => {
+        const schedule = isHelper
+          ? (member.schedules?.[date.format('YYYY-MM-DD')] || null)
+          : getScheduleForUserAndDate(member.id, date);
+        return buildScheduleCellText(member, date, schedule, isHelper);
+      });
+      return [
+        member.employee_number || '',
+        member.display_name || member.name_zh || member.name || '',
+        getMemberPositionLabel(member),
+        member.position_employment_mode || member.employment_mode || '',
+        isHelper ? t('schedule.helper') : '',
+        ...dateCells
+      ];
+    };
+
+    const rows = [
+      ...groupMembers.map((member) => buildMatrixRow(member, false)),
+      ...getHelperUsersForExport().map((helperUser) => buildMatrixRow(helperUser, true))
+    ];
+
+    downloadCsvFile(headers, rows, getExportGroupFilenamePrefix('schedule-table'));
   };
 
   const content = (
@@ -2519,6 +2584,25 @@ const Schedule = ({ noLayout = false }) => {
                   )}
                   <Button
                     variant="outlined"
+                    onClick={handleExportMatrixCsv}
+                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
+                    startIcon={<FileDownloadIcon />}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      bgcolor: 'background.paper',
+                      '&:hover': {
+                        boxShadow: 3,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s',
+                      },
+                    }}
+                  >
+                    {t('schedule.exportCsvTable')}
+                  </Button>
+                  <Button
+                    variant="outlined"
                     onClick={handleExportCsv}
                     disabled={!selectedGroupId || groupMembers.length === 0 || loading}
                     startIcon={<FileDownloadIcon />}
@@ -2534,7 +2618,7 @@ const Schedule = ({ noLayout = false }) => {
                       },
                     }}
                   >
-                    {t('schedule.exportCsv')}
+                    {t('schedule.exportCsvDetail')}
                   </Button>
                 </Box>
               </Grid>

@@ -973,15 +973,99 @@ const Attendance = ({ noLayout = false }) => {
     return leaveTypeDisplay;
   };
 
-  const handleExportCsv = () => {
+  const getExportGroupFilenamePrefix = (prefix) => {
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
+    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
+    const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
+    return `${prefix}-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`;
+  };
+
+  const ensureExportReady = () => {
     if (!selectedGroupId || groupMembers.length === 0) {
       Swal.fire({
         icon: 'warning',
         title: t('attendance.error'),
         text: t('attendance.noDataToExport')
       });
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const getMemberExportMeta = (member) => {
+    const userData = groupedData[member.id] || {
+      employee_number: member.employee_number,
+      display_name: member.display_name || member.name_zh || member.name,
+      position_code: member.position_code || null,
+      position_name: member.position_name || null,
+      position_name_zh: member.position_name_zh || null,
+      dates: {}
+    };
+    const positionLabel = userData.position_code || (i18n.language === 'en'
+      ? (userData.position_name || userData.position_name_zh)
+      : (userData.position_name_zh || userData.position_name)) || '';
+    const employmentMode = member.position_employment_mode || member.employment_mode || '';
+    return { userData, positionLabel, employmentMode };
+  };
+
+  const getAttendanceDayParts = (item) => {
+    const schedule = item?.schedule;
+    const outdoorApps = item?.outdoor_work || [];
+    const clockRecords = item?.clock_records || [];
+    const validRecords = clockRecords.filter((r) => r.is_valid === true);
+    const sortedRecords = [...validRecords].sort((a, b) => {
+      const timeA = a.clock_time || '';
+      const timeB = b.clock_time || '';
+      return timeA.localeCompare(timeB);
+    });
+    const clockTimes = sortedRecords
+      .map((record) => formatCsvTime(record.clock_time))
+      .filter(Boolean)
+      .join(' ');
+    let statusText = '';
+    if (item?.attendance?.status) {
+      statusText = item.attendance.status === 'late' && item.attendance.late_minutes
+        ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
+        : getStatusText(item.attendance.status);
+    }
+    const rosterLabel = (schedule?.start_time || schedule?.end_time)
+      ? `${schedule.start_time ? formatCsvTime(schedule.start_time) : '--:--'} - ${schedule.end_time ? formatCsvTime(schedule.end_time) : '--:--'}`
+      : '';
+    return {
+      schedule,
+      outdoorApps,
+      clockTimes,
+      statusText,
+      rosterLabel,
+      hours: formatCsvHours(schedule?.start_time, schedule?.end_time),
+      leaveText: getLeaveTypeCsv(schedule),
+      storeLabel: schedule?.store_short_name || schedule?.store_code || '',
+      outdoorText: formatOutdoorWorkCsv(outdoorApps),
+      remarks: schedule?.remarks || ''
+    };
+  };
+
+  const buildAttendanceCellText = (item) => {
+    const day = getAttendanceDayParts(item);
+    const parts = [];
+    if (day.rosterLabel) {
+      parts.push(day.rosterLabel);
+      if (day.hours) parts.push(day.hours);
+    }
+    if (day.leaveText) parts.push(day.leaveText);
+    if (day.clockTimes) parts.push(day.clockTimes);
+    if (day.statusText) parts.push(day.statusText);
+    if (day.storeLabel) parts.push(day.storeLabel);
+    if (day.outdoorText) parts.push(day.outdoorText);
+    if (canViewScheduleRemarks() && day.remarks) {
+      parts.push(day.remarks);
+    }
+    return parts.join('\n');
+  };
+
+  const handleExportCsv = () => {
+    if (!ensureExportReady()) return;
 
     const includeRemarks = canViewScheduleRemarks();
     const headers = [
@@ -1003,45 +1087,11 @@ const Attendance = ({ noLayout = false }) => {
 
     const rows = [];
     groupMembers.forEach((member) => {
-      const userData = groupedData[member.id] || {
-        employee_number: member.employee_number,
-        display_name: member.display_name || member.name_zh || member.name,
-        position_code: member.position_code || null,
-        position_name: member.position_name || null,
-        position_name_zh: member.position_name_zh || null,
-        dates: {}
-      };
-      const positionLabel = userData.position_code || (i18n.language === 'en'
-        ? (userData.position_name || userData.position_name_zh)
-        : (userData.position_name_zh || userData.position_name)) || '';
-      const employmentMode = member.position_employment_mode || member.employment_mode || '';
+      const { userData, positionLabel, employmentMode } = getMemberExportMeta(member);
 
       dates.forEach((date) => {
         const dateStr = date.format('YYYY-MM-DD');
-        const item = userData.dates[dateStr];
-        const schedule = item?.schedule;
-        const outdoorApps = item?.outdoor_work || [];
-        const clockRecords = item?.clock_records || [];
-        const validRecords = clockRecords.filter((r) => r.is_valid === true);
-        const sortedRecords = [...validRecords].sort((a, b) => {
-          const timeA = a.clock_time || '';
-          const timeB = b.clock_time || '';
-          return timeA.localeCompare(timeB);
-        });
-        const clockTimes = sortedRecords
-          .map((record) => formatCsvTime(record.clock_time))
-          .filter(Boolean)
-          .join(' ');
-        let statusText = '';
-        if (item?.attendance?.status) {
-          statusText = item.attendance.status === 'late' && item.attendance.late_minutes
-            ? `${getStatusText(item.attendance.status)} (${item.attendance.late_minutes}${t('attendance.minutes')})`
-            : getStatusText(item.attendance.status);
-        }
-        const rosterLabel = (schedule?.start_time || schedule?.end_time)
-          ? `${schedule.start_time ? formatCsvTime(schedule.start_time) : '--:--'} - ${schedule.end_time ? formatCsvTime(schedule.end_time) : '--:--'}`
-          : '';
-
+        const day = getAttendanceDayParts(userData.dates[dateStr]);
         const row = [
           userData.employee_number || '',
           userData.display_name || '',
@@ -1049,30 +1099,52 @@ const Attendance = ({ noLayout = false }) => {
           employmentMode,
           dateStr,
           date.format('ddd'),
-          rosterLabel,
-          formatCsvHours(schedule?.start_time, schedule?.end_time),
-          getLeaveTypeCsv(schedule),
-          clockTimes,
-          statusText,
-          schedule?.store_short_name || schedule?.store_code || '',
-          formatOutdoorWorkCsv(outdoorApps)
+          day.rosterLabel,
+          day.hours,
+          day.leaveText,
+          day.clockTimes,
+          day.statusText,
+          day.storeLabel,
+          day.outdoorText
         ];
         if (includeRemarks) {
-          row.push(schedule?.remarks || '');
+          row.push(day.remarks);
         }
         rows.push(row);
       });
     });
 
-    const group = departmentGroups.find((g) => g.id === selectedGroupId);
-    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
-    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
-    const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
-    downloadCsvFile(
-      headers,
-      rows,
-      `attendance-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`
-    );
+    downloadCsvFile(headers, rows, getExportGroupFilenamePrefix('attendance-detail'));
+  };
+
+  const handleExportMatrixCsv = () => {
+    if (!ensureExportReady()) return;
+
+    const dateHeaders = dates.map((date) => formatDateDisplay(date));
+    const headers = [
+      t('common.employeeNumber'),
+      t('attendance.employee'),
+      t('attendance.position'),
+      'FT/PT',
+      ...dateHeaders
+    ];
+
+    const rows = groupMembers.map((member) => {
+      const { userData, positionLabel, employmentMode } = getMemberExportMeta(member);
+      const dateCells = dates.map((date) => {
+        const dateStr = date.format('YYYY-MM-DD');
+        return buildAttendanceCellText(userData.dates[dateStr]);
+      });
+      return [
+        userData.employee_number || '',
+        userData.display_name || '',
+        positionLabel,
+        employmentMode,
+        ...dateCells
+      ];
+    });
+
+    downloadCsvFile(headers, rows, getExportGroupFilenamePrefix('attendance-table'));
   };
 
   const content = (
@@ -1237,6 +1309,25 @@ const Attendance = ({ noLayout = false }) => {
                   )}
                   <Button
                     variant="outlined"
+                    onClick={handleExportMatrixCsv}
+                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
+                    startIcon={<FileDownloadIcon />}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      bgcolor: 'background.paper',
+                      '&:hover': {
+                        boxShadow: 3,
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s',
+                      },
+                    }}
+                  >
+                    {t('attendance.exportCsvTable')}
+                  </Button>
+                  <Button
+                    variant="outlined"
                     onClick={handleExportCsv}
                     disabled={!selectedGroupId || groupMembers.length === 0 || loading}
                     startIcon={<FileDownloadIcon />}
@@ -1252,7 +1343,7 @@ const Attendance = ({ noLayout = false }) => {
                       },
                     }}
                   >
-                    {t('attendance.exportCsv')}
+                    {t('attendance.exportCsvDetail')}
                   </Button>
                 </Box>
               </Grid>
