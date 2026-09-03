@@ -393,45 +393,43 @@ class MonthlyAttendanceSummaryController {
     map.set(key, leaveInfo);
   }
 
-  // 根據有效打卡記錄計算應計時數：全日工時 = 最後一次打卡 - 首次打卡
-  computeAccruedMinutesFromClocks(validRecords, employmentMode) {
-    const clockIn = validRecords[0] ? this.formatTimeValue(validRecords[0].clock_time) : null;
+  // 店舖工時／工資成本報表：與 /monthly-attendance-summary 一致，OT 及 PT 工時均考慮排班時間
+  async computeReportDayMetrics(clockRecords, scheduleData, employmentMode, dateStr) {
+    const attendanceData = {
+      attendance_date: dateStr,
+      clock_records: clockRecords || []
+    };
+    const calculated = await this.calculateDailyAttendance(
+      attendanceData,
+      scheduleData || {},
+      employmentMode
+    );
+    const validRecords = calculated.valid_clock_records || [];
+    const clockIn = validRecords[0]?.clock_time
+      ? this.formatTimeValue(validRecords[0].clock_time)
+      : null;
     const clockOut = validRecords.length > 0
       ? this.formatTimeValue(validRecords[validRecords.length - 1].clock_time)
       : null;
 
-    if (validRecords.length < 2) {
-      return { minutes: null, clockIn, clockOut, totalWorkMinutes: null, overtimeMinutes: null };
-    }
+    const totalWorkHours = calculated.total_work_hours != null
+      ? Number(parseFloat(calculated.total_work_hours).toFixed(2))
+      : null;
+    const overtimeHours = calculated.overtime_hours != null
+      ? Number(parseFloat(calculated.overtime_hours).toFixed(2))
+      : null;
 
-    const start = this.parseTime(clockIn);
-    const end = this.parseTime(clockOut);
-    if (start == null || end == null || end <= start) {
-      return { minutes: null, clockIn, clockOut, totalWorkMinutes: null, overtimeMinutes: null };
-    }
-
-    const totalWorkMinutes = end - start;
-    const floorTo = (value, interval) => Math.floor(value / interval) * interval;
-    const mode = (employmentMode || 'FT').toString().trim().toUpperCase();
-
-    if (mode === 'PT') {
-      return {
-        minutes: floorTo(totalWorkMinutes, 15),
-        clockIn,
-        clockOut,
-        totalWorkMinutes,
-        overtimeMinutes: null
-      };
-    }
-
-    const overtimeMinutes = totalWorkMinutes - (9 * 60);
-    const accruedOvertime = overtimeMinutes > 0 ? floorTo(overtimeMinutes, 30) : 0;
     return {
-      minutes: accruedOvertime,
+      minutes: calculated.approved_overtime_minutes != null && !Number.isNaN(calculated.approved_overtime_minutes)
+        ? calculated.approved_overtime_minutes
+        : null,
       clockIn,
       clockOut,
-      totalWorkMinutes,
-      overtimeMinutes: overtimeMinutes > 0 ? overtimeMinutes : 0
+      totalWorkMinutes: totalWorkHours != null ? Math.round(totalWorkHours * 60) : null,
+      overtimeMinutes: overtimeHours != null ? Math.round(overtimeHours * 60) : null,
+      total_work_hours: totalWorkHours,
+      overtime_hours: overtimeHours,
+      is_absent: !!calculated.is_absent
     };
   }
 
@@ -1878,7 +1876,7 @@ class MonthlyAttendanceSummaryController {
 
           if (!scheduleData && validRecords.length === 0) continue;
 
-          const accrued = this.computeAccruedMinutesFromClocks(validRecords, mode);
+          const accrued = await this.computeReportDayMetrics(clockRecords, scheduleData, mode, dateStr);
 
           emp.days[dateStr] = {
             schedule_start_time: scheduleData?.start_time || null,
@@ -1887,13 +1885,9 @@ class MonthlyAttendanceSummaryController {
             clock_end_time: accrued.clockOut,
             hours_type: mode === 'PT' ? 'work' : 'overtime',
             minutes: accrued.minutes != null && !Number.isNaN(accrued.minutes) ? accrued.minutes : null,
-            overtime_hours: accrued.overtimeMinutes != null
-              ? Number((accrued.overtimeMinutes / 60).toFixed(2))
-              : null,
-            total_work_hours: accrued.totalWorkMinutes != null
-              ? Number((accrued.totalWorkMinutes / 60).toFixed(2))
-              : null,
-            is_absent: !!scheduleData?.start_time && validRecords.length === 0
+            overtime_hours: accrued.overtime_hours,
+            total_work_hours: accrued.total_work_hours,
+            is_absent: accrued.is_absent
           };
         }
       }
@@ -2317,7 +2311,7 @@ class MonthlyAttendanceSummaryController {
             // 當日有 IN1：只顯示打卡店舖屬於本群組嘅日；去咗其他舖就完全唔出（包括假期）
             if (!in1StoreCode || !targetStoreCodes.has(in1StoreCode)) continue;
             storeCode = in1StoreCode;
-            accrued = this.computeAccruedMinutesFromClocks(validRecords, mode);
+            accrued = await this.computeReportDayMetrics(validRecords, scheduleInfo, mode, dateStr);
           } else if (leaveInfo) {
             // 全日假、冇打卡：先歸駐守舖
             const homeStoreCode = pickHomeStoreCode(emp.user_id);
@@ -2340,12 +2334,8 @@ class MonthlyAttendanceSummaryController {
             schedule_end_time: scheduleInfo?.end_time || null,
             hours_type: mode === 'PT' ? 'work' : 'overtime',
             minutes: accrued.minutes != null && !Number.isNaN(accrued.minutes) ? accrued.minutes : null,
-            overtime_hours: accrued.overtimeMinutes != null
-              ? Number((accrued.overtimeMinutes / 60).toFixed(2))
-              : null,
-            total_work_hours: accrued.totalWorkMinutes != null
-              ? Number((accrued.totalWorkMinutes / 60).toFixed(2))
-              : null,
+            overtime_hours: accrued.overtime_hours,
+            total_work_hours: accrued.total_work_hours,
             store_id: store?.id || null,
             store_code: store?.store_code || storeCode || null,
             store_short_name_: store?.store_short_name_ || null,
