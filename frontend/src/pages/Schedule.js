@@ -23,6 +23,7 @@ import {
   TextField,
   Grid,
   Chip,
+  Badge,
   IconButton,
   Tooltip,
   FormControlLabel,
@@ -46,7 +47,9 @@ import {
   Upload as UploadIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
-  FileDownload as FileDownloadIcon
+  FileDownload as FileDownloadIcon,
+  History as HistoryIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -120,6 +123,13 @@ const Schedule = ({ noLayout = false }) => {
   const [checkerEditableStartDate, setCheckerEditableStartDate] = useState(null); // Checker 可編輯範圍開始（UTC+8）
   const [checkerEditableEndDate, setCheckerEditableEndDate] = useState(null); // Checker 可編輯範圍結束（UTC+8）
   const [checkerSectionExpanded, setCheckerSectionExpanded] = useState(false);
+  const [requireCheckerApproval, setRequireCheckerApproval] = useState(false);
+  const [isChecker, setIsChecker] = useState(false);
+  const [changeSubmissions, setChangeSubmissions] = useState([]);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyTarget, setHistoryTarget] = useState(null);
 
   useEffect(() => {
     fetchDepartmentGroups();
@@ -174,6 +184,7 @@ const Schedule = ({ noLayout = false }) => {
       const group = departmentGroups.find(g => g.id === selectedGroupId);
       if (group) {
         setAllowCheckerEdit(group.allow_checker_edit !== false);
+        setRequireCheckerApproval(group.require_checker_schedule_approval === true);
         const start = group.checker_editable_start_date;
         const end = group.checker_editable_end_date;
         const startStr = start != null && start !== '' ? dayjs(start).tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
@@ -308,6 +319,10 @@ const Schedule = ({ noLayout = false }) => {
       }
       setSchedules(schedulesData);
       setOutdoorWorkByCell(schedulesResponse.data.outdoor_work_by_cell || {});
+      setChangeSubmissions(schedulesResponse.data.schedule_change_submissions || []);
+      if (schedulesResponse.data.require_checker_schedule_approval !== undefined) {
+        setRequireCheckerApproval(schedulesResponse.data.require_checker_schedule_approval === true);
+      }
       setHelperSchedules(helperSchedulesData);
     } catch (error) {
       console.error('Fetch schedules error:', error);
@@ -330,18 +345,22 @@ const Schedule = ({ noLayout = false }) => {
         setCanEdit(false);
         setCanControlCheckerEdit(false);
         setAllowCheckerEdit(true);
+        setRequireCheckerApproval(false);
         setIsApprover(false);
+        setIsChecker(false);
         return;
       }
 
       // 設置 allow_checker_edit 狀態
       setAllowCheckerEdit(group.allow_checker_edit !== false);
+      setRequireCheckerApproval(group.require_checker_schedule_approval === true);
 
       // 檢查用戶是否為系統管理員
       if (user.is_system_admin) {
         setCanEdit(true);
         setCanControlCheckerEdit(true);
         setIsApprover(true); // 系統管理員視為 approver
+        setIsChecker(false);
         return;
       }
 
@@ -356,11 +375,9 @@ const Schedule = ({ noLayout = false }) => {
 
       // 只有 approver1, approver2, approver3 可以控制 checker 編輯權限
       setCanControlCheckerEdit(isApprover1 || isApprover2 || isApprover3);
-      
-      // 設置用戶是否為 approver（不包括 checker）
       setIsApprover(isApprover1 || isApprover2 || isApprover3);
+      setIsChecker(!!isChecker && !(isApprover1 || isApprover2 || isApprover3));
 
-      // 如果用戶是 checker，需要檢查 allow_checker_edit 設置
       if (isChecker) {
         setCanEdit(group.allow_checker_edit !== false);
       } else {
@@ -371,6 +388,7 @@ const Schedule = ({ noLayout = false }) => {
       setCanEdit(false);
       setCanControlCheckerEdit(false);
       setIsApprover(false);
+      setIsChecker(false);
     }
   };
 
@@ -451,9 +469,459 @@ const Schedule = ({ noLayout = false }) => {
     return d.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
   };
 
+  const scheduleDateKey = (val) => {
+    if (val == null || val === '') return null;
+    if (typeof val === 'string') {
+      const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+    return toHKDateStr(val);
+  };
+
+  const enrichScheduleDisplay = (schedule) => {
+    if (!schedule) return schedule;
+    const leaveType = leaveTypes.find((lt) => Number(lt.id) === Number(schedule.leave_type_id));
+    const store = stores.find((st) => Number(st.id) === Number(schedule.store_id));
+    return {
+      ...schedule,
+      leave_type_code: schedule.leave_type_code || leaveType?.code || null,
+      leave_type_name: schedule.leave_type_name || leaveType?.name || null,
+      leave_type_name_zh: schedule.leave_type_name_zh || leaveType?.name_zh || null,
+      store_code: schedule.store_code || store?.store_code || null,
+      store_short_name: schedule.store_short_name || store?.store_short_name_ || store?.store_short_name || null
+    };
+  };
+
+  const upsertLocalSubmission = (submission) => {
+    if (!submission) return;
+    setChangeSubmissions((prev) => {
+      const rest = prev.filter((s) => Number(s.id) !== Number(submission.id));
+      if (submission.status === 'approved') return rest;
+      return [submission, ...rest];
+    });
+  };
+
+  const mergeOfficialSchedules = (incoming) => {
+    const list = (Array.isArray(incoming) ? incoming : [incoming]).filter(Boolean).map(enrichScheduleDisplay);
+    if (list.length === 0) return;
+    setSchedules((prev) => {
+      const next = [...prev];
+      for (const schedule of list) {
+        const dateStr = scheduleDateKey(schedule.schedule_date);
+        const idx = next.findIndex((s) =>
+          Number(s.user_id) === Number(schedule.user_id) &&
+          scheduleDateKey(s.schedule_date) === dateStr
+        );
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...schedule, schedule_date: dateStr || next[idx].schedule_date };
+        } else {
+          next.push({ ...schedule, schedule_date: dateStr || schedule.schedule_date });
+        }
+      }
+      return next;
+    });
+  };
+
+  const removeOfficialSchedules = (pairs) => {
+    const keys = new Set(
+      (pairs || [])
+        .map((p) => `${Number(p.user_id)}_${scheduleDateKey(p.schedule_date)}`)
+        .filter((key) => !key.endsWith('_null'))
+    );
+    if (keys.size === 0) return;
+    setSchedules((prev) => prev.filter((s) =>
+      !keys.has(`${Number(s.user_id)}_${scheduleDateKey(s.schedule_date)}`)
+    ));
+  };
+
+  const bumpGroupPendingCount = (delta) => {
+    const n = Number(delta) || 0;
+    if (!n || !selectedGroupId) return;
+    setDepartmentGroups((prev) => prev.map((g) =>
+      Number(g.id) === Number(selectedGroupId)
+        ? { ...g, pending_item_count: Math.max(0, (Number(g.pending_item_count) || 0) + n) }
+        : g
+    ));
+  };
+
+  const applySaveResponse = (data, deletedOfficial = null) => {
+    if (data?.requires_approval && data.submission) {
+      upsertLocalSubmission(data.submission);
+      return;
+    }
+    if (data?.submission && !data.schedule && !data.schedules) {
+      upsertLocalSubmission(data.submission);
+      return;
+    }
+    if (data?.schedule) mergeOfficialSchedules(data.schedule);
+    if (data?.schedules) mergeOfficialSchedules(data.schedules);
+    if (deletedOfficial) {
+      removeOfficialSchedules([deletedOfficial]);
+    }
+  };
+
+  const getMyOpenSubmission = () => {
+    return changeSubmissions.find(s =>
+      ['draft', 'returned'].includes(s.status) && Number(s.submitted_by_id) === Number(user?.id)
+    ) || null;
+  };
+
+  const getMyPendingSubmission = () => {
+    return changeSubmissions.find(s =>
+      s.status === 'pending' && Number(s.submitted_by_id) === Number(user?.id)
+    ) || null;
+  };
+
+  const getPendingSubmissions = () => changeSubmissions.filter(s => s.status === 'pending');
+
+  const isCheckerPendingLocked = () => {
+    return !!(isChecker && requireCheckerApproval && getMyPendingSubmission());
+  };
+
+  const formatCellDateStr = (date) => {
+    if (!date) return null;
+    if (dayjs.isDayjs(date)) return date.format('YYYY-MM-DD');
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    const parsed = dayjs(date);
+    return parsed.isValid() ? parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+  };
+
+  const getChangeForUserAndDate = (userId, date) => {
+    const dateStr = formatCellDateStr(date);
+    if (!dateStr) return null;
+    for (const submission of changeSubmissions) {
+      const item = (submission.items || []).find(i => {
+        const itemDate = typeof i.schedule_date === 'string'
+          ? i.schedule_date.split('T')[0].substring(0, 10)
+          : formatCellDateStr(i.schedule_date);
+        return Number(i.user_id) === Number(userId) && itemDate === dateStr;
+      });
+      if (item) {
+        return {
+          ...item,
+          status: submission.status,
+          submission_id: submission.id,
+          submitted_by_id: submission.submitted_by_id,
+          return_reason: submission.return_reason
+        };
+      }
+    }
+    return null;
+  };
+
+  const getDisplaySchedule = (userId, date) => {
+    const official = getScheduleForUserAndDate(userId, date);
+    const change = getChangeForUserAndDate(userId, date);
+    if (!change) return official;
+    if (change.action === 'delete') {
+      return {
+        ...(official || { user_id: userId, schedule_date: formatCellDateStr(date), id: official?.id || null }),
+        _change: change,
+        _proposedDelete: true
+      };
+    }
+    return {
+      ...(official || {}),
+      id: official?.id || null,
+      user_id: userId,
+      schedule_date: formatCellDateStr(date) || official?.schedule_date,
+      department_group_id: change.department_group_id || official?.department_group_id || selectedGroupId,
+      start_time: change.start_time,
+      end_time: change.end_time,
+      leave_type_id: change.leave_type_id,
+      leave_session: change.leave_session,
+      store_id: change.store_id,
+      remarks: change.remarks,
+      leave_type_code: change.leave_type_code,
+      leave_type_name: change.leave_type_name,
+      leave_type_name_zh: change.leave_type_name_zh,
+      store_code: change.store_code,
+      store_short_name: change.store_short_name,
+      _change: change,
+      _changeItemId: change.id
+    };
+  };
+
+  const getChangeStatusLabel = (status, action) => {
+    if (action === 'delete') return t('schedule.proposedDelete');
+    if (status === 'pending') return t('schedule.statusPending');
+    if (status === 'returned') return t('schedule.statusReturned');
+    return t('schedule.statusDraft');
+  };
+
+  const getChangeBadgeColor = (change) => {
+    if (!change) return 'default';
+    if (change.status === 'pending') return 'warning';
+    if (change.status === 'returned') return 'error';
+    return 'info';
+  };
+
+  const dateHasPendingChange = (date) => {
+    const dateStr = formatCellDateStr(date);
+    if (!dateStr) return false;
+    return changeSubmissions.some((submission) =>
+      submission.status === 'pending' &&
+      (submission.items || []).some((item) => formatCellDateStr(item.schedule_date) === dateStr)
+    );
+  };
+
+  const wrapWithChangeBadge = (change, children) => (
+    <Badge
+      invisible={!change}
+      badgeContent={change ? getChangeStatusLabel(change.status, change.action) : 0}
+      color={getChangeBadgeColor(change)}
+      overlap="rectangular"
+      sx={{
+        width: '100%',
+        display: 'flex',
+        justifyContent: 'center',
+        '& .MuiBadge-badge': {
+          fontSize: '0.58rem',
+          height: 16,
+          minWidth: 16,
+          px: 0.5,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          top: 2,
+          right: 2
+        }
+      }}
+    >
+      {children}
+    </Badge>
+  );
+
+  const formatHistoryPayload = (payload) => {
+    if (!payload) return '—';
+    if (payload.action === 'delete') return t('schedule.proposedDelete');
+    const time = `${payload.start_time ? String(payload.start_time).substring(0, 5) : '--:--'} - ${payload.end_time ? String(payload.end_time).substring(0, 5) : '--:--'}`;
+    const leave = payload.leave_type_name_zh || payload.leave_type_id || '';
+    const store = payload.store_short_name || payload.store_id || '';
+    return [time, leave, store, payload.remarks].filter(Boolean).join(' / ');
+  };
+
+  const getChangeActionLabel = (action) => {
+    const map = {
+      direct_edit: t('schedule.changeActionDirectEdit'),
+      direct_delete: t('schedule.changeActionDirectDelete'),
+      draft_save: t('schedule.changeActionDraftSave'),
+      submit: t('schedule.changeActionSubmit'),
+      approve: t('schedule.changeActionApprove'),
+      return: t('schedule.changeActionReturn')
+    };
+    return map[action] || action;
+  };
+
+  const handleOpenHistory = async (userId, date) => {
+    const dateStr = formatCellDateStr(date);
+    setHistoryTarget({ userId, dateStr });
+    setHistoryDialogOpen(true);
+    setHistoryLoading(true);
+    try {
+      const res = await axios.get('/api/schedules/change-logs', {
+        params: {
+          department_group_id: selectedGroupId,
+          user_id: userId,
+          schedule_date: dateStr
+        }
+      });
+      setHistoryLogs(res.data.logs || []);
+    } catch (error) {
+      console.error('Fetch change logs error:', error);
+      setHistoryLogs([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleSubmitMyChanges = async () => {
+    const open = getMyOpenSubmission();
+    if (!open) return;
+    try {
+      const response = await axios.post(`/api/schedules/changes/${open.id}/submit`);
+      const submitted = response.data.submission;
+      upsertLocalSubmission(submitted);
+      bumpGroupPendingCount((submitted?.items || []).length);
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.submitSuccess')
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+    }
+  };
+
+  const handleApproveSubmission = async (submissionId) => {
+    const result = await Swal.fire({
+      icon: 'question',
+      title: t('schedule.approveChanges'),
+      showCancelButton: true,
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const response = await axios.post(`/api/schedules/changes/${submissionId}/approve`);
+      const submitted = response.data.submission;
+      const applied = response.data.applied || [];
+      const toRemove = [];
+      const toMerge = [];
+      if (applied.length > 0) {
+        applied.forEach((row) => {
+          if (row.deleted) {
+            toRemove.push({ user_id: row.user_id, schedule_date: row.schedule_date });
+          } else if (row.schedule) {
+            toMerge.push({
+              ...row.schedule,
+              leave_type_code: row.item?.leave_type_code || row.schedule.leave_type_code,
+              leave_type_name: row.item?.leave_type_name || row.schedule.leave_type_name,
+              leave_type_name_zh: row.item?.leave_type_name_zh || row.schedule.leave_type_name_zh,
+              store_code: row.item?.store_code || row.schedule.store_code,
+              store_short_name: row.item?.store_short_name || row.schedule.store_short_name
+            });
+          }
+        });
+      } else {
+        (submitted?.items || []).forEach((item) => {
+          if (item.action === 'delete') {
+            toRemove.push({ user_id: item.user_id, schedule_date: item.schedule_date });
+          } else {
+            toMerge.push({
+              user_id: item.user_id,
+              department_group_id: item.department_group_id,
+              schedule_date: item.schedule_date,
+              start_time: item.start_time,
+              end_time: item.end_time,
+              leave_type_id: item.leave_type_id,
+              leave_session: item.leave_session,
+              store_id: item.store_id,
+              remarks: item.remarks,
+              leave_type_code: item.leave_type_code,
+              leave_type_name: item.leave_type_name,
+              leave_type_name_zh: item.leave_type_name_zh,
+              store_code: item.store_code,
+              store_short_name: item.store_short_name
+            });
+          }
+        });
+      }
+      if (toRemove.length) removeOfficialSchedules(toRemove);
+      if (toMerge.length) mergeOfficialSchedules(toMerge);
+      upsertLocalSubmission({ ...(submitted || {}), status: 'approved' });
+      bumpGroupPendingCount(-((submitted?.items || []).length));
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.approveSuccess')
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+    }
+  };
+
+  const handleReturnSubmission = async (submissionId) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('schedule.returnChanges'),
+      input: 'textarea',
+      inputPlaceholder: t('schedule.returnReasonPlaceholder'),
+      showCancelButton: true,
+      confirmButtonText: t('schedule.returnChanges'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const response = await axios.post(`/api/schedules/changes/${submissionId}/return`, { reason: result.value || null });
+      const returned = response.data.submission;
+      upsertLocalSubmission(returned);
+      bumpGroupPendingCount(-((returned?.items || []).length));
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.returnSuccess')
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+    }
+  };
+
+  const handleToggleCheckerApproval = async (event) => {
+    const newValue = event.target.checked;
+    if (!selectedGroupId) return;
+    try {
+      await axios.put(`/api/schedules/group/${selectedGroupId}/checker-edit-permission`, {
+        require_checker_schedule_approval: newValue
+      });
+      setRequireCheckerApproval(newValue);
+      setDepartmentGroups(prev => prev.map(g =>
+        g.id === selectedGroupId ? { ...g, require_checker_schedule_approval: newValue } : g
+      ));
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: newValue ? t('schedule.checkerApprovalEnabled') : t('schedule.checkerApprovalDisabled'),
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+      setRequireCheckerApproval(!newValue);
+    }
+  };
+
+  const handleBatchUpdateCheckerApproval = async (enable) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('schedule.confirmBatchUpdate'),
+      text: enable ? t('schedule.confirmEnableAllCheckerApproval') : t('schedule.confirmDisableAllCheckerApproval'),
+      showCancelButton: true,
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const response = await axios.put('/api/schedules/groups/batch-checker-edit-permission', {
+        require_checker_schedule_approval: enable
+      });
+      setDepartmentGroups(prev => prev.map(g => ({ ...g, require_checker_schedule_approval: enable })));
+      setRequireCheckerApproval(enable);
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.batchUpdateSuccess', { count: response.data?.updated_count ?? 0 }),
+        timer: 3000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.batchUpdateFailed')
+      });
+    }
+  };
+
   // 檢查該日期是否在 checker 可編輯範圍內（UTC+8）；approver / 系統管理員不受限
   const canEditDate = (date) => {
     if (isApprover || user?.is_system_admin) return true;
+    if (isCheckerPendingLocked()) return false;
     const group = departmentGroups.find(g => g.id === selectedGroupId);
     if (!group || !allowCheckerEdit) return false;
     const startStr = toHKDateStr(group.checker_editable_start_date);
@@ -656,7 +1124,7 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
     
-    const existingSchedule = getScheduleForUserAndDate(userId, date);
+    const existingSchedule = getDisplaySchedule(userId, date);
 
     if (existingSchedule) {
       setEditingSchedule(existingSchedule);
@@ -1053,12 +1521,13 @@ const Schedule = ({ noLayout = false }) => {
         remarks: editRemarks.trim() || null
       };
 
+      let response;
       if (editingSchedule.id) {
         // 更新現有記錄
-        await axios.put(`/api/schedules/${editingSchedule.id}`, scheduleData);
+        response = await axios.put(`/api/schedules/${editingSchedule.id}`, scheduleData);
       } else {
         // 建立新記錄
-        await axios.post('/api/schedules', scheduleData);
+        response = await axios.post('/api/schedules', scheduleData);
       }
 
       setEditDialogOpen(false);
@@ -1069,14 +1538,13 @@ const Schedule = ({ noLayout = false }) => {
       setEditLeaveSession(null);
       setEditStoreId(null);
       setEditRemarks('');
-      
-      // 等待數據刷新完成
-      await fetchSchedules();
+
+      applySaveResponse(response.data);
       
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.updateSuccess')
+        text: response.data?.requires_approval ? t('schedule.draftSaved') : t('schedule.updateSuccess')
       });
     } catch (error) {
       console.error('Save schedule error:', error);
@@ -1175,14 +1643,21 @@ const Schedule = ({ noLayout = false }) => {
                         fontSize: '0.85rem',
                       }}
                     >
-                      <Box>
-                        <Typography variant="body2" display="block" sx={{ fontWeight: 600 }}>
-                          {formatDateDisplay(date)}
-                        </Typography>
-                        <Typography variant="caption" display="block" sx={{ opacity: 0.9, mt: 0.5 }}>
-                          {date.format('ddd')}
-                        </Typography>
-                      </Box>
+                      <Badge
+                        variant="dot"
+                        color="warning"
+                        invisible={!dateHasPendingChange(date)}
+                        overlap="circular"
+                      >
+                        <Box>
+                          <Typography variant="body2" display="block" sx={{ fontWeight: 600 }}>
+                            {formatDateDisplay(date)}
+                          </Typography>
+                          <Typography variant="caption" display="block" sx={{ opacity: 0.9, mt: 0.5 }}>
+                            {date.format('ddd')}
+                          </Typography>
+                        </Box>
+                      </Badge>
                     </TableCell>
                   ))}
                 </TableRow>
@@ -1276,7 +1751,7 @@ const Schedule = ({ noLayout = false }) => {
                     </Box>
                   </TableCell>
                   {dates.map(date => {
-                    const schedule = getScheduleForUserAndDate(member.id, date);
+                    const schedule = getDisplaySchedule(member.id, date);
                     const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
                     const dateStr = date.format('YYYY-MM-DD');
                     return (
@@ -1287,9 +1762,18 @@ const Schedule = ({ noLayout = false }) => {
                           minWidth: 80,
                           whiteSpace: 'nowrap',
                           p: 0.5,
+                          bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined,
                         }}
                       >
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+                        {wrapWithChangeBadge(schedule?._change, (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center', width: '100%' }}>
+                          {canViewLeaveTypeDetail() && (
+                            <Tooltip title={t('schedule.changeHistory')}>
+                              <IconButton size="small" onClick={() => handleOpenHistory(member.id, date)} sx={{ p: 0.25 }}>
+                                <HistoryIcon sx={{ fontSize: '0.95rem' }} />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           {editMode && canEdit ? (
                             <>
                               {canEditDate(date) ? (
@@ -1464,6 +1948,7 @@ const Schedule = ({ noLayout = false }) => {
                             </>
                           )}
                         </Box>
+                        ))}
                       </TableCell>
                     );
                   })}
@@ -1868,7 +2353,7 @@ const Schedule = ({ noLayout = false }) => {
         }
       });
 
-      await axios.post('/api/schedules/batch', { schedules: schedulesData });
+      const response = await axios.post('/api/schedules/batch', { schedules: schedulesData });
       
       setBatchEditDialogOpen(false);
       setSelectedUsers([]);
@@ -1878,14 +2363,15 @@ const Schedule = ({ noLayout = false }) => {
       setBatchLeaveTypeId(null);
       setBatchLeaveSession(null);
       setBatchStoreId(null);
-      
-      // 等待數據刷新完成
-      await fetchSchedules();
+
+      applySaveResponse(response.data);
       
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.batchScheduleUpdateSuccess', { count: schedulesData.length })
+        text: response.data?.requires_approval
+          ? t('schedule.draftSaved')
+          : t('schedule.batchScheduleUpdateSuccess', { count: schedulesData.length })
       });
     } catch (error) {
       console.error('Batch save error:', error);
@@ -2048,10 +2534,17 @@ const Schedule = ({ noLayout = false }) => {
 
     if (result.isConfirmed) {
       try {
-        await axios.delete(`/api/schedules/${schedule.id}`);
-        
-        // 等待數據刷新完成
-        await fetchSchedules();
+        let response;
+        if (!schedule.id && schedule._changeItemId) {
+          response = await axios.delete(`/api/schedules/changes/items/${schedule._changeItemId}`);
+          applySaveResponse(response.data);
+        } else {
+          response = await axios.delete(`/api/schedules/${schedule.id}`);
+          applySaveResponse(response.data, {
+            user_id: schedule.user_id,
+            schedule_date: schedule.schedule_date
+          });
+        }
         
         Swal.fire({
           icon: 'success',
@@ -2470,13 +2963,17 @@ const Schedule = ({ noLayout = false }) => {
                       borderRadius: 1,
                     }}
                   >
-                    {departmentGroups.map(group => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'zh-TW' || i18n.language === 'zh-CN' 
-                          ? group.name_zh || group.name 
-                          : group.name}
-                      </MenuItem>
-                    ))}
+                    {departmentGroups.map(group => {
+                      const name = i18n.language === 'zh-TW' || i18n.language === 'zh-CN'
+                        ? group.name_zh || group.name
+                        : group.name;
+                      const pending = Number(group.pending_item_count) || 0;
+                      return (
+                        <MenuItem key={group.id} value={group.id}>
+                          {pending > 0 ? `${name} (${pending})` : name}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                 </FormControl>
               </Grid>
@@ -2582,6 +3079,17 @@ const Schedule = ({ noLayout = false }) => {
                       {t('schedule.batchEdit')}
                     </Button>
                   )}
+                  {isChecker && requireCheckerApproval && getMyOpenSubmission() && (
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      onClick={handleSubmitMyChanges}
+                      startIcon={<SendIcon />}
+                      sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                    >
+                      {t('schedule.submitChanges')} ({t('schedule.itemCount', { count: (getMyOpenSubmission().items || []).length })})
+                    </Button>
+                  )}
                   <Button
                     variant="outlined"
                     onClick={handleExportMatrixCsv}
@@ -2663,6 +3171,22 @@ const Schedule = ({ noLayout = false }) => {
                           }
                           sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
                         />
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={requireCheckerApproval}
+                              onChange={handleToggleCheckerApproval}
+                              color="warning"
+                              size="small"
+                            />
+                          }
+                          label={
+                            <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                              {t('schedule.requireCheckerApproval')}
+                            </Typography>
+                          }
+                          sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
+                        />
                         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {t('schedule.batchControl')}
@@ -2684,6 +3208,23 @@ const Schedule = ({ noLayout = false }) => {
                             sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
                           >
                             {t('schedule.disableAll')}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="warning"
+                            size="small"
+                            onClick={() => handleBatchUpdateCheckerApproval(true)}
+                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                          >
+                            {t('schedule.requireCheckerApproval')} · {t('schedule.enableAll')}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() => handleBatchUpdateCheckerApproval(false)}
+                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                          >
+                            {t('schedule.requireCheckerApproval')} · {t('schedule.disableAll')}
                           </Button>
                           <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
                             {t('schedule.checkerEditableRange')}
@@ -2749,6 +3290,73 @@ const Schedule = ({ noLayout = false }) => {
             </Grid>
           </Card>
 
+          {isChecker && requireCheckerApproval && getMyPendingSubmission() && (
+            <Card elevation={1} sx={{ mt: 2, p: 2, bgcolor: '#fff8e1' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {t('schedule.pendingLocked')}
+              </Typography>
+            </Card>
+          )}
+          {isChecker && requireCheckerApproval && getMyOpenSubmission()?.status === 'returned' && (
+            <Card elevation={1} sx={{ mt: 2, p: 2, bgcolor: '#ffebee' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {t('schedule.statusReturned')}
+                {getMyOpenSubmission().return_reason ? `：${getMyOpenSubmission().return_reason}` : ''}
+              </Typography>
+            </Card>
+          )}
+          {isApprover && getPendingSubmissions().length > 0 && (
+            <Card elevation={2} sx={{ mt: 2, p: 2 }}>
+              <Badge
+                badgeContent={getPendingSubmissions().reduce((sum, s) => sum + ((s.items || []).length), 0)}
+                color="warning"
+                max={999}
+                sx={{ mb: 1.5, '& .MuiBadge-badge': { fontWeight: 700 } }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, pr: 1.5 }}>
+                  {t('schedule.pendingSubmissions')}
+                </Typography>
+              </Badge>
+              {getPendingSubmissions().map((submission) => (
+                <Box
+                  key={submission.id}
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 1,
+                    py: 1,
+                    borderTop: '1px solid',
+                    borderColor: 'divider'
+                  }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 220 }}>
+                    {t('schedule.submittedBy')}: {submission.submitted_by_name_zh || submission.submitted_by_name}
+                    {' · '}
+                    {t('schedule.itemCount', { count: (submission.items || []).length })}
+                    {submission.submitted_at ? ` · ${dayjs(submission.submitted_at).tz('Asia/Hong_Kong').format('YYYY-MM-DD HH:mm')}` : ''}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="success"
+                    onClick={() => handleApproveSubmission(submission.id)}
+                  >
+                    {t('schedule.approveChanges')}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => handleReturnSubmission(submission.id)}
+                  >
+                    {t('schedule.returnChanges')}
+                  </Button>
+                </Box>
+              ))}
+            </Card>
+          )}
+
 
           {loading ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
@@ -2790,14 +3398,21 @@ const Schedule = ({ noLayout = false }) => {
                             minWidth: 100,
                           }}
                         >
-                          <Box>
-                            <Typography variant="body2" display="block" sx={{ fontWeight: 600 }}>
-                              {formatDateDisplay(date)}
-                            </Typography>
-                            <Typography variant="caption" display="block" sx={{ opacity: 0.9, mt: 0.5 }}>
-                              {date.format('ddd')}
-                            </Typography>
-                          </Box>
+                          <Badge
+                            variant="dot"
+                            color="warning"
+                            invisible={!dateHasPendingChange(date)}
+                            overlap="circular"
+                          >
+                            <Box>
+                              <Typography variant="body2" display="block" sx={{ fontWeight: 600 }}>
+                                {formatDateDisplay(date)}
+                              </Typography>
+                              <Typography variant="caption" display="block" sx={{ opacity: 0.9, mt: 0.5 }}>
+                                {date.format('ddd')}
+                              </Typography>
+                            </Box>
+                          </Badge>
                         </TableCell>
                       ))}
                     </TableRow>
@@ -2856,7 +3471,7 @@ const Schedule = ({ noLayout = false }) => {
                         </Box>
                       </TableCell>
                       {dates.map(date => {
-                        const schedule = getScheduleForUserAndDate(member.id, date);
+                        const schedule = getDisplaySchedule(member.id, date);
                         const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
                         const dateStr = date.format('YYYY-MM-DD');
                         return (
@@ -2867,12 +3482,21 @@ const Schedule = ({ noLayout = false }) => {
                               py: 1.5,
                               borderRight: '1px solid',
                               borderColor: 'divider',
+                              bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined,
                               '&:hover': {
-                                bgcolor: 'action.hover',
+                                bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.2)' : 'action.hover',
                               },
                             }}
                           >
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+                            {wrapWithChangeBadge(schedule?._change, (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center', width: '100%' }}>
+                              {canViewLeaveTypeDetail() && (
+                                <Tooltip title={t('schedule.changeHistory')}>
+                                  <IconButton size="small" onClick={() => handleOpenHistory(member.id, date)} sx={{ p: 0.25 }}>
+                                    <HistoryIcon sx={{ fontSize: '0.95rem' }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                               {editMode && canEdit ? (
                                 <>
                                   {canEditDate(date) ? (
@@ -2955,7 +3579,7 @@ const Schedule = ({ noLayout = false }) => {
                                           }}
                                         />
                                       )}
-                                      {schedule.id && (canEditDate(date) ? (
+                                      {(schedule.id || schedule._changeItemId) && (canEditDate(date) ? (
                                         <IconButton
                                           size="small"
                                           onClick={() => handleDeleteSchedule(schedule)}
@@ -3067,6 +3691,7 @@ const Schedule = ({ noLayout = false }) => {
                                 </>
                               )}
                             </Box>
+                            ))}
                           </TableCell>
                         );
                       })}
@@ -3857,6 +4482,56 @@ const Schedule = ({ noLayout = false }) => {
             >
               {t('common.save')}
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={historyDialogOpen}
+          onClose={() => {
+            setHistoryDialogOpen(false);
+            setHistoryLogs([]);
+            setHistoryTarget(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>{t('schedule.changeHistory')}</DialogTitle>
+          <DialogContent>
+            {historyTarget && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {t('schedule.scheduleDate')}: {historyTarget.dateStr}
+              </Typography>
+            )}
+            {historyLoading ? (
+              <Typography variant="body2">{t('common.loading')}</Typography>
+            ) : historyLogs.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">{t('schedule.noChangeHistory')}</Typography>
+            ) : (
+              historyLogs.map((log) => (
+                <Box key={log.id} sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {getChangeActionLabel(log.action)} · {log.actor_name || log.actor_name_zh}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    {log.created_at ? dayjs(log.created_at).tz('Asia/Hong_Kong').format('YYYY-MM-DD HH:mm') : ''}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    {t('schedule.beforeValue')}: {formatHistoryPayload(log.before_payload)}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    {t('schedule.afterValue')}: {formatHistoryPayload(log.after_payload)}
+                  </Typography>
+                  {log.note && (
+                    <Typography variant="caption" display="block" color="error.main">
+                      {t('schedule.returnReason')}: {log.note}
+                    </Typography>
+                  )}
+                </Box>
+              ))
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setHistoryDialogOpen(false)}>{t('common.confirm')}</Button>
           </DialogActions>
         </Dialog>
 

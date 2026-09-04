@@ -67,14 +67,17 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [schedulePendingCount, setSchedulePendingCount] = useState(0);
   const [isApprovalMember, setIsApprovalMember] = useState(false);
 
   useEffect(() => {
     fetchPendingCount();
+    fetchSchedulePendingCount();
     checkApprovalMembership();
     // 設置定時刷新，減少更新頻率
     const interval = setInterval(() => {
       fetchPendingCount();
+      fetchSchedulePendingCount();
     }, 60000); // 改為每60秒更新一次
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,6 +87,9 @@ const Layout = ({ children }) => {
   useEffect(() => {
     if (location.pathname.startsWith('/approval') || location.pathname === '/my-approvals') {
       fetchPendingCount();
+    }
+    if (location.pathname.startsWith('/schedule') || location.pathname.startsWith('/shift-management')) {
+      fetchSchedulePendingCount();
     }
   }, [location.pathname]);
 
@@ -100,6 +106,16 @@ const Layout = ({ children }) => {
     } catch (error) {
       console.error('獲取待批核數量錯誤:', error);
       setPendingCount(0);
+    }
+  };
+
+  const fetchSchedulePendingCount = async () => {
+    try {
+      const response = await axios.get('/api/schedules/changes/pending-count');
+      setSchedulePendingCount(response.data.pending_count || 0);
+    } catch (error) {
+      console.error('獲取待批核編更數量錯誤:', error);
+      setSchedulePendingCount(0);
     }
   };
 
@@ -156,7 +172,11 @@ const Layout = ({ children }) => {
       path: '/my-approvals', 
       show: isApprovalMember 
     },
-    { key: 'shiftManagement', icon: <CalendarTodayIcon />, path: '/shift-management', show: true },
+    { key: 'shiftManagement', icon: (
+        <Badge badgeContent={schedulePendingCount} color="warning" max={99999}>
+          <CalendarTodayIcon />
+        </Badge>
+      ), path: '/shift-management', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },

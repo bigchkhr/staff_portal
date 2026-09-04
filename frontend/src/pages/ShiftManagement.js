@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardActionArea,
+  Badge,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -34,6 +35,7 @@ const ShiftManagement = () => {
   const { user, isSystemAdmin } = useAuth();
   const [canViewApproverFeatures, setCanViewApproverFeatures] = useState(false);
   const [canViewAttendanceManagement, setCanViewAttendanceManagement] = useState(false);
+  const [schedulePendingCount, setSchedulePendingCount] = useState(0);
 
   useEffect(() => {
     const checkApproverPermission = async () => {
@@ -116,6 +118,16 @@ const ShiftManagement = () => {
 
     checkApproverPermission();
     checkApprovalMemberPermission();
+    const fetchSchedulePendingCount = async () => {
+      try {
+        const response = await axios.get('/api/schedules/changes/pending-count');
+        setSchedulePendingCount(response.data.pending_count || 0);
+      } catch (error) {
+        console.error('獲取待批核編更數量錯誤:', error);
+        setSchedulePendingCount(0);
+      }
+    };
+    fetchSchedulePendingCount();
   }, [user, isSystemAdmin]);
 
   const shiftItems = [
@@ -135,7 +147,11 @@ const ShiftManagement = () => {
     },
     {
       key: 'schedule',
-      icon: <CalendarTodayIcon sx={{ fontSize: 48 }} />,
+      icon: (
+        <Badge badgeContent={schedulePendingCount} color="warning" max={99999}>
+          <CalendarTodayIcon sx={{ fontSize: 48 }} />
+        </Badge>
+      ),
       path: '/schedule',
       translationKey: 'schedule',
       show: true

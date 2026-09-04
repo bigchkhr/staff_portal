@@ -1,4 +1,5 @@
 const Schedule = require('../database/models/Schedule');
+const ScheduleChange = require('../database/models/ScheduleChange');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const User = require('../database/models/User');
 const LeaveApplication = require('../database/models/LeaveApplication');
@@ -197,9 +198,30 @@ class ScheduleController {
         }
       }
       
+      const groupRow = await knex('department_groups').where('id', groupId).first();
+      const actorRole = await Schedule.getActorRole(req.user.id, groupId, req.user.is_system_admin);
+      let schedule_change_submissions = [];
+      if (actorRole.isAdmin || actorRole.isApprover || actorRole.isChecker) {
+        try {
+          schedule_change_submissions = await ScheduleChange.listForGroup(groupId, {
+            startDate: start_date || null,
+            endDate: end_date || null,
+            viewerUserId: req.user.id,
+            isApprover: actorRole.isApprover,
+            isAdmin: actorRole.isAdmin
+          });
+        } catch (changeErr) {
+          console.error('獲取編更呈交時發生錯誤:', changeErr);
+        }
+      }
+
       res.json({ 
         schedules: sanitizedSchedules,
-        outdoor_work_by_cell
+        outdoor_work_by_cell,
+        schedule_change_submissions,
+        require_checker_schedule_approval: groupRow
+          ? groupRow.require_checker_schedule_approval === true
+          : false
       });
     } catch (error) {
       console.error('Get schedules error:', error);
@@ -805,6 +827,8 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限編輯此群組的排班表，或該日期不在 Checker 可編輯範圍內' });
       }
 
+      const actorRole = await Schedule.getActorRole(userId, department_group_id, req.user.is_system_admin);
+
       // 檢查用戶是否屬於該群組
       const isInGroup = await Schedule.isUserInGroup(user_id, department_group_id);
       if (!isInGroup) {
@@ -856,7 +880,24 @@ class ScheduleController {
         updated_by_id: userId
       };
 
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, department_group_id, [{
+          user_id,
+          schedule_date,
+          action: 'upsert',
+          department_group_id,
+          start_time: scheduleData.start_time,
+          end_time: scheduleData.end_time,
+          leave_type_id: scheduleData.leave_type_id,
+          leave_session: scheduleData.leave_session,
+          store_id: scheduleData.store_id,
+          remarks: scheduleData.remarks
+        }]);
+      }
+
       const schedule = await Schedule.create(scheduleData);
+      await this._logDirectScheduleChange(department_group_id, userId, user_id, schedule_date, null, schedule);
+      await this._syncOfficialSchedule(schedule);
       res.status(201).json({ schedule, message: '排班記錄建立成功' });
     } catch (error) {
       console.error('Create schedule error:', error);
@@ -882,6 +923,8 @@ class ScheduleController {
 
       const departmentGroupId = departmentGroupIds[0];
 
+      const actorRole = await Schedule.getActorRole(userId, departmentGroupId, req.user.is_system_admin);
+
       // 驗證所有用戶是否屬於該群組，且每筆排班日期在 checker 可編輯範圍內（UTC+8）
       for (const schedule of schedules) {
         const canEditThis = await Schedule.canEditSchedule(userId, departmentGroupId, schedule.schedule_date);
@@ -900,6 +943,20 @@ class ScheduleController {
             message: `用戶 ID ${schedule.user_id} 不屬於指定的群組` 
           });
         }
+      }
+
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, departmentGroupId, schedules.map(s => ({
+          user_id: s.user_id,
+          schedule_date: s.schedule_date,
+          action: 'upsert',
+          department_group_id: departmentGroupId,
+          start_time: s.start_time || null,
+          end_time: s.end_time || null,
+          leave_type_id: s.leave_type_id !== undefined && s.leave_type_id !== null && s.leave_type_id !== '' ? Number(s.leave_type_id) : null,
+          leave_session: s.leave_session !== undefined && s.leave_session !== null && s.leave_session !== '' ? s.leave_session : null,
+          store_id: s.store_id !== undefined && s.store_id !== null && s.store_id !== '' ? Number(s.store_id) : null
+        })));
       }
 
       // 驗證所有 store_id（如果提供）
@@ -931,21 +988,9 @@ class ScheduleController {
       }));
 
       const createdSchedules = await Schedule.createBatch(schedulesData);
-      // 同步到月結表，令 /monthly-attendance-summary 顯示嘅排班時間與 schedules 表一致
       for (const s of createdSchedules) {
-        await monthlyAttendanceSummaryController.syncScheduleToMonthlySummary(
-          s.user_id,
-          s.schedule_date,
-          {
-            id: s.id,
-            store_id: s.store_id,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            leave_type_name_zh: s.leave_type_name_zh,
-            leave_session: s.leave_session,
-            is_approved_leave: false
-          }
-        );
+        await this._logDirectScheduleChange(departmentGroupId, userId, s.user_id, s.schedule_date, null, s);
+        await this._syncOfficialSchedule(s);
       }
       res.status(201).json({ 
         schedules: createdSchedules, 
@@ -974,6 +1019,8 @@ class ScheduleController {
       if (!canEdit) {
         return res.status(403).json({ message: '您沒有權限編輯此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
+
+      const actorRole = await Schedule.getActorRole(userId, schedule.department_group_id, req.user.is_system_admin);
 
       // 如果提供了leave_type_id，驗證該假期類型是否允許在排班表中輸入
       if (leave_type_id !== undefined) {
@@ -1025,21 +1072,31 @@ class ScheduleController {
         updateData.remarks = remarks !== null && String(remarks).trim() !== '' ? String(remarks).trim() : null;
       }
 
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
+          user_id: schedule.user_id,
+          schedule_date: schedule.schedule_date,
+          action: 'upsert',
+          department_group_id: updateData.department_group_id || schedule.department_group_id,
+          start_time: updateData.start_time !== undefined ? updateData.start_time : schedule.start_time,
+          end_time: updateData.end_time !== undefined ? updateData.end_time : schedule.end_time,
+          leave_type_id: updateData.leave_type_id !== undefined ? updateData.leave_type_id : schedule.leave_type_id,
+          leave_session: updateData.leave_session !== undefined ? updateData.leave_session : schedule.leave_session,
+          store_id: updateData.store_id !== undefined ? updateData.store_id : schedule.store_id,
+          remarks: updateData.remarks !== undefined ? updateData.remarks : schedule.remarks
+        }]);
+      }
+
       const updatedSchedule = await Schedule.update(id, updateData);
-      // 同步到月結表，令 /monthly-attendance-summary 顯示嘅排班時間與 schedules 表一致
-      await monthlyAttendanceSummaryController.syncScheduleToMonthlySummary(
+      await this._logDirectScheduleChange(
+        updatedSchedule.department_group_id,
+        userId,
         updatedSchedule.user_id,
         updatedSchedule.schedule_date,
-        {
-          id: updatedSchedule.id,
-          store_id: updatedSchedule.store_id,
-          start_time: updatedSchedule.start_time,
-          end_time: updatedSchedule.end_time,
-          leave_type_name_zh: updatedSchedule.leave_type_name_zh,
-          leave_session: updatedSchedule.leave_session,
-          is_approved_leave: false
-        }
+        schedule,
+        updatedSchedule
       );
+      await this._syncOfficialSchedule(updatedSchedule);
       res.json({ schedule: updatedSchedule, message: '排班記錄更新成功' });
     } catch (error) {
       console.error('Update schedule error:', error);
@@ -1064,7 +1121,41 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限刪除此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
+      const actorRole = await Schedule.getActorRole(userId, schedule.department_group_id, req.user.is_system_admin);
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
+          user_id: schedule.user_id,
+          schedule_date: schedule.schedule_date,
+          action: 'delete',
+          department_group_id: schedule.department_group_id,
+          start_time: null,
+          end_time: null,
+          leave_type_id: null,
+          leave_session: null,
+          store_id: null,
+          remarks: null
+        }]);
+      }
+
       await Schedule.delete(id);
+      await this._logDirectScheduleChange(
+        schedule.department_group_id,
+        userId,
+        schedule.user_id,
+        schedule.schedule_date,
+        schedule,
+        { action: 'delete' }
+      );
+      await this._syncOfficialSchedule({
+        user_id: schedule.user_id,
+        schedule_date: schedule.schedule_date,
+        id: null,
+        store_id: null,
+        start_time: null,
+        end_time: null,
+        leave_type_name_zh: null,
+        leave_session: null
+      });
       res.json({ message: '排班記錄刪除成功' });
     } catch (error) {
       console.error('Delete schedule error:', error);
@@ -1265,6 +1356,14 @@ class ScheduleController {
     return out;
   }
 
+  async _attachPendingItemCounts(groups, userId, isSystemAdmin) {
+    const counts = await ScheduleChange.countPendingItemsByGroupForUser(userId, isSystemAdmin);
+    return (groups || []).map((group) => ({
+      ...group,
+      pending_item_count: counts[Number(group.id)] || 0
+    }));
+  }
+
   // 獲取用戶有權限查看的排班群組列表（包括直接所屬和通過授權群組關聯的）
   async getAccessibleScheduleGroups(req, res) {
     try {
@@ -1276,7 +1375,11 @@ class ScheduleController {
       // 系統管理員可以查看所有群組
       if (isSystemAdmin) {
         const allGroups = await DepartmentGroup.findAll({ closed: false });
-        const groupsWithDateStr = allGroups.map(g => this._formatGroupDateFields(g));
+        const groupsWithDateStr = await this._attachPendingItemCounts(
+          allGroups.map(g => this._formatGroupDateFields(g)),
+          userId,
+          true
+        );
         return res.json({ groups: groupsWithDateStr });
       }
 
@@ -1313,7 +1416,9 @@ class ScheduleController {
         }
       });
       
-      res.json({ groups: allAccessibleGroups });
+      res.json({
+        groups: await this._attachPendingItemCounts(allAccessibleGroups, userId, false)
+      });
     } catch (error) {
       console.error('Get accessible schedule groups error:', error);
       res.status(500).json({ message: '獲取可訪問的排班群組列表時發生錯誤', error: error.message });
@@ -1341,11 +1446,11 @@ class ScheduleController {
   async updateCheckerEditPermission(req, res) {
     try {
       const { department_group_id } = req.params;
-      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date } = req.body;
+      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date, require_checker_schedule_approval } = req.body;
       const userId = req.user.id;
 
-      if (allow_checker_edit === undefined) {
-        return res.status(400).json({ message: '缺少必填欄位 allow_checker_edit' });
+      if (allow_checker_edit === undefined && require_checker_schedule_approval === undefined) {
+        return res.status(400).json({ message: '缺少必填欄位 allow_checker_edit 或 require_checker_schedule_approval' });
       }
 
       // 檢查用戶是否為 approver1, approver2 或 approver3
@@ -1368,7 +1473,13 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限修改此設置' });
       }
 
-      const updatePayload = { allow_checker_edit: Boolean(allow_checker_edit) };
+      const updatePayload = {};
+      if (allow_checker_edit !== undefined) {
+        updatePayload.allow_checker_edit = Boolean(allow_checker_edit);
+      }
+      if (require_checker_schedule_approval !== undefined) {
+        updatePayload.require_checker_schedule_approval = Boolean(require_checker_schedule_approval);
+      }
       if (checker_editable_start_date !== undefined) {
         updatePayload.checker_editable_start_date = this._normalizeCheckerDate(checker_editable_start_date);
       }
@@ -1393,16 +1504,17 @@ class ScheduleController {
   // allow_checker_edit 可選；若只傳 checker_editable_start_date / checker_editable_end_date，則只更新「可編輯範圍」並套用到所有群組
   async batchUpdateCheckerEditPermission(req, res) {
     try {
-      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date } = req.body;
+      const { allow_checker_edit, checker_editable_start_date, checker_editable_end_date, require_checker_schedule_approval } = req.body;
       const userId = req.user.id;
 
       const updatePayload = {};
       if (allow_checker_edit !== undefined) updatePayload.allow_checker_edit = Boolean(allow_checker_edit);
+      if (require_checker_schedule_approval !== undefined) updatePayload.require_checker_schedule_approval = Boolean(require_checker_schedule_approval);
       if (checker_editable_start_date !== undefined) updatePayload.checker_editable_start_date = (checker_editable_start_date === null || checker_editable_start_date === '') ? null : this._normalizeCheckerDate(checker_editable_start_date);
       if (checker_editable_end_date !== undefined) updatePayload.checker_editable_end_date = (checker_editable_end_date === null || checker_editable_end_date === '') ? null : this._normalizeCheckerDate(checker_editable_end_date);
 
       if (Object.keys(updatePayload).length === 0) {
-        return res.status(400).json({ message: '請提供 allow_checker_edit 或 checker_editable_start_date / checker_editable_end_date' });
+        return res.status(400).json({ message: '請提供 allow_checker_edit、require_checker_schedule_approval 或 checker_editable_start_date / checker_editable_end_date' });
       }
 
       // 獲取用戶所屬的授權群組
@@ -1439,11 +1551,223 @@ class ScheduleController {
       res.json({ 
         message: `成功更新 ${groupsToUpdate.length} 個群組的設置`,
         updated_count: groupsToUpdate.length,
-        ...(updatePayload.allow_checker_edit !== undefined && { allow_checker_edit: updatePayload.allow_checker_edit })
+        ...(updatePayload.allow_checker_edit !== undefined && { allow_checker_edit: updatePayload.allow_checker_edit }),
+        ...(updatePayload.require_checker_schedule_approval !== undefined && { require_checker_schedule_approval: updatePayload.require_checker_schedule_approval })
       });
     } catch (error) {
       console.error('Batch update checker edit permission error:', error);
       res.status(500).json({ message: '批量更新設置失敗', error: error.message });
+    }
+  }
+
+  _handleChangeError(error, res) {
+    const messages = {
+      PENDING_SUBMISSION_EXISTS: { status: 409, message: '已有待批核呈交，請等待 Approver 批核或退回後再修改' },
+      ITEM_NOT_EDITABLE: { status: 409, message: '此草稿項目目前不可修改' },
+      FORBIDDEN: { status: 403, message: '您沒有權限執行此操作' },
+      INVALID_STATUS: { status: 409, message: '呈交狀態不正確，無法執行此操作' },
+      EMPTY_SUBMISSION: { status: 400, message: '沒有可呈交的改動' }
+    };
+    const mapped = messages[error.code];
+    if (mapped) {
+      res.status(mapped.status).json({ message: mapped.message });
+      return true;
+    }
+    return false;
+  }
+
+  async _respondCheckerDraft(req, res, departmentGroupId, items) {
+    try {
+      const submission = await ScheduleChange.upsertDraftItems(
+        departmentGroupId,
+        req.user.id,
+        items,
+        req.user.id
+      );
+      return res.status(200).json({
+        requires_approval: true,
+        submission,
+        message: '已存入草稿，請呈交後待 Approver 批核方會生效'
+      });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      throw error;
+    }
+  }
+
+  async _logDirectScheduleChange(departmentGroupId, actorId, userId, scheduleDate, before, after) {
+    try {
+      await ScheduleChange.addLog({
+        department_group_id: departmentGroupId,
+        user_id: userId,
+        schedule_date: Schedule._normalizeDateStr(scheduleDate),
+        actor_id: actorId,
+        action: after && after.action === 'delete' ? 'direct_delete' : 'direct_edit',
+        before_payload: before ? Schedule.snapshot(before) : null,
+        after_payload: after && after.action === 'delete' ? { action: 'delete' } : Schedule.snapshot(after)
+      });
+    } catch (error) {
+      console.error('Log direct schedule change error:', error);
+    }
+  }
+
+  async _syncOfficialSchedule(schedule) {
+    if (!schedule) return;
+    await monthlyAttendanceSummaryController.syncScheduleToMonthlySummary(
+      schedule.user_id,
+      schedule.schedule_date,
+      {
+        id: schedule.id || null,
+        store_id: schedule.store_id || null,
+        start_time: schedule.start_time || null,
+        end_time: schedule.end_time || null,
+        leave_type_name_zh: schedule.leave_type_name_zh || null,
+        leave_session: schedule.leave_session || null,
+        is_approved_leave: false
+      }
+    );
+  }
+
+  async _assertCanReviewSubmission(req, submission) {
+    if (!submission) return false;
+    const role = await Schedule.getActorRole(req.user.id, submission.department_group_id, req.user.is_system_admin);
+    return role.isAdmin || role.isApprover;
+  }
+
+  async submitScheduleChange(req, res) {
+    try {
+      const submission = await ScheduleChange.findSubmissionById(req.params.id);
+      if (!submission) {
+        return res.status(404).json({ message: '呈交記錄不存在' });
+      }
+      const submitted = await ScheduleChange.submit(req.params.id, req.user.id);
+      res.json({ submission: submitted, message: '已呈交，等待 Approver 批核' });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      console.error('Submit schedule change error:', error);
+      res.status(500).json({ message: '呈交失敗', error: error.message });
+    }
+  }
+
+  async approveScheduleChange(req, res) {
+    try {
+      const submission = await ScheduleChange.findSubmissionById(req.params.id);
+      if (!submission) {
+        return res.status(404).json({ message: '呈交記錄不存在' });
+      }
+      const canReview = await this._assertCanReviewSubmission(req, submission);
+      if (!canReview) {
+        return res.status(403).json({ message: '只有 Approver 可以批核編更' });
+      }
+
+      const { submission: approved, applied } = await ScheduleChange.approve(req.params.id, req.user.id);
+      for (const { item, result } of applied) {
+        if (result && result.deleted) {
+          await this._syncOfficialSchedule({
+            user_id: item.user_id,
+            schedule_date: item.schedule_date,
+            id: null,
+            store_id: null,
+            start_time: null,
+            end_time: null,
+            leave_type_name_zh: null,
+            leave_session: null
+          });
+        } else if (result) {
+          const official = await Schedule.findById(result.id);
+          await this._syncOfficialSchedule(official || result);
+        }
+      }
+      res.json({
+        submission: approved,
+        applied: applied.map(({ item, result }) => ({
+          user_id: item.user_id,
+          schedule_date: item.schedule_date,
+          deleted: !!(result && result.deleted),
+          schedule: result && !result.deleted ? result : null,
+          item
+        })),
+        message: '已批核，編更已生效'
+      });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      console.error('Approve schedule change error:', error);
+      res.status(500).json({ message: '批核失敗', error: error.message });
+    }
+  }
+
+  async returnScheduleChange(req, res) {
+    try {
+      const submission = await ScheduleChange.findSubmissionById(req.params.id);
+      if (!submission) {
+        return res.status(404).json({ message: '呈交記錄不存在' });
+      }
+      const canReview = await this._assertCanReviewSubmission(req, submission);
+      if (!canReview) {
+        return res.status(403).json({ message: '只有 Approver 可以退回編更' });
+      }
+
+      const returned = await ScheduleChange.returnSubmission(
+        req.params.id,
+        req.user.id,
+        req.body?.reason || req.body?.return_reason || null
+      );
+      res.json({ submission: returned, message: '已退回，草稿已保留供 Checker 修改後再呈交' });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      console.error('Return schedule change error:', error);
+      res.status(500).json({ message: '退回失敗', error: error.message });
+    }
+  }
+
+  async deleteScheduleChangeItem(req, res) {
+    try {
+      const submission = await ScheduleChange.removeDraftItem(req.params.itemId, req.user.id);
+      if (!submission) {
+        return res.status(404).json({ message: '草稿項目不存在' });
+      }
+      res.json({ submission, message: '已從草稿移除' });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      console.error('Delete schedule change item error:', error);
+      res.status(500).json({ message: '移除草稿項目失敗', error: error.message });
+    }
+  }
+
+  async getPendingChangeCount(req, res) {
+    try {
+      const pending_count = await ScheduleChange.countPendingItemsForUser(
+        req.user.id,
+        req.user.is_system_admin
+      );
+      res.json({ pending_count });
+    } catch (error) {
+      console.error('Get pending schedule change count error:', error);
+      res.status(500).json({ message: '取得待批核編更數量失敗', error: error.message });
+    }
+  }
+
+  async getScheduleChangeLogs(req, res) {
+    try {
+      const { department_group_id, user_id, schedule_date, start_date, end_date } = req.query;
+      if (!department_group_id) {
+        return res.status(400).json({ message: '必須指定群組ID' });
+      }
+      const role = await Schedule.getActorRole(req.user.id, department_group_id, req.user.is_system_admin);
+      if (!role.isAdmin && !role.isApprover && !role.isChecker) {
+        return res.status(403).json({ message: '您沒有權限查看編更紀錄' });
+      }
+      const logs = await ScheduleChange.findLogs({
+        departmentGroupId: department_group_id,
+        userId: user_id || null,
+        scheduleDate: schedule_date || null,
+        startDate: start_date || null,
+        endDate: end_date || null
+      });
+      res.json({ logs });
+    } catch (error) {
+      console.error('Get schedule change logs error:', error);
+      res.status(500).json({ message: '取得編更紀錄失敗', error: error.message });
     }
   }
 }

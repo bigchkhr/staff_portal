@@ -288,6 +288,69 @@ class Schedule {
     return null;
   }
 
+  // 取得用戶在該群組的排班角色。同時是 checker 與 approver 時視為 approver（可直接改更）
+  static async getActorRole(userId, departmentGroupId, isSystemAdmin = false) {
+    if (isSystemAdmin) {
+      return {
+        isAdmin: true,
+        isApprover: true,
+        isChecker: false,
+        requireApproval: false,
+        group: null
+      };
+    }
+
+    const group = await knex('department_groups')
+      .where('id', departmentGroupId)
+      .first();
+
+    if (!group) {
+      return {
+        isAdmin: false,
+        isApprover: false,
+        isChecker: false,
+        requireApproval: false,
+        group: null
+      };
+    }
+
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+    const delegationGroupIds = delegationGroups.map(g => Number(g.id));
+
+    const isChecker = !!(group.checker_id && delegationGroupIds.includes(Number(group.checker_id)));
+    const isApprover1 = !!(group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id)));
+    const isApprover2 = !!(group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id)));
+    const isApprover3 = !!(group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id)));
+    const isApprover = isApprover1 || isApprover2 || isApprover3;
+    const requireApproval = !isApprover && isChecker && group.require_checker_schedule_approval === true;
+
+    return {
+      isAdmin: false,
+      isApprover,
+      isChecker,
+      requireApproval,
+      group
+    };
+  }
+
+  static snapshot(schedule) {
+    if (!schedule) return null;
+    return {
+      id: schedule.id || null,
+      user_id: schedule.user_id || null,
+      department_group_id: schedule.department_group_id || null,
+      schedule_date: this._normalizeDateStr(schedule.schedule_date),
+      start_time: schedule.start_time || null,
+      end_time: schedule.end_time || null,
+      leave_type_id: schedule.leave_type_id || null,
+      leave_session: schedule.leave_session || null,
+      store_id: schedule.store_id || null,
+      remarks: schedule.remarks || null
+    };
+  }
+
   // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
   // scheduleDate: 可選，YYYY-MM-DD 或 Date；若為 checker 且群組設有可編輯範圍，會檢查該日期是否在範圍內（UTC+8）
   static async canEditSchedule(userId, departmentGroupId, scheduleDate = null) {

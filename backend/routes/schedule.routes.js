@@ -12,6 +12,14 @@ router.get('/accessible-groups', scheduleController.getAccessibleScheduleGroups.
 // 以員工編號 + 日期範圍查詢單一員工排班（只限 approver1/2/3 或系統管理員）
 router.get('/user-schedules', scheduleController.getUserSchedulesForApprover.bind(scheduleController));
 
+// 編更呈交／批核／紀錄（必須放在 /:id 之前）
+router.get('/change-logs', scheduleController.getScheduleChangeLogs.bind(scheduleController));
+router.get('/changes/pending-count', scheduleController.getPendingChangeCount.bind(scheduleController));
+router.post('/changes/:id/submit', scheduleController.submitScheduleChange.bind(scheduleController));
+router.post('/changes/:id/approve', scheduleController.approveScheduleChange.bind(scheduleController));
+router.post('/changes/:id/return', scheduleController.returnScheduleChange.bind(scheduleController));
+router.delete('/changes/items/:itemId', scheduleController.deleteScheduleChangeItem.bind(scheduleController));
+
 // 更新群組的 checker 編輯權限設置（必須放在 /:id 之前）
 router.put('/group/:department_group_id/checker-edit-permission', scheduleController.updateCheckerEditPermission.bind(scheduleController));
 
