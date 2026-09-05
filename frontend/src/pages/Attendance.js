@@ -58,6 +58,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
 import { getRosterDurationMinutes } from '../utils/rosterDuration';
+import { toHKCalendarDate } from '../utils/dateFormat';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -368,9 +369,7 @@ const Attendance = ({ noLayout = false }) => {
       return;
     }
 
-    const dateStr = typeof item.attendance_date === 'string'
-      ? item.attendance_date.split('T')[0].split(' ')[0].substring(0, 10)
-      : `${item.attendance_date.getFullYear()}-${String(item.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(item.attendance_date.getDate()).padStart(2, '0')}`;
+    const dateStr = toHKCalendarDate(item.attendance_date);
 
     setEditingAttendance(item);
     setEditClockInTime(item.attendance?.clock_in_time ? dayjs(item.attendance.clock_in_time, 'HH:mm:ss') : null);

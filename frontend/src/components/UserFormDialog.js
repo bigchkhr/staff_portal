@@ -19,6 +19,7 @@ import {
 import { Refresh as RefreshIcon, Visibility, VisibilityOff } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { toHKCalendarDate } from '../utils/dateFormat';
 
 const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null, isHRMember = false, onToggleForcePasswordChange = null }) => {
   const { t, i18n } = useTranslation();
@@ -60,10 +61,8 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           password: '',
           department_id: initialData.department_id || '',
           position_id: initialData.position_id || '',
-          hire_date: initialData.hire_date ? initialData.hire_date.split('T')[0] : '',
-          termination_date: initialData.termination_date
-            ? initialData.termination_date.split('T')[0]
-            : '',
+          hire_date: toHKCalendarDate(initialData.hire_date) || '',
+          termination_date: toHKCalendarDate(initialData.termination_date) || '',
           deactivated: !!initialData.deactivated,
           force_password_change: !!initialData.force_password_change
         });

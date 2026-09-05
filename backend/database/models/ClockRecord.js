@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { toHKCalendarDate } = require('../../utils/hkDate');
 
 class ClockRecord {
   // 取得所有打卡記錄（可選篩選條件）
@@ -156,19 +157,9 @@ class ClockRecord {
         .orderBy('attendance_date', 'asc')
         .orderBy('clock_time', 'asc');
       
-      // 格式化日期為 YYYY-MM-DD 字符串格式
       return results.map(record => {
         if (record.attendance_date) {
-          if (record.attendance_date instanceof Date) {
-            // 使用本地時間的年份、月份、日期
-            const year = record.attendance_date.getFullYear();
-            const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
-            const day = String(record.attendance_date.getDate()).padStart(2, '0');
-            record.attendance_date = `${year}-${month}-${day}`;
-          } else if (typeof record.attendance_date === 'string') {
-            // 移除時間部分
-            record.attendance_date = record.attendance_date.split('T')[0].split(' ')[0].substring(0, 10);
-          }
+          record.attendance_date = toHKCalendarDate(record.attendance_date) || record.attendance_date;
         }
         return record;
       });

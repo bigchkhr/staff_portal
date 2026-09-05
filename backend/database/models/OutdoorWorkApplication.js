@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { toHKCalendarDate } = require('../../utils/hkDate');
 const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
 const APPROVAL_STAGE_CONFIG = [
@@ -393,16 +394,7 @@ class OutdoorWorkApplication {
 
   /** @returns {string|null} */
   static normalizeCalendarDate(value) {
-    if (value == null || value === '') return null;
-    if (value instanceof Date) {
-      const y = value.getFullYear();
-      const m = String(value.getMonth() + 1).padStart(2, '0');
-      const d = String(value.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
-    const s = String(value).trim();
-    const head = s.split('T')[0].split(' ')[0];
-    return head.length >= 10 ? head.substring(0, 10) : head;
+    return toHKCalendarDate(value);
   }
 
   static toCalendarSummary(app) {

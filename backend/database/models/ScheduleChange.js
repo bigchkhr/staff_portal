@@ -5,17 +5,6 @@ const OPEN_STATUSES = ['draft', 'returned'];
 const VISIBLE_STATUSES = ['draft', 'returned', 'pending'];
 
 function formatDate(val) {
-  if (val === undefined || val === null || val === '') return null;
-  if (typeof val === 'string') {
-    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
-  }
-  if (val && typeof val.getFullYear === 'function') {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const d = String(val.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
   return Schedule._normalizeDateStr(val);
 }
 

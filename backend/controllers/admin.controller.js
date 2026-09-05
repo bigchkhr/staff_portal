@@ -6,6 +6,7 @@ const Department = require('../database/models/Department');
 const Position = require('../database/models/Position');
 const { hashPassword } = require('../utils/password');
 const knex = require('../config/database');
+const { toHKCalendarDate } = require('../utils/hkDate');
 
 class AdminController {
   async createUser(req, res) {
@@ -57,10 +58,10 @@ class AdminController {
         password_hash: passwordHash,
         department_id: department_id || null,
         position_id: position_id || null,
-        hire_date: hire_date || null,
+        hire_date: hire_date ? toHKCalendarDate(hire_date) : null,
         termination_date:
           termination_date && String(termination_date).trim()
-            ? String(termination_date).trim().split('T')[0]
+            ? toHKCalendarDate(String(termination_date).trim())
             : null,
         // 帳戶是否停用（預設為未停用，可由 HR/System Admin 指定）
         deactivated: deactivated !== undefined ? !!deactivated : false,
@@ -88,7 +89,13 @@ class AdminController {
       if (Object.prototype.hasOwnProperty.call(updateData, 'termination_date')) {
         const td = updateData.termination_date;
         updateData.termination_date =
-          td && String(td).trim() ? String(td).trim().split('T')[0] : null;
+          td && String(td).trim() ? toHKCalendarDate(String(td).trim()) : null;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updateData, 'hire_date')) {
+        const hd = updateData.hire_date;
+        updateData.hire_date =
+          hd && String(hd).trim() ? toHKCalendarDate(String(hd).trim()) : null;
       }
 
       if (updateData.password) {

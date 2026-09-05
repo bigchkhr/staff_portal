@@ -1,5 +1,6 @@
 const PublicHoliday = require('../database/models/PublicHoliday');
 const User = require('../database/models/User');
+const { toHKCalendarDate } = require('../utils/hkDate');
 
 class PublicHolidayController {
   // 獲取法定假期列表
@@ -173,9 +174,11 @@ class PublicHolidayController {
         return res.status(400).json({ message: '日期格式無效' });
       }
 
-      // 確保日期格式為 YYYY-MM-DD
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const startDateStr = toHKCalendarDate(start_date);
+      const endDateStr = toHKCalendarDate(end_date);
+      if (!startDateStr || !endDateStr) {
+        return res.status(400).json({ message: '日期格式無效' });
+      }
 
       const holidays = await PublicHoliday.getHolidaysInRange(startDateStr, endDateStr);
       

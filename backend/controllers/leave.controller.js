@@ -7,6 +7,7 @@ const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
 const path = require('path');
+const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
 
 class LeaveController {
   async createApplication(req, res) {
@@ -65,12 +66,12 @@ class LeaveController {
       }
 
       // 優先使用前端發送的year參數，如果沒有則從start_date計算
-      const applicationYear = year ? parseInt(year) : new Date(start_date).getFullYear();
+      const applicationYear = year ? parseInt(year, 10) : parseInt((toHKCalendarDate(start_date) || '').slice(0, 4), 10);
 
       // 對於 e-flow 申請，如果沒有提供申請日期，自動設置為當前日期
-      let finalApplicationDate = application_date;
+      let finalApplicationDate = toHKCalendarDate(application_date);
       if (actualFlowType === 'e-flow' && !finalApplicationDate) {
-        finalApplicationDate = new Date().toISOString().split('T')[0]; // 格式：YYYY-MM-DD
+        finalApplicationDate = todayHK();
       }
 
       let balanceRecord = null;

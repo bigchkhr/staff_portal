@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Paper,
@@ -25,7 +25,6 @@ import {
   Chip,
   Badge,
   IconButton,
-  Tooltip,
   FormControlLabel,
   Switch,
   Card,
@@ -48,7 +47,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   FileDownload as FileDownloadIcon,
-  History as HistoryIcon,
   Send as SendIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -61,6 +59,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
 import { getRosterDurationMinutes } from '../utils/rosterDuration';
+import { HK_TZ, toHKCalendarDate, toHKDayjs } from '../utils/dateFormat';
 
 // 配置 dayjs 時區插件
 dayjs.extend(utc);
@@ -68,6 +67,30 @@ dayjs.extend(timezone);
 
 // 設置默認時區為香港（UTC+8）
 dayjs.tz.setDefault('Asia/Hong_Kong');
+
+const MAX_EDIT_DAYS = 7;
+
+const buildDateRange = (from, to) => {
+  const start = toHKDayjs(from);
+  const end = toHKDayjs(to);
+  if (!start || !end) return [];
+  const dates = [];
+  let current = start;
+  while (current.isBefore(end) || current.isSame(end, 'day')) {
+    dates.push(current);
+    current = current.add(1, 'day');
+  }
+  return dates;
+};
+
+const makeCellKey = (userId, dateStr) => `${Number(userId)}|${dateStr}`;
+
+const parseCellKey = (key) => {
+  const text = String(key || '');
+  const idx = text.indexOf('|');
+  if (idx < 0) return { userId: NaN, dateStr: '' };
+  return { userId: Number(text.slice(0, idx)), dateStr: text.slice(idx + 1) };
+};
 
 const Schedule = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
@@ -78,9 +101,11 @@ const Schedule = ({ noLayout = false }) => {
   // 根據語言格式化日期顯示
   const formatDateDisplay = (date) => {
     if (!date) return '';
+    const dateStr = toHKCalendarDate(date);
+    if (!dateStr) return '';
+    const d = dayjs.tz(dateStr, 'YYYY-MM-DD', HK_TZ);
     const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
-    // 中文使用 DD/MM，英文使用 MM/DD
-    return isChinese ? date.format('DD/MM') : date.format('MM/DD');
+    return isChinese ? d.format('DD/MM') : d.format('MM/DD');
   };
   const [departmentGroups, setDepartmentGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
@@ -130,12 +155,41 @@ const Schedule = ({ noLayout = false }) => {
   const [historyLogs, setHistoryLogs] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyTarget, setHistoryTarget] = useState(null);
+  const [editSetupOpen, setEditSetupOpen] = useState(false);
+  const [setupMemberIds, setSetupMemberIds] = useState([]);
+  const [setupStartDate, setSetupStartDate] = useState(null);
+  const [setupEndDate, setSetupEndDate] = useState(null);
+  const [editMemberIds, setEditMemberIds] = useState([]);
+  const [editRangeStart, setEditRangeStart] = useState(null);
+  const [editRangeEnd, setEditRangeEnd] = useState(null);
+  const [selectedCellKeys, setSelectedCellKeys] = useState([]);
+  const [selectionAnchor, setSelectionAnchor] = useState(null);
+
+  const viewDates = useMemo(() => buildDateRange(startDate, endDate), [startDate, endDate]);
+  const editDates = useMemo(() => buildDateRange(editRangeStart, editRangeEnd), [editRangeStart, editRangeEnd]);
+  const dates = editMode && editDates.length > 0 ? editDates : viewDates;
+  const displayedMembers = useMemo(() => {
+    if (!editMode || !editMemberIds.length) return groupMembers;
+    const idSet = new Set(editMemberIds.map(Number));
+    return groupMembers.filter((m) => idSet.has(Number(m.id)));
+  }, [editMode, groupMembers, editMemberIds]);
+  const selectedCellKeySet = useMemo(() => new Set(selectedCellKeys), [selectedCellKeys]);
 
   useEffect(() => {
     fetchDepartmentGroups();
     fetchLeaveTypes();
     fetchStores();
   }, []);
+
+  useEffect(() => {
+    setEditMode(false);
+    setEditSetupOpen(false);
+    setSelectedCellKeys([]);
+    setSelectionAnchor(null);
+    setEditMemberIds([]);
+    setEditRangeStart(null);
+    setEditRangeEnd(null);
+  }, [selectedGroupId]);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -147,35 +201,23 @@ const Schedule = ({ noLayout = false }) => {
 
   // 處理開始日期變更，自動將結束日期設定為該月的最後一天
   const handleStartDateChange = (newValue) => {
-    if (!newValue || !newValue.isValid()) return;
-    
-    setStartDate(newValue);
-    
-    // 自動將結束日期設定為該月的最後一天
-    const lastDayOfMonth = newValue.endOf('month');
-    setEndDate(lastDayOfMonth);
+    const next = toHKDayjs(newValue);
+    if (!next) return;
+    setStartDate(next);
+    setEndDate(next.endOf('month'));
   };
 
-  // 處理結束日期變更，確保在同一個月內
   const handleEndDateChange = (newValue) => {
-    if (!newValue || !newValue.isValid()) return;
-    
-    // 如果開始日期存在，確保結束日期在同一個月
-    if (startDate && startDate.isValid()) {
-      const startMonth = startDate.month();
-      const startYear = startDate.year();
-      const endMonth = newValue.month();
-      const endYear = newValue.year();
-      
-      // 如果不在同一個月，調整為該月的最後一天
-      if (startMonth !== endMonth || startYear !== endYear) {
-        const lastDayOfMonth = startDate.endOf('month');
-        setEndDate(lastDayOfMonth);
+    const next = toHKDayjs(newValue);
+    if (!next) return;
+    const viewStart = toHKDayjs(startDate);
+    if (viewStart) {
+      if (next.month() !== viewStart.month() || next.year() !== viewStart.year()) {
+        setEndDate(viewStart.endOf('month'));
         return;
       }
     }
-    
-    setEndDate(newValue);
+    setEndDate(next);
   };
 
   // 當群組改變時，更新 allow_checker_edit 及 checker 可編輯日期範圍（一律以 UTC+8 香港日曆解讀）
@@ -187,10 +229,10 @@ const Schedule = ({ noLayout = false }) => {
         setRequireCheckerApproval(group.require_checker_schedule_approval === true);
         const start = group.checker_editable_start_date;
         const end = group.checker_editable_end_date;
-        const startStr = start != null && start !== '' ? dayjs(start).tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-        const endStr = end != null && end !== '' ? dayjs(end).tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-        setCheckerEditableStartDate(startStr ? dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong') : null);
-        setCheckerEditableEndDate(endStr ? dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong') : null);
+        const startStr = toHKCalendarDate(start);
+        const endStr = toHKCalendarDate(end);
+        setCheckerEditableStartDate(startStr ? dayjs.tz(startStr, 'YYYY-MM-DD', HK_TZ) : null);
+        setCheckerEditableEndDate(endStr ? dayjs.tz(endStr, 'YYYY-MM-DD', HK_TZ) : null);
       }
     }
   }, [selectedGroupId, departmentGroups]);
@@ -282,8 +324,11 @@ const Schedule = ({ noLayout = false }) => {
         if (!start.isValid() || !end.isValid()) {
           throw new Error('Invalid date range');
         }
-        startDateStr = start.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-        endDateStr = end.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+        startDateStr = toHKCalendarDate(start);
+        endDateStr = toHKCalendarDate(end);
+        if (!startDateStr || !endDateStr) {
+          throw new Error('Invalid date range');
+        }
       } catch (error) {
         console.error('Error formatting dates for API:', error);
         throw error;
@@ -417,10 +462,11 @@ const Schedule = ({ noLayout = false }) => {
 
   const renderTerminationDateBelowPosition = (terminationDate, fontSizeRem) => {
     if (!canViewLeaveTypeDetail() || !terminationDate) return null;
-    const d = dayjs(terminationDate);
-    if (!d.isValid()) return null;
+    const dateKey = toHKCalendarDate(terminationDate);
+    if (!dateKey) return null;
+    const d = dayjs.tz(dateKey, 'YYYY-MM-DD', HK_TZ);
     const dateStr =
-      i18n.language === 'en' ? d.format('MMM D, YYYY') : d.format('YYYY-MM-DD');
+      i18n.language === 'en' ? d.format('MMM D, YYYY') : dateKey;
     return (
       <Typography
         variant="caption"
@@ -461,22 +507,40 @@ const Schedule = ({ noLayout = false }) => {
     );
   };
 
-  // 將 API 回傳的日期（可能為 YYYY-MM-DD 或 ISO）統一解讀為 UTC+8 香港日曆的 YYYY-MM-DD
-  const toHKDateStr = (val) => {
-    if (val == null || val === '') return null;
-    const d = dayjs(val);
-    if (!d.isValid()) return null;
-    return d.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-  };
+  // 將 API 回傳的日期統一解讀為 UTC+8 香港日曆的 YYYY-MM-DD
+  const toHKDateStr = (val) => toHKCalendarDate(val);
 
-  const scheduleDateKey = (val) => {
-    if (val == null || val === '') return null;
-    if (typeof val === 'string') {
-      const match = val.match(/^(\d{4}-\d{2}-\d{2})/);
-      if (match) return match[1];
-    }
-    return toHKDateStr(val);
-  };
+  const scheduleDateKey = (val) => toHKCalendarDate(val);
+
+  const scheduleByCellKey = useMemo(() => {
+    const map = new Map();
+    (schedules || []).forEach((s) => {
+      const dateStr = scheduleDateKey(s.schedule_date);
+      if (!dateStr) return;
+      map.set(makeCellKey(s.user_id, dateStr), s);
+    });
+    return map;
+  }, [schedules]);
+
+  const changeByCellKey = useMemo(() => {
+    const map = new Map();
+    (changeSubmissions || []).forEach((submission) => {
+      (submission.items || []).forEach((item) => {
+        const itemDate = scheduleDateKey(item.schedule_date);
+        if (!itemDate) return;
+        const key = makeCellKey(item.user_id, itemDate);
+        if (map.has(key)) return;
+        map.set(key, {
+          ...item,
+          status: submission.status,
+          submission_id: submission.id,
+          submitted_by_id: submission.submitted_by_id,
+          return_reason: submission.return_reason
+        });
+      });
+    });
+    return map;
+  }, [changeSubmissions]);
 
   const enrichScheduleDisplay = (schedule) => {
     if (!schedule) return schedule;
@@ -578,35 +642,12 @@ const Schedule = ({ noLayout = false }) => {
     return !!(isChecker && requireCheckerApproval && getMyPendingSubmission());
   };
 
-  const formatCellDateStr = (date) => {
-    if (!date) return null;
-    if (dayjs.isDayjs(date)) return date.format('YYYY-MM-DD');
-    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
-    const parsed = dayjs(date);
-    return parsed.isValid() ? parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-  };
+  const formatCellDateStr = (date) => toHKCalendarDate(date);
 
   const getChangeForUserAndDate = (userId, date) => {
     const dateStr = formatCellDateStr(date);
     if (!dateStr) return null;
-    for (const submission of changeSubmissions) {
-      const item = (submission.items || []).find(i => {
-        const itemDate = typeof i.schedule_date === 'string'
-          ? i.schedule_date.split('T')[0].substring(0, 10)
-          : formatCellDateStr(i.schedule_date);
-        return Number(i.user_id) === Number(userId) && itemDate === dateStr;
-      });
-      if (item) {
-        return {
-          ...item,
-          status: submission.status,
-          submission_id: submission.id,
-          submitted_by_id: submission.submitted_by_id,
-          return_reason: submission.return_reason
-        };
-      }
-    }
-    return null;
+    return changeByCellKey.get(makeCellKey(userId, dateStr)) || null;
   };
 
   const getDisplaySchedule = (userId, date) => {
@@ -927,7 +968,7 @@ const Schedule = ({ noLayout = false }) => {
     const startStr = toHKDateStr(group.checker_editable_start_date);
     const endStr = toHKDateStr(group.checker_editable_end_date);
     if (startStr == null && endStr == null) return true;
-    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = toHKCalendarDate(date);
     if (startStr != null && dateStr < startStr) return false;
     if (endStr != null && dateStr > endStr) return false;
     return true;
@@ -960,123 +1001,269 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const getScheduleForUserAndDate = (userId, date) => {
-    // 如果 date 為 null 或 undefined，返回 null
-    if (!date) {
-      return null;
-    }
-    
-    // 使用香港時區格式化日期，確保日期有效
-    let dateStr;
-    try {
-      // 如果 date 已經是 dayjs 對象，直接使用其日期部分（不受時區影響）
-      if (dayjs.isDayjs(date)) {
-        // 已經是 dayjs 對象，直接獲取日期字符串（YYYY-MM-DD），不進行時區轉換
-        // 這樣可以避免時區轉換導致的日期偏移
-        dateStr = date.format('YYYY-MM-DD');
-      } else {
-        // 需要解析，先解析為本地時間，然後轉換為香港時區
-        let dateObj = dayjs(date);
-        if (!dateObj.isValid()) {
-          console.warn('Invalid date in getScheduleForUserAndDate:', date);
-          return null;
-        }
-        // 如果是字符串日期（YYYY-MM-DD），直接使用；否則轉換時區
-        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          dateStr = date;
-        } else {
-          dateObj = dateObj.tz('Asia/Hong_Kong');
-          dateStr = dateObj.format('YYYY-MM-DD');
-        }
-      }
-    } catch (error) {
-      console.error('Error formatting date in getScheduleForUserAndDate:', error, date);
-      return null;
-    }
-    // 確保 user_id 類型一致（都轉為數字）
-    const userIdNum = Number(userId);
-    const found = schedules.find(s => {
-      const sUserId = Number(s.user_id);
-      // 處理 schedule_date 可能是 Date 對象或字符串的情況
-      let sDateStr = s.schedule_date;
-      
-      // 如果為 null 或 undefined，跳過
-      if (!sDateStr) {
-        return false;
-      }
-      
-      try {
-        // 處理 Date 對象或字符串，統一轉換為日期字符串（YYYY-MM-DD）
-        if (sDateStr instanceof Date) {
-          // Date 對象，使用本地日期部分（避免時區轉換導致的日期偏移）
-          // 因為數據庫存儲的是純日期，不應該進行時區轉換
-          const year = sDateStr.getFullYear();
-          const month = String(sDateStr.getMonth() + 1).padStart(2, '0');
-          const day = String(sDateStr.getDate()).padStart(2, '0');
-          sDateStr = `${year}-${month}-${day}`;
-        } else if (typeof sDateStr === 'string') {
-          // 字符串格式
-          if (sDateStr.includes('T') && sDateStr.includes('Z')) {
-            // UTC 時間字符串，需要轉換為香港時區
-            const parsed = dayjs.utc(sDateStr);
-            if (!parsed.isValid()) {
-              return false;
-            }
-            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-          } else if (sDateStr.includes('T')) {
-            // 有時區信息的時間字符串，需要轉換
-            const parsed = dayjs(sDateStr);
-            if (!parsed.isValid()) {
-              return false;
-            }
-            sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-          } else {
-            // 純日期字符串（YYYY-MM-DD），直接使用，不進行時區轉換
-            // 因為數據庫存儲的是純日期，不應該進行時區轉換
-            sDateStr = sDateStr.split('T')[0].substring(0, 10);
-          }
-        } else {
-          // 嘗試用 dayjs 解析其他格式
-          const parsed = dayjs(sDateStr);
-          if (parsed.isValid()) {
-            // 如果是純日期格式，直接格式化；否則轉換時區
-            if (typeof sDateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sDateStr)) {
-              sDateStr = sDateStr;
-            } else {
-              sDateStr = parsed.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-            }
-          } else {
-            return false;
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing schedule date:', error, sDateStr);
-        return false;
-      }
-      
-      const matches = sUserId === userIdNum && sDateStr === dateStr;
-      return matches;
-    });
-    return found;
+    if (date == null || userId == null) return null;
+    const dateStr = formatCellDateStr(date);
+    if (!dateStr) return null;
+    return scheduleByCellKey.get(makeCellKey(userId, dateStr)) || null;
   };
 
   const getOutdoorWorkForUserAndDate = (userId, date) => {
     if (!date || !outdoorWorkByCell || typeof outdoorWorkByCell !== 'object') return [];
-    let dateStr;
-    try {
-      if (dayjs.isDayjs(date)) {
-        dateStr = date.format('YYYY-MM-DD');
-      } else if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        dateStr = date;
-      } else {
-        const dateObj = dayjs(date);
-        if (!dateObj.isValid()) return [];
-        dateStr = dateObj.format('YYYY-MM-DD');
-      }
-    } catch {
-      return [];
-    }
+    const dateStr = toHKCalendarDate(date);
+    if (!dateStr) return [];
     const key = `${Number(userId)}_${dateStr}`;
     return outdoorWorkByCell[key] || [];
+  };
+
+  const clampSetupRange = (start, end) => {
+    let nextStart = toHKDayjs(start);
+    let nextEnd = toHKDayjs(end);
+    if (!nextStart || !nextEnd) return { start: nextStart, end: nextEnd };
+    if (nextEnd.isBefore(nextStart, 'day')) nextEnd = nextStart;
+    const maxEnd = nextStart.add(MAX_EDIT_DAYS - 1, 'day');
+    if (nextEnd.isAfter(maxEnd, 'day')) nextEnd = maxEnd;
+    const viewStart = toHKDayjs(startDate);
+    const viewEnd = toHKDayjs(endDate);
+    if (viewStart && nextStart.isBefore(viewStart, 'day')) nextStart = viewStart;
+    if (viewEnd && nextEnd.isAfter(viewEnd, 'day')) nextEnd = viewEnd;
+    if (nextEnd.isBefore(nextStart, 'day')) nextEnd = nextStart;
+    return { start: nextStart, end: nextEnd };
+  };
+
+  const resetExcelSelection = () => {
+    setSelectedCellKeys([]);
+    setSelectionAnchor(null);
+  };
+
+  const handleExitEditMode = () => {
+    setEditMode(false);
+    setEditSetupOpen(false);
+    resetExcelSelection();
+    setEditMemberIds([]);
+    setEditRangeStart(null);
+    setEditRangeEnd(null);
+  };
+
+  const handleOpenEditSetup = () => {
+    if (!canEdit || !selectedGroupId || groupMembers.length === 0) return;
+    const defaultStart = startDate;
+    const { start, end } = clampSetupRange(
+      defaultStart,
+      defaultStart ? defaultStart.add(MAX_EDIT_DAYS - 1, 'day') : endDate
+    );
+    setSetupMemberIds(groupMembers.map((m) => m.id));
+    setSetupStartDate(start);
+    setSetupEndDate(end);
+    setEditSetupOpen(true);
+  };
+
+  const handleConfirmEditSetup = () => {
+    if (!setupMemberIds.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.selectUsersFirst')
+      });
+      return;
+    }
+    if (!setupStartDate || !setupEndDate) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.selectEditDateRange')
+      });
+      return;
+    }
+    const { start, end } = clampSetupRange(setupStartDate, setupEndDate);
+    const dayCount = end.diff(start, 'day') + 1;
+    if (dayCount > MAX_EDIT_DAYS) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.editRangeMaxDays', { days: MAX_EDIT_DAYS })
+      });
+      return;
+    }
+    setEditMemberIds(setupMemberIds);
+    setEditRangeStart(start);
+    setEditRangeEnd(end);
+    resetExcelSelection();
+    setEditMode(true);
+    setEditSetupOpen(false);
+  };
+
+  const openExcelBatchDialog = () => {
+    if (!selectedCellKeys.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.selectCellsFirst')
+      });
+      return;
+    }
+    setBatchStoreId(selectedDefaultStoreId);
+    setBatchEditDialogOpen(true);
+  };
+
+  const handleSelectAllVisibleCells = () => {
+    const keys = [];
+    displayedMembers.forEach((member) => {
+      dates.forEach((date) => {
+        if (!canEditDate(date)) return;
+        keys.push(makeCellKey(member.id, toHKCalendarDate(date)));
+      });
+    });
+    setSelectedCellKeys(keys);
+    if (displayedMembers.length && dates.length) {
+      setSelectionAnchor({
+        rowIndex: 0,
+        colIndex: 0,
+        userId: displayedMembers[0].id,
+        dateStr: toHKCalendarDate(dates[0])
+      });
+    }
+  };
+
+  const handleMatrixCellClick = (event, member, date, rowIndex, colIndex) => {
+    event.preventDefault();
+    if (event.detail > 1) return;
+    const dateStr = toHKCalendarDate(date);
+    const key = makeCellKey(member.id, dateStr);
+
+    if (!editMode) {
+      if (canViewLeaveTypeDetail()) {
+        handleOpenHistory(member.id, date);
+      }
+      return;
+    }
+    if (!canEdit || !canEditDate(date)) return;
+
+    if (event.shiftKey && selectionAnchor) {
+      const r1 = Math.min(selectionAnchor.rowIndex, rowIndex);
+      const r2 = Math.max(selectionAnchor.rowIndex, rowIndex);
+      const c1 = Math.min(selectionAnchor.colIndex, colIndex);
+      const c2 = Math.max(selectionAnchor.colIndex, colIndex);
+      const keys = [];
+      for (let r = r1; r <= r2; r += 1) {
+        for (let c = c1; c <= c2; c += 1) {
+          const m = displayedMembers[r];
+          const d = dates[c];
+          if (!m || !d || !canEditDate(d)) continue;
+          keys.push(makeCellKey(m.id, toHKCalendarDate(d)));
+        }
+      }
+      if (event.ctrlKey || event.metaKey) {
+        setSelectedCellKeys((prev) => [...new Set([...prev, ...keys])]);
+      } else {
+        setSelectedCellKeys(keys);
+      }
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedCellKeys((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+      setSelectionAnchor({ rowIndex, colIndex, userId: member.id, dateStr });
+      return;
+    }
+
+    setSelectedCellKeys([key]);
+    setSelectionAnchor({ rowIndex, colIndex, userId: member.id, dateStr });
+  };
+
+  const handleMatrixCellDoubleClick = (event, member, date, rowIndex, colIndex) => {
+    if (!editMode || !canEdit || !canEditDate(date)) return;
+    event.preventDefault();
+    const dateStr = toHKCalendarDate(date);
+    const key = makeCellKey(member.id, dateStr);
+    if (!selectedCellKeys.includes(key)) {
+      setSelectedCellKeys([key]);
+      setSelectionAnchor({ rowIndex, colIndex, userId: member.id, dateStr });
+    }
+    setBatchStoreId(selectedDefaultStoreId);
+    setBatchEditDialogOpen(true);
+  };
+
+  const renderCellBody = (schedule, outdoorApps) => {
+    const timeText = schedule && (schedule.start_time || schedule.end_time)
+      ? `${schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - ${schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}`
+      : null;
+    const hoursLabel = schedule ? getRosterTotalHoursLabel(schedule.start_time, schedule.end_time) : null;
+    const leaveText = getLeaveTypeDisplayText(schedule);
+    const storeLabel = schedule?.store_short_name || schedule?.store_code;
+    const hasOutdoor = outdoorApps && outdoorApps.length > 0;
+    const empty = !timeText && !leaveText && !storeLabel && !hasOutdoor;
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.2, alignItems: 'center', width: '100%', pointerEvents: 'none' }}>
+        {timeText && (
+          <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#1565c0', fontWeight: 600, lineHeight: 1.2 }}>
+            {timeText}
+          </Typography>
+        )}
+        {hoursLabel && (
+          <Typography variant="caption" sx={{ fontSize: '0.62rem', color: 'text.secondary', lineHeight: 1.2 }}>
+            {hoursLabel}
+          </Typography>
+        )}
+        {leaveText && (
+          <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'primary.main', fontWeight: 600, lineHeight: 1.2 }}>
+            {leaveText}
+          </Typography>
+        )}
+        {storeLabel && (
+          <Typography variant="caption" sx={{ fontSize: '0.62rem', color: 'text.secondary', lineHeight: 1.2 }}>
+            {storeLabel}
+          </Typography>
+        )}
+        {hasOutdoor && (
+          <Box sx={{ pointerEvents: 'auto' }}>
+            <OutdoorWorkCalendarChip applications={outdoorApps} sx={{ fontSize: '0.65rem', height: '18px' }} />
+          </Box>
+        )}
+        {empty && (
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>---</Typography>
+        )}
+      </Box>
+    );
+  };
+
+  const renderMemberDateCell = (member, date, rowIndex, colIndex) => {
+    const schedule = getDisplaySchedule(member.id, date);
+    const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
+    const dateStr = toHKCalendarDate(date);
+    const cellKey = makeCellKey(member.id, dateStr);
+    const selected = editMode && selectedCellKeySet.has(cellKey);
+    const editable = editMode && canEdit && canEditDate(date);
+
+    return (
+      <TableCell
+        key={dateStr}
+        align="center"
+        onClick={(event) => handleMatrixCellClick(event, member, date, rowIndex, colIndex)}
+        onDoubleClick={(event) => handleMatrixCellDoubleClick(event, member, date, rowIndex, colIndex)}
+        sx={{
+          minWidth: 80,
+          whiteSpace: 'nowrap',
+          p: 0.5,
+          py: 1,
+          userSelect: 'none',
+          cursor: editMode ? (editable ? 'cell' : 'not-allowed') : (canViewLeaveTypeDetail() ? 'pointer' : 'default'),
+          bgcolor: selected
+            ? 'rgba(25, 118, 210, 0.22)'
+            : (schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined),
+          outline: selected ? '2px solid' : undefined,
+          outlineColor: selected ? 'primary.main' : undefined,
+          outlineOffset: '-2px',
+          '&:hover': {
+            bgcolor: selected
+              ? 'rgba(25, 118, 210, 0.28)'
+              : (schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.2)' : 'action.hover'),
+          },
+        }}
+      >
+        {wrapWithChangeBadge(schedule?._change, renderCellBody(schedule, outdoorApps))}
+      </TableCell>
+    );
   };
 
   const handleOpenEditDialog = (userId, date) => {
@@ -1090,37 +1277,9 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
 
-    // 確保日期有效
-    if (!date) {
+    const dateStr = toHKCalendarDate(date);
+    if (!dateStr) {
       console.warn('Invalid date in handleOpenEditDialog');
-      return;
-    }
-
-    // 使用香港時區格式化日期
-    // 如果 date 已經是 dayjs 對象，直接使用其日期部分（不受時區影響）
-    let dateStr;
-    try {
-      if (dayjs.isDayjs(date)) {
-        // 已經是 dayjs 對象，直接獲取日期字符串（YYYY-MM-DD），不進行時區轉換
-        // 這樣可以避免時區轉換導致的日期偏移
-        dateStr = date.format('YYYY-MM-DD');
-      } else {
-        // 需要解析
-        let dateObj = dayjs(date);
-        if (!dateObj.isValid()) {
-          console.warn('Invalid date in handleOpenEditDialog:', date);
-          return;
-        }
-        // 如果是字符串日期（YYYY-MM-DD），直接使用；否則轉換時區
-        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          dateStr = date;
-        } else {
-          dateObj = dateObj.tz('Asia/Hong_Kong');
-          dateStr = dateObj.format('YYYY-MM-DD');
-        }
-      }
-    } catch (error) {
-      console.error('Error formatting date in handleOpenEditDialog:', error, date);
       return;
     }
     
@@ -1424,7 +1583,7 @@ const Schedule = ({ noLayout = false }) => {
 
   const handleSaveSchedule = async () => {
     if (!editingSchedule) return;
-    const scheduleDate = editingSchedule.schedule_date ? dayjs(editingSchedule.schedule_date).tz('Asia/Hong_Kong') : null;
+    const scheduleDate = editingSchedule.schedule_date ? toHKDayjs(editingSchedule.schedule_date) : null;
     if (scheduleDate && !canEditDate(scheduleDate)) {
       Swal.fire({
         icon: 'warning',
@@ -1632,7 +1791,7 @@ const Schedule = ({ noLayout = false }) => {
                   </TableCell>
                   {dates.map(date => (
                     <TableCell
-                      key={date.format('YYYY-MM-DD')}
+                      key={toHKCalendarDate(date)}
                       align="center"
                       sx={{
                         bgcolor: 'primary.main',
@@ -1663,7 +1822,7 @@ const Schedule = ({ noLayout = false }) => {
                 </TableRow>
               </TableHead>
             <TableBody>
-              {groupMembers.map(member => (
+              {displayedMembers.map((member, rowIndex) => (
                 <TableRow key={member.id}>
                   <TableCell
                     sx={{
@@ -1750,208 +1909,7 @@ const Schedule = ({ noLayout = false }) => {
                       {renderTerminationDateBelowPosition(member.termination_date, '0.6rem')}
                     </Box>
                   </TableCell>
-                  {dates.map(date => {
-                    const schedule = getDisplaySchedule(member.id, date);
-                    const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
-                    const dateStr = date.format('YYYY-MM-DD');
-                    return (
-                      <TableCell
-                        key={dateStr}
-                        align="center"
-                        sx={{
-                          minWidth: 80,
-                          whiteSpace: 'nowrap',
-                          p: 0.5,
-                          bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined,
-                        }}
-                      >
-                        {wrapWithChangeBadge(schedule?._change, (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center', width: '100%' }}>
-                          {canViewLeaveTypeDetail() && (
-                            <Tooltip title={t('schedule.changeHistory')}>
-                              <IconButton size="small" onClick={() => handleOpenHistory(member.id, date)} sx={{ p: 0.25 }}>
-                                <HistoryIcon sx={{ fontSize: '0.95rem' }} />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          {editMode && canEdit ? (
-                            <>
-                              {canEditDate(date) ? (
-                                <Button
-                                  size="small"
-                                  variant="outlined"
-                                  onClick={() => handleOpenEditDialog(member.id, date)}
-                                  sx={{ 
-                                    minWidth: 'auto', 
-                                    p: 0.5,
-                                    borderRadius: 1.5,
-                                    borderColor: 'primary.main',
-                                    '&:hover': {
-                                      bgcolor: 'primary.main',
-                                      color: 'white',
-                                      transform: 'scale(1.05)',
-                                      transition: 'all 0.2s',
-                                    },
-                                  }}
-                                >
-                                  <EditIcon fontSize="small" />
-                                </Button>
-                              ) : (
-                                <Tooltip title={t('schedule.checkerDateOutOfRange')}>
-                                  <span>
-                                    <Button size="small" variant="outlined" disabled sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1.5 }}>
-                                      <EditIcon fontSize="small" />
-                                    </Button>
-                                  </span>
-                                </Tooltip>
-                              )}
-                              {schedule && (
-                                <>
-                                  {(schedule.start_time || schedule.end_time) && (
-                                    <>
-                                      <Typography 
-                                        variant="caption" 
-                                        display="block" 
-                                        sx={{ 
-                                          fontSize: '0.7rem', 
-                                          mb: 0.5, 
-                                          color: '#1565c0',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                      </Typography>
-                                      {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
-                                    </>
-                                  )}
-                                  {getLeaveTypeDisplayText(schedule) && (
-                                    <Chip
-                                      label={getLeaveTypeDisplayText(schedule)}
-                                      size="small"
-                                      color="primary"
-                                      sx={{ 
-                                        fontSize: '0.65rem', 
-                                        height: '20px', 
-                                        mb: 0.5,
-                                        fontWeight: 600,
-                                        boxShadow: 1,
-                                      }}
-                                    />
-                                  )}
-                                  {canEditDate(date) ? (
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleDeleteSchedule(schedule)}
-                                      color="error"
-                                      sx={{ 
-                                        p: 0.3,
-                                        '&:hover': {
-                                          bgcolor: 'error.main',
-                                          color: 'error.contrastText',
-                                          transform: 'scale(1.1)',
-                                          transition: 'all 0.2s',
-                                        },
-                                      }}
-                                    >
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                  ) : (
-                                    <Tooltip title={t('schedule.checkerDateOutOfRange')}>
-                                      <span>
-                                        <IconButton size="small" color="error" disabled sx={{ p: 0.3 }}>
-                                          <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                      </span>
-                                    </Tooltip>
-                                  )}
-                                </>
-                              )}
-                              <OutdoorWorkCalendarChip
-                                applications={outdoorApps}
-                                sx={{ fontSize: '0.65rem', height: '20px' }}
-                              />
-                            </>
-                          ) : (
-                            <>
-                              {schedule ? (
-                                <>
-                                  {(schedule.start_time || schedule.end_time) && (
-                                    <>
-                                      <Typography 
-                                        variant="caption" 
-                                        display="block" 
-                                        sx={{ 
-                                          fontSize: '0.7rem', 
-                                          mb: 0.5, 
-                                          color: '#1565c0',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                      </Typography>
-                                      {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
-                                    </>
-                                  )}
-                                  {getLeaveTypeDisplayText(schedule) && (
-                                    <Chip
-                                      label={getLeaveTypeDisplayText(schedule)}
-                                      size="small"
-                                      color="primary"
-                                      sx={{ 
-                                        fontSize: '0.65rem', 
-                                        height: '20px', 
-                                        mb: 0.5,
-                                        fontWeight: 600,
-                                        boxShadow: 1,
-                                      }}
-                                    />
-                                  )}
-                                  {/* 顯示店舖 */}
-                                  {schedule.store_code && (
-                                    <Chip 
-                                      label={schedule.store_short_name || schedule.store_code}
-                                      size="small" 
-                                      sx={{ 
-                                        fontSize: '0.65rem', 
-                                        height: '20px', 
-                                        mb: 0.5,
-                                        fontWeight: 600,
-                                        boxShadow: 1,
-                                        bgcolor: '#424242',
-                                        color: '#ffffff',
-                                      }}
-                                    />
-                                  )}
-                                  <OutdoorWorkCalendarChip
-                                    applications={outdoorApps}
-                                    sx={{ fontSize: '0.65rem', height: '20px' }}
-                                  />
-                                  {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && outdoorApps.length === 0 && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', fontStyle: 'italic' }}>
-                                      ---
-                                    </Typography>
-                                  )}
-                                </>
-                              ) : (
-                                <>
-                                  <OutdoorWorkCalendarChip
-                                    applications={outdoorApps}
-                                    sx={{ fontSize: '0.65rem', height: '20px' }}
-                                  />
-                                  {outdoorApps.length === 0 && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
-                                      ---
-                                    </Typography>
-                                  )}
-                                </>
-                              )}
-                            </>
-                          )}
-                        </Box>
-                        ))}
-                      </TableCell>
-                    );
-                  })}
+                  {dates.map((date, colIndex) => renderMemberDateCell(member, date, rowIndex, colIndex))}
                 </TableRow>
               ))}
               {/* 統計行：顯示每日 FT 和 PT 數量 */}
@@ -1974,7 +1932,7 @@ const Schedule = ({ noLayout = false }) => {
                   {t('schedule.summary') || '統計'}
                 </TableCell>
                 {dates.map(date => {
-                  const dateStr = date.format('YYYY-MM-DD');
+                  const dateStr = toHKCalendarDate(date);
                   // 計算該日期有排班的 FT 和 PT 數量
                   let ftCount = 0;
                   let ptCount = 0;
@@ -2001,9 +1959,7 @@ const Schedule = ({ noLayout = false }) => {
                   // 統計 helper schedules（只計算有排班時間的）
                   // 後端已經根據選擇的店舖篩選了 helper，直接統計所有返回的 helper
                   helperSchedules.forEach(helper => {
-                    const helperDateStr = typeof helper.schedule_date === 'string' 
-                      ? helper.schedule_date.split('T')[0] 
-                      : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                    const helperDateStr = toHKCalendarDate(helper.schedule_date);
                     
                     if (helperDateStr === dateStr) {
                       // 判斷是否有排班時間：必須有 start_time 或 end_time
@@ -2053,12 +2009,6 @@ const Schedule = ({ noLayout = false }) => {
         </Box>
       );
     };
-
-  const handleBatchEdit = () => {
-    // 設置批量編輯的店舖預設值為控制面板選擇的店舖
-    setBatchStoreId(selectedDefaultStoreId);
-    setBatchEditDialogOpen(true);
-  };
 
   // 處理批量編輯開始時間輸入
   const handleBatchStartTimeChange = (e) => {
@@ -2237,11 +2187,13 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const handleBatchSave = async () => {
-    if (selectedUsers.length === 0 || selectedDates.length === 0) {
+    const excelCells = selectedCellKeys.map(parseCellKey).filter((cell) => cell.userId && cell.dateStr);
+    const useExcelCells = excelCells.length > 0;
+    if (!useExcelCells && (selectedUsers.length === 0 || selectedDates.length === 0)) {
       Swal.fire({
         icon: 'warning',
         title: t('schedule.warning'),
-        text: t('schedule.selectUsersAndDates')
+        text: t('schedule.selectCellsFirst')
       });
       return;
     }
@@ -2320,22 +2272,24 @@ const Schedule = ({ noLayout = false }) => {
       }
 
       const schedulesData = [];
-      
-      selectedDates.forEach(date => {
-        if (!date) return;
-        try {
-          let dateObj;
-          if (dayjs.isDayjs(date)) {
-            dateObj = date.tz('Asia/Hong_Kong', true);
-          } else {
-            dateObj = dayjs(date);
-            if (!dateObj.isValid()) {
-              console.warn('Invalid date in batch save:', date);
-              return;
-            }
-            dateObj = dateObj.tz('Asia/Hong_Kong');
-          }
-          const dateStr = dateObj.format('YYYY-MM-DD');
+
+      if (useExcelCells) {
+        excelCells.forEach((cell) => {
+          schedulesData.push({
+            user_id: cell.userId,
+            department_group_id: selectedGroupId,
+            schedule_date: cell.dateStr,
+            start_time: startTimeValue,
+            end_time: endTimeValue,
+            leave_type_id: batchLeaveTypeId !== null && batchLeaveTypeId !== undefined && batchLeaveTypeId !== '' ? Number(batchLeaveTypeId) : null,
+            leave_session: batchLeaveSession !== null && batchLeaveSession !== undefined && batchLeaveSession !== '' ? batchLeaveSession : null,
+            store_id: batchStoreId !== null && batchStoreId !== undefined && batchStoreId !== '' ? Number(batchStoreId) : null
+          });
+        });
+      } else {
+        selectedDates.forEach(date => {
+          const dateStr = toHKCalendarDate(date);
+          if (!dateStr) return;
           selectedUsers.forEach(userId => {
             schedulesData.push({
               user_id: userId,
@@ -2348,10 +2302,8 @@ const Schedule = ({ noLayout = false }) => {
               store_id: batchStoreId !== null && batchStoreId !== undefined && batchStoreId !== '' ? Number(batchStoreId) : null
             });
           });
-        } catch (error) {
-          console.error('Error processing date in batch save:', error, date);
-        }
-      });
+        });
+      }
 
       const response = await axios.post('/api/schedules/batch', { schedules: schedulesData });
       
@@ -2363,6 +2315,7 @@ const Schedule = ({ noLayout = false }) => {
       setBatchLeaveTypeId(null);
       setBatchLeaveSession(null);
       setBatchStoreId(null);
+      resetExcelSelection();
 
       applySaveResponse(response.data);
       
@@ -2513,7 +2466,7 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const handleDeleteSchedule = async (schedule) => {
-    const scheduleDate = schedule?.schedule_date ? dayjs(schedule.schedule_date).tz('Asia/Hong_Kong') : null;
+    const scheduleDate = schedule?.schedule_date ? toHKDayjs(schedule.schedule_date) : null;
     if (scheduleDate && !canEditDate(scheduleDate)) {
       Swal.fire({
         icon: 'warning',
@@ -2562,29 +2515,66 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
-  const generateDateRange = () => {
-    const dates = [];
-    // 確保使用香港時區
-    let current = dayjs(startDate);
-    if (!current.isValid()) {
-      console.warn('Invalid startDate in generateDateRange');
-      return [];
+  const handleDeleteSelectedCells = async () => {
+    if (!selectedCellKeys.length) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.selectCellsFirst')
+      });
+      return;
     }
-    current = current.tz('Asia/Hong_Kong').startOf('day');
-    
-    let end = dayjs(endDate);
-    if (!end.isValid()) {
-      console.warn('Invalid endDate in generateDateRange');
-      return [];
+
+    const targets = selectedCellKeys
+      .map(parseCellKey)
+      .map((cell) => getDisplaySchedule(cell.userId, cell.dateStr))
+      .filter((schedule) => schedule && (schedule.id || schedule._changeItemId));
+
+    if (targets.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: t('schedule.warning'),
+        text: t('schedule.noScheduleToDelete')
+      });
+      return;
     }
-    end = end.tz('Asia/Hong_Kong').startOf('day');
-    
-    while (current.isBefore(end) || current.isSame(end, 'day')) {
-      dates.push(current);
-      current = current.add(1, 'day');
+
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('schedule.confirmDelete'),
+      text: t('schedule.deleteSelectedConfirm', { count: targets.length }),
+      showCancelButton: true,
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!result.isConfirmed) return;
+
+    try {
+      for (const schedule of targets) {
+        if (!schedule.id && schedule._changeItemId) {
+          const response = await axios.delete(`/api/schedules/changes/items/${schedule._changeItemId}`);
+          applySaveResponse(response.data);
+        } else if (schedule.id) {
+          const response = await axios.delete(`/api/schedules/${schedule.id}`);
+          applySaveResponse(response.data, {
+            user_id: schedule.user_id,
+            schedule_date: schedule.schedule_date
+          });
+        }
+      }
+      resetExcelSelection();
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.deleteSuccess')
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.deleteFailed')
+      });
     }
-    
-    return dates;
   };
 
   // 更新 checker 編輯權限設置（含可編輯日期範圍 UTC+8）
@@ -2595,8 +2585,8 @@ const Schedule = ({ noLayout = false }) => {
     try {
       const payload = {
         allow_checker_edit: newValue,
-        checker_editable_start_date: checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null,
-        checker_editable_end_date: checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null
+        checker_editable_start_date: checkerEditableStartDate ? toHKCalendarDate(checkerEditableStartDate) : null,
+        checker_editable_end_date: checkerEditableEndDate ? toHKCalendarDate(checkerEditableEndDate) : null
       };
       await axios.put(`/api/schedules/group/${selectedGroupId}/checker-edit-permission`, payload);
       
@@ -2657,13 +2647,13 @@ const Schedule = ({ noLayout = false }) => {
     try {
       const payload = {
         allow_checker_edit: enable,
-        checker_editable_start_date: checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null,
-        checker_editable_end_date: checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null
+        checker_editable_start_date: checkerEditableStartDate ? toHKCalendarDate(checkerEditableStartDate) : null,
+        checker_editable_end_date: checkerEditableEndDate ? toHKCalendarDate(checkerEditableEndDate) : null
       };
       const response = await axios.put('/api/schedules/groups/batch-checker-edit-permission', payload);
 
-      const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
-      const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+      const startStr = checkerEditableStartDate ? toHKCalendarDate(checkerEditableStartDate) : null;
+      const endStr = checkerEditableEndDate ? toHKCalendarDate(checkerEditableEndDate) : null;
       setDepartmentGroups(prevGroups => 
         prevGroups.map(g => ({ ...g, allow_checker_edit: enable, checker_editable_start_date: startStr, checker_editable_end_date: endStr }))
       );
@@ -2691,8 +2681,6 @@ const Schedule = ({ noLayout = false }) => {
       });
     }
   };
-
-  const dates = generateDateRange();
 
   const downloadCsvFile = (headers, rows, filename) => {
     const csv = [headers, ...rows]
@@ -2763,9 +2751,7 @@ const Schedule = ({ noLayout = false }) => {
           schedules: {}
         };
       }
-      const dateStr = typeof helper.schedule_date === 'string'
-        ? helper.schedule_date.split('T')[0]
-        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+      const dateStr = toHKCalendarDate(helper.schedule_date);
       helperByUser[userId].schedules[dateStr] = helper;
     });
     return Object.values(helperByUser);
@@ -2841,7 +2827,7 @@ const Schedule = ({ noLayout = false }) => {
         member.display_name || member.name_zh || member.name || '',
         getMemberPositionLabel(member),
         member.position_employment_mode || member.employment_mode || '',
-        date.format('YYYY-MM-DD'),
+        toHKCalendarDate(date),
         date.format('ddd'),
         schedule?.start_time ? formatCsvTime(schedule.start_time) : '',
         schedule?.end_time ? formatEndTimeForDisplay(schedule.end_time) : '',
@@ -2859,13 +2845,13 @@ const Schedule = ({ noLayout = false }) => {
 
     const rows = [];
     groupMembers.forEach((member) => {
-      dates.forEach((date) => {
+      viewDates.forEach((date) => {
         rows.push(buildRow(member, date, getScheduleForUserAndDate(member.id, date), false));
       });
     });
     getHelperUsersForExport().forEach((helperUser) => {
-      dates.forEach((date) => {
-        const dateStr = date.format('YYYY-MM-DD');
+      viewDates.forEach((date) => {
+        const dateStr = toHKCalendarDate(date);
         rows.push(buildRow(helperUser, date, helperUser.schedules[dateStr] || null, true));
       });
     });
@@ -2876,7 +2862,7 @@ const Schedule = ({ noLayout = false }) => {
   const handleExportMatrixCsv = () => {
     if (!ensureExportReady()) return;
 
-    const dateHeaders = dates.map((date) => formatDateDisplay(date));
+    const dateHeaders = viewDates.map((date) => formatDateDisplay(date));
     const headers = [
       t('common.employeeNumber'),
       t('schedule.employee'),
@@ -2887,9 +2873,9 @@ const Schedule = ({ noLayout = false }) => {
     ];
 
     const buildMatrixRow = (member, isHelper) => {
-      const dateCells = dates.map((date) => {
+      const dateCells = viewDates.map((date) => {
         const schedule = isHelper
-          ? (member.schedules?.[date.format('YYYY-MM-DD')] || null)
+          ? (member.schedules?.[toHKCalendarDate(date)] || null)
           : getScheduleForUserAndDate(member.id, date);
         return buildScheduleCellText(member, date, schedule, isHelper);
       });
@@ -2958,6 +2944,7 @@ const Schedule = ({ noLayout = false }) => {
                     value={selectedGroupId}
                     onChange={(e) => setSelectedGroupId(e.target.value)}
                     label={t('schedule.selectGroup')}
+                    disabled={editMode}
                     sx={{
                       bgcolor: 'background.paper',
                       borderRadius: 1,
@@ -2978,10 +2965,11 @@ const Schedule = ({ noLayout = false }) => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={3}>
-                <DatePicker
+                <DatePicker timezone={HK_TZ}
                   label={t('schedule.startDate')}
                   value={startDate}
                   onChange={handleStartDateChange}
+                  disabled={editMode}
                   format="DD/MM/YYYY"
                   slotProps={{ 
                     textField: { 
@@ -2995,10 +2983,11 @@ const Schedule = ({ noLayout = false }) => {
                 />
               </Grid>
               <Grid item xs={12} md={3}>
-                <DatePicker
+                <DatePicker timezone={HK_TZ}
                   label={t('schedule.endDate')}
                   value={endDate}
                   onChange={handleEndDateChange}
+                  disabled={editMode}
                   format="DD/MM/YYYY"
                   minDate={startDate?.startOf('month')}
                   maxDate={startDate?.endOf('month')}
@@ -3020,6 +3009,7 @@ const Schedule = ({ noLayout = false }) => {
                     value={selectedDefaultStoreId || ''}
                     onChange={(e) => setSelectedDefaultStoreId(e.target.value || null)}
                     label={t('schedule.selectStoreForHelper') || t('schedule.store')}
+                    disabled={editMode}
                     sx={{
                       bgcolor: 'background.paper',
                       borderRadius: 1,
@@ -3041,7 +3031,7 @@ const Schedule = ({ noLayout = false }) => {
                   {canEdit && (
                     <Button
                       variant={editMode ? 'contained' : 'outlined'}
-                      onClick={() => setEditMode(!editMode)}
+                      onClick={() => (editMode ? handleExitEditMode() : handleOpenEditSetup())}
                       startIcon={<EditIcon />}
                       sx={{
                         borderRadius: 2,
@@ -3059,25 +3049,40 @@ const Schedule = ({ noLayout = false }) => {
                     </Button>
                   )}
                   {canEdit && editMode && (
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={handleBatchEdit}
-                      startIcon={<SaveIcon />}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        boxShadow: 3,
-                        '&:hover': {
-                          boxShadow: 5,
-                          transform: 'translateY(-2px)',
-                          transition: 'all 0.2s',
-                        },
-                      }}
-                    >
-                      {t('schedule.batchEdit')}
-                    </Button>
+                    <>
+                      <Button
+                        variant="outlined"
+                        onClick={handleSelectAllVisibleCells}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        {t('schedule.selectAllCells')}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={openExcelBatchDialog}
+                        disabled={selectedCellKeys.length === 0}
+                        startIcon={<SaveIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          boxShadow: 3,
+                        }}
+                      >
+                        {t('schedule.setSelectedCells')} ({selectedCellKeys.length})
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        onClick={handleDeleteSelectedCells}
+                        disabled={selectedCellKeys.length === 0}
+                        startIcon={<DeleteIcon />}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                      >
+                        {t('schedule.deleteSelected')}
+                      </Button>
+                    </>
                   )}
                   {isChecker && requireCheckerApproval && getMyOpenSubmission() && (
                     <Button
@@ -3229,22 +3234,22 @@ const Schedule = ({ noLayout = false }) => {
                           <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
                             {t('schedule.checkerEditableRange')}
                           </Typography>
-                          <DatePicker
+                          <DatePicker timezone={HK_TZ}
                             label={t('schedule.checkerEditableRangeStart')}
                             value={checkerEditableStartDate}
                             onChange={(newVal) => {
                               if (!newVal || !newVal.isValid()) {
                                 setCheckerEditableStartDate(null);
-                                const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                                const endStr = checkerEditableEndDate ? toHKCalendarDate(checkerEditableEndDate) : null;
                                 axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: null, checker_editable_end_date: endStr }).then(() => {
                                   setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: null, checker_editable_end_date: endStr })));
                                 }).catch(() => {});
                                 return;
                               }
-                              const startStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                              const startStr = toHKCalendarDate(newVal);
                               const normalizedStart = dayjs.tz(startStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
                               setCheckerEditableStartDate(normalizedStart);
-                              const endStr = checkerEditableEndDate ? checkerEditableEndDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                              const endStr = checkerEditableEndDate ? toHKCalendarDate(checkerEditableEndDate) : null;
                               axios.put('/api/schedules/groups/batch-checker-edit-permission', {
                                 checker_editable_start_date: startStr,
                                 checker_editable_end_date: endStr
@@ -3255,22 +3260,22 @@ const Schedule = ({ noLayout = false }) => {
                             format="DD/MM/YYYY"
                             slotProps={{ textField: { size: 'small', sx: { minWidth: 160, bgcolor: 'background.paper', borderRadius: 1 } } }}
                           />
-                          <DatePicker
+                          <DatePicker timezone={HK_TZ}
                             label={t('schedule.checkerEditableRangeEnd')}
                             value={checkerEditableEndDate}
                             onChange={(newVal) => {
                               if (!newVal || !newVal.isValid()) {
                                 setCheckerEditableEndDate(null);
-                                const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                                const startStr = checkerEditableStartDate ? toHKCalendarDate(checkerEditableStartDate) : null;
                                 axios.put('/api/schedules/groups/batch-checker-edit-permission', { checker_editable_start_date: startStr, checker_editable_end_date: null }).then(() => {
                                   setDepartmentGroups(prev => prev.map(g => ({ ...g, checker_editable_start_date: startStr, checker_editable_end_date: null })));
                                 }).catch(() => {});
                                 return;
                               }
-                              const endStr = newVal.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+                              const endStr = toHKCalendarDate(newVal);
                               const normalizedEnd = dayjs.tz(endStr, 'YYYY-MM-DD', 'Asia/Hong_Kong');
                               setCheckerEditableEndDate(normalizedEnd);
-                              const startStr = checkerEditableStartDate ? checkerEditableStartDate.tz('Asia/Hong_Kong').format('YYYY-MM-DD') : null;
+                              const startStr = checkerEditableStartDate ? toHKCalendarDate(checkerEditableStartDate) : null;
                               axios.put('/api/schedules/groups/batch-checker-edit-permission', {
                                 checker_editable_start_date: startStr,
                                 checker_editable_end_date: endStr
@@ -3358,6 +3363,18 @@ const Schedule = ({ noLayout = false }) => {
           )}
 
 
+          {editMode && (
+            <Card elevation={1} sx={{ mb: 2, p: 2, bgcolor: '#e3f2fd' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {t('schedule.excelHint')}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                {t('schedule.editingRange')}: {editRangeStart ? formatDateDisplay(editRangeStart) : ''} – {editRangeEnd ? formatDateDisplay(editRangeEnd) : ''}
+                {' · '}
+                {t('schedule.selectUsers')}: {displayedMembers.length}
+              </Typography>
+            </Card>
+          )}
           {loading ? (
             <Box sx={{ textAlign: 'center', py: 6 }}>
               <Typography variant="h6" color="text.secondary">
@@ -3387,7 +3404,7 @@ const Schedule = ({ noLayout = false }) => {
                       </TableCell>
                       {dates.map(date => (
                         <TableCell 
-                          key={date.format('YYYY-MM-DD')} 
+                          key={toHKCalendarDate(date)} 
                           align="center"
                           sx={{
                             bgcolor: 'primary.main',
@@ -3418,7 +3435,7 @@ const Schedule = ({ noLayout = false }) => {
                     </TableRow>
                   </TableHead>
                 <TableBody>
-                  {groupMembers.map(member => (
+                  {displayedMembers.map((member, rowIndex) => (
                     <TableRow key={member.id}>
                       <TableCell
                         sx={{
@@ -3470,235 +3487,11 @@ const Schedule = ({ noLayout = false }) => {
                           {renderTerminationDateBelowPosition(member.termination_date, '0.75rem')}
                         </Box>
                       </TableCell>
-                      {dates.map(date => {
-                        const schedule = getDisplaySchedule(member.id, date);
-                        const outdoorApps = getOutdoorWorkForUserAndDate(member.id, date);
-                        const dateStr = date.format('YYYY-MM-DD');
-                        return (
-                          <TableCell 
-                            key={dateStr} 
-                            align="center"
-                            sx={{
-                              py: 1.5,
-                              borderRight: '1px solid',
-                              borderColor: 'divider',
-                              bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined,
-                              '&:hover': {
-                                bgcolor: schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.2)' : 'action.hover',
-                              },
-                            }}
-                          >
-                            {wrapWithChangeBadge(schedule?._change, (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center', width: '100%' }}>
-                              {canViewLeaveTypeDetail() && (
-                                <Tooltip title={t('schedule.changeHistory')}>
-                                  <IconButton size="small" onClick={() => handleOpenHistory(member.id, date)} sx={{ p: 0.25 }}>
-                                    <HistoryIcon sx={{ fontSize: '0.95rem' }} />
-                                  </IconButton>
-                                </Tooltip>
-                              )}
-                              {editMode && canEdit ? (
-                                <>
-                                  {canEditDate(date) ? (
-                                    <Button
-                                      size="small"
-                                      variant="outlined"
-                                      onClick={() => handleOpenEditDialog(member.id, date)}
-                                      sx={{ 
-                                        minWidth: 'auto', 
-                                        p: 0.75,
-                                        borderRadius: 1.5,
-                                        borderColor: 'primary.main',
-                                        '&:hover': {
-                                          bgcolor: 'primary.main',
-                                          color: 'white',
-                                          transform: 'scale(1.05)',
-                                          transition: 'all 0.2s',
-                                        },
-                                      }}
-                                    >
-                                      <EditIcon fontSize="small" />
-                                    </Button>
-                                  ) : (
-                                    <Tooltip title={t('schedule.checkerDateOutOfRange')}>
-                                      <span>
-                                        <Button size="small" variant="outlined" disabled sx={{ minWidth: 'auto', p: 0.75, borderRadius: 1.5 }}>
-                                          <EditIcon fontSize="small" />
-                                        </Button>
-                                      </span>
-                                    </Tooltip>
-                                  )}
-                                  {schedule && (
-                                    <>
-                                      {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
-                                      {(schedule.start_time || schedule.end_time) && (
-                                        <>
-                                          <Typography 
-                                            variant="caption" 
-                                            display="block" 
-                                            sx={{ 
-                                              mb: 0.5, 
-                                              color: '#1565c0',
-                                              fontWeight: 600,
-                                              fontSize: '0.75rem',
-                                            }}
-                                          >
-                                            {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                          </Typography>
-                                          {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.7rem')}
-                                        </>
-                                      )}
-                                      {/* 顯示假期類型 */}
-                                      {getLeaveTypeDisplayText(schedule) && (
-                                        <Chip 
-                                          label={getLeaveTypeDisplayText(schedule)}
-                                          size="small" 
-                                          color="primary"
-                                          sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: '22px', 
-                                            mb: 0.5,
-                                            fontWeight: 600,
-                                            boxShadow: 1,
-                                          }}
-                                        />
-                                      )}
-                                      {/* 顯示店舖 */}
-                                      {schedule.store_code && (
-                                        <Chip 
-                                          label={schedule.store_short_name || schedule.store_code}
-                                          size="small" 
-                                          sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: '22px', 
-                                            mb: 0.5,
-                                            fontWeight: 600,
-                                            boxShadow: 1,
-                                            bgcolor: '#424242',
-                                            color: '#ffffff',
-                                          }}
-                                        />
-                                      )}
-                                      {(schedule.id || schedule._changeItemId) && (canEditDate(date) ? (
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => handleDeleteSchedule(schedule)}
-                                          color="error"
-                                          sx={{
-                                            '&:hover': {
-                                              bgcolor: 'error.main',
-                                              color: 'error.contrastText',
-                                              transform: 'scale(1.1)',
-                                              transition: 'all 0.2s',
-                                            },
-                                          }}
-                                        >
-                                          <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                      ) : (
-                                        <Tooltip title={t('schedule.checkerDateOutOfRange')}>
-                                          <span>
-                                            <IconButton size="small" color="error" disabled>
-                                              <DeleteIcon fontSize="small" />
-                                            </IconButton>
-                                          </span>
-                                        </Tooltip>
-                                      ))}
-                                    </>
-                                  )}
-                                  <OutdoorWorkCalendarChip
-                                    applications={outdoorApps}
-                                    sx={{ fontSize: '0.7rem', height: '22px' }}
-                                  />
-                                </>
-                              ) : (
-                                <>
-                                  {schedule ? (
-                                    <>
-                                      {/* 顯示工作時間 - 只要有start_time或end_time就顯示 */}
-                                      {(schedule.start_time || schedule.end_time) && (
-                                        <>
-                                          <Typography 
-                                            variant="caption" 
-                                            display="block" 
-                                            sx={{ 
-                                              mb: 0.5, 
-                                              color: '#1565c0',
-                                              fontWeight: 600,
-                                              fontSize: '0.75rem',
-                                            }}
-                                          >
-                                            {schedule.start_time ? schedule.start_time.substring(0, 5) : '--:--'} - {schedule.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}
-                                          </Typography>
-                                          {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.7rem')}
-                                        </>
-                                      )}
-                                      {/* 顯示假期類型 */}
-                                      {getLeaveTypeDisplayText(schedule) && (
-                                        <Chip 
-                                          label={getLeaveTypeDisplayText(schedule)}
-                                          size="small" 
-                                          color="primary"
-                                          sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: '22px', 
-                                            mb: 0.5,
-                                            fontWeight: 600,
-                                            boxShadow: 1,
-                                          }}
-                                        />
-                                      )}
-                                      {/* 顯示店舖 */}
-                                      {schedule.store_code && (
-                                        <Chip 
-                                          label={schedule.store_short_name || schedule.store_code}
-                                          size="small" 
-                                          sx={{ 
-                                            fontSize: '0.7rem', 
-                                            height: '22px', 
-                                            mb: 0.5,
-                                            fontWeight: 600,
-                                            boxShadow: 1,
-                                            bgcolor: '#424242',
-                                            color: '#ffffff',
-                                          }}
-                                        />
-                                      )}
-                                      <OutdoorWorkCalendarChip
-                                        applications={outdoorApps}
-                                        sx={{ fontSize: '0.7rem', height: '22px' }}
-                                      />
-                                      {/* 如果沒有任何資訊，顯示 --- */}
-                                      {!schedule.start_time && !schedule.end_time && !schedule.leave_type_name_zh && !schedule.leave_type_name && !schedule.leave_type_code && !schedule.store_code && outdoorApps.length === 0 && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                          ---
-                                        </Typography>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <OutdoorWorkCalendarChip
-                                        applications={outdoorApps}
-                                        sx={{ fontSize: '0.7rem', height: '22px' }}
-                                      />
-                                      {outdoorApps.length === 0 && (
-                                        <Typography variant="caption" color="text.secondary">
-                                          ---
-                                        </Typography>
-                                      )}
-                                    </>
-                                  )}
-                                </>
-                              )}
-                            </Box>
-                            ))}
-                          </TableCell>
-                        );
-                      })}
+                      {dates.map((date, colIndex) => renderMemberDateCell(member, date, rowIndex, colIndex))}
                     </TableRow>
                   ))}
                   {/* 顯示跨群組的 helper */}
-                  {(() => {
+                  {!editMode && (() => {
                     // 獲取選中的 store 的 store_short_name_
                     const selectedStore = selectedDefaultStoreId 
                       ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
@@ -3731,9 +3524,7 @@ const Schedule = ({ noLayout = false }) => {
                           schedules: {}
                         };
                       }
-                      const dateStr = typeof helper.schedule_date === 'string' 
-                        ? helper.schedule_date.split('T')[0] 
-                        : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                      const dateStr = toHKCalendarDate(helper.schedule_date);
                       helperByUser[userId].schedules[dateStr] = helper;
                     });
                     
@@ -3806,7 +3597,7 @@ const Schedule = ({ noLayout = false }) => {
                           </Box>
                         </TableCell>
                         {dates.map(date => {
-                          const dateStr = date.format('YYYY-MM-DD');
+                          const dateStr = toHKCalendarDate(date);
                           const schedule = helperUser.schedules[dateStr];
                           const outdoorApps = getOutdoorWorkForUserAndDate(helperUser.user_id, date);
                           return (
@@ -3897,7 +3688,7 @@ const Schedule = ({ noLayout = false }) => {
                       {t('schedule.summary') || '統計'}
                     </TableCell>
                     {dates.map(date => {
-                      const dateStr = date.format('YYYY-MM-DD');
+                      const dateStr = toHKCalendarDate(date);
                       // 計算該日期有排班的 FT 和 PT 數量
                       let ftCount = 0;
                       let ptCount = 0;
@@ -3924,9 +3715,7 @@ const Schedule = ({ noLayout = false }) => {
                       // 統計 helper schedules（只計算有排班時間的）
                       // 後端已經根據選擇的店舖篩選了 helper，直接統計所有返回的 helper
                       helperSchedules.forEach(helper => {
-                        const helperDateStr = typeof helper.schedule_date === 'string' 
-                          ? helper.schedule_date.split('T')[0] 
-                          : dayjs(helper.schedule_date).format('YYYY-MM-DD');
+                        const helperDateStr = toHKCalendarDate(helper.schedule_date);
                         
                         if (helperDateStr === dateStr) {
                           // 判斷是否有排班時間：必須有 start_time 或 end_time
@@ -4030,14 +3819,14 @@ const Schedule = ({ noLayout = false }) => {
               // 若為幫舖員工則從 helperSchedules 取得
               const helperSchedule = !member && editingSchedule.schedule_date
                 ? helperSchedules.find(s => {
-                    const sDate = typeof s.schedule_date === 'string' ? s.schedule_date.split('T')[0] : dayjs(s.schedule_date).format('YYYY-MM-DD');
+                    const sDate = toHKCalendarDate(s.schedule_date);
                     return Number(s.user_id) === Number(editingSchedule.user_id) && sDate === editingSchedule.schedule_date;
                   })
                 : null;
               const employeeNumber = member?.employee_number ?? helperSchedule?.employee_number ?? '—';
               const displayName = member ? (member.display_name || member.name_zh || member.name) : (helperSchedule ? (helperSchedule.user_name || helperSchedule.user_name_zh || '') : '—');
               const scheduleDateDisplay = editingSchedule.schedule_date
-                ? formatDateDisplay(dayjs(editingSchedule.schedule_date).tz('Asia/Hong_Kong'))
+                ? formatDateDisplay(editingSchedule.schedule_date)
                 : '';
               return (
                 <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
@@ -4211,6 +4000,93 @@ const Schedule = ({ noLayout = false }) => {
           </DialogActions>
         </Dialog>
 
+        {/* 進入編輯前：選擇同事與最多 7 日 */}
+        <Dialog
+          open={editSetupOpen}
+          onClose={() => setEditSetupOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>{t('schedule.editSetupTitle')}</DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {t('schedule.editSetupHint', { days: MAX_EDIT_DAYS })}
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={6}>
+                <DatePicker timezone={HK_TZ}
+                  label={t('schedule.startDate')}
+                  value={setupStartDate}
+                  onChange={(newValue) => {
+                    if (!newValue || !newValue.isValid()) return;
+                    const { start, end } = clampSetupRange(newValue, setupEndDate || newValue);
+                    setSetupStartDate(start);
+                    setSetupEndDate(end);
+                  }}
+                  minDate={startDate}
+                  maxDate={endDate}
+                  format="DD/MM/YYYY"
+                  slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <DatePicker timezone={HK_TZ}
+                  label={t('schedule.endDate')}
+                  value={setupEndDate}
+                  onChange={(newValue) => {
+                    if (!newValue || !newValue.isValid()) return;
+                    const { start, end } = clampSetupRange(setupStartDate || newValue, newValue);
+                    setSetupStartDate(start);
+                    setSetupEndDate(end);
+                  }}
+                  minDate={setupStartDate || startDate}
+                  maxDate={setupStartDate ? setupStartDate.add(MAX_EDIT_DAYS - 1, 'day') : endDate}
+                  format="DD/MM/YYYY"
+                  slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    {t('schedule.selectUsers')}
+                  </Typography>
+                  <Box>
+                    <Button size="small" onClick={() => setSetupMemberIds(groupMembers.map((m) => m.id))}>
+                      {t('schedule.selectAll')}
+                    </Button>
+                    <Button size="small" onClick={() => setSetupMemberIds([])}>
+                      {t('schedule.clearSelection')}
+                    </Button>
+                  </Box>
+                </Box>
+                <Box sx={{ maxHeight: 240, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
+                  {groupMembers.map((member) => (
+                    <Box key={member.id} sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Checkbox
+                        checked={setupMemberIds.includes(member.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSetupMemberIds([...setupMemberIds, member.id]);
+                          } else {
+                            setSetupMemberIds(setupMemberIds.filter((id) => id !== member.id));
+                          }
+                        }}
+                      />
+                      <Typography variant="body2">
+                        {member.employee_number} - {member.display_name || member.name_zh || member.name}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditSetupOpen(false)}>{t('common.cancel')}</Button>
+            <Button variant="contained" onClick={handleConfirmEditSetup}>{t('schedule.enterEdit')}</Button>
+          </DialogActions>
+        </Dialog>
+
         {/* 批量編輯對話框 */}
         <Dialog 
           open={batchEditDialogOpen} 
@@ -4241,10 +4117,19 @@ const Schedule = ({ noLayout = false }) => {
               py: 2.5,
             }}
           >
-            {t('schedule.batchEdit')}
+            {selectedCellKeys.length > 0 ? t('schedule.setSelectedCells') : t('schedule.batchEdit')}
           </DialogTitle>
           <DialogContent sx={{ p: 3, mt: 2 }}>
             <Grid container spacing={3} sx={{ mt: 1 }}>
+              {selectedCellKeys.length > 0 && (
+                <Grid item xs={12}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {t('schedule.applyToSelectedCells', { count: selectedCellKeys.length })}
+                  </Typography>
+                </Grid>
+              )}
+              {selectedCellKeys.length === 0 && (
+              <>
               {/* Desktop：選擇員工與選擇日期並排；Mobile：上下堆疊 */}
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 2 }}>
@@ -4301,7 +4186,7 @@ const Schedule = ({ noLayout = false }) => {
                   boxShadow: 1,
                 }}>
                   {dates.map(date => (
-                    <Box key={date.format('YYYY-MM-DD')} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Box key={toHKCalendarDate(date)} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                       <Checkbox
                         checked={selectedDates.some(d => {
                           if (!d || !date) return false;
@@ -4339,6 +4224,8 @@ const Schedule = ({ noLayout = false }) => {
                   ))}
                 </Box>
               </Grid>
+              </>
+              )}
 
               <Grid item xs={12}>
                 <Typography variant="subtitle1" gutterBottom sx={{ mt: 1, fontWeight: 600, color: 'primary.main', mb: 2 }}>

@@ -32,7 +32,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import YearSelector from '../components/YearSelector';
-import { formatDateUTC8 } from '../utils/dateFormat';
+import { formatDateUTC8, todayHK } from '../utils/dateFormat';
 
 const LeaveApplication = () => {
   const { t, i18n } = useTranslation();
@@ -421,7 +421,7 @@ const LeaveApplication = () => {
       formDataToSend.append('total_days', parseFloat(formData.days));
       formDataToSend.append('year', formData.year); // 發送年份
       // e-flow 申請必須將當時的日期錄入申請日期
-      formDataToSend.append('application_date', new Date().toISOString().split('T')[0]); // 格式：YYYY-MM-DD
+      formDataToSend.append('application_date', todayHK());
       if (formData.reason) {
         formDataToSend.append('reason', formData.reason);
       }

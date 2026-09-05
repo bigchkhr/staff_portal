@@ -32,6 +32,7 @@ import Layout from '../components/Layout';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import isoWeek from 'dayjs/plugin/isoWeek';
+import { toHKCalendarDate } from '../utils/dateFormat';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -227,25 +228,10 @@ const MyAttendance = () => {
   };
 
   const getAttendanceForDate = (date) => {
-    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = toHKCalendarDate(date);
     return attendanceData.find(item => {
       if (!item || !item.attendance_date) return false;
-      
-      let itemDateStr = item.attendance_date;
-      
-      // 處理 Date 對象：以 UTC+8 解析
-      if (itemDateStr instanceof Date) {
-        itemDateStr = dayjs(itemDateStr).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      }
-      // 處理字符串：以香港時區解析，避免 "YYYY-MM-DD" 被當成 UTC 午夜
-      else if (typeof itemDateStr === 'string') {
-        const raw = itemDateStr.split('T')[0].split(' ')[0].substring(0, 10);
-        const parsed = dayjs.tz(raw, 'Asia/Hong_Kong');
-        itemDateStr = parsed.isValid() ? parsed.format('YYYY-MM-DD') : raw;
-      }
-      
-      // 嚴格比較日期字符串
-      return itemDateStr === dateStr;
+      return toHKCalendarDate(item.attendance_date) === dateStr;
     });
   };
 

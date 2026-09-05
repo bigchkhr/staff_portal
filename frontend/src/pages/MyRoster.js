@@ -30,6 +30,7 @@ import Layout from '../components/Layout';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import isoWeek from 'dayjs/plugin/isoWeek';
+import { toHKCalendarDate } from '../utils/dateFormat';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -87,13 +88,10 @@ const MyRoster = () => {
   };
 
   const getScheduleForDate = (date) => {
-    const dateStr = dayjs.tz(date, 'Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = toHKCalendarDate(date);
     return schedules.find(s => {
       if (!s || !s.schedule_date) return false;
-      const sDateStr = typeof s.schedule_date === 'string'
-        ? s.schedule_date.split('T')[0].substring(0, 10)
-        : dayjs(s.schedule_date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
-      return sDateStr === dateStr;
+      return toHKCalendarDate(s.schedule_date) === dateStr;
     });
   };
 

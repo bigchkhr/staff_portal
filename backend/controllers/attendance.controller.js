@@ -6,6 +6,7 @@ const User = require('../database/models/User');
 const LeaveApplication = require('../database/models/LeaveApplication');
 const OutdoorWorkApplication = require('../database/models/OutdoorWorkApplication');
 const knex = require('../config/database');
+const { toHKCalendarDate, eachHKCalendarDate } = require('../utils/hkDate');
 
 class AttendanceController {
   // 取得考勤列表
@@ -60,24 +61,12 @@ class AttendanceController {
         return res.status(400).json({ message: '請提供考勤日期' });
       }
 
-      // 處理 attendance_date：可能是字符串、Date 對象或空值
-      let finalAttendanceDate = attendance_date;
-      
-      // 如果是 Date 對象，轉換為 YYYY-MM-DD 格式字符串
-      if (finalAttendanceDate instanceof Date) {
-        const year = finalAttendanceDate.getFullYear();
-        const month = String(finalAttendanceDate.getMonth() + 1).padStart(2, '0');
-        const day = String(finalAttendanceDate.getDate()).padStart(2, '0');
-        finalAttendanceDate = `${year}-${month}-${day}`;
-      } else if (typeof finalAttendanceDate === 'string') {
-        // 如果是字符串，移除時間部分（如果有）
-        finalAttendanceDate = finalAttendanceDate.split('T')[0].split(' ')[0];
-        // 驗證格式是否為 YYYY-MM-DD
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(finalAttendanceDate)) {
-          console.error('createAttendance - invalid date format:', finalAttendanceDate);
-          return res.status(400).json({ message: `attendance_date 格式不正確: ${finalAttendanceDate}，應為 YYYY-MM-DD` });
-        }
+      const normalizedDate = toHKCalendarDate(attendance_date);
+      if (!normalizedDate) {
+        console.error('createAttendance - invalid date format:', attendance_date);
+        return res.status(400).json({ message: `attendance_date 格式不正確: ${attendance_date}，應為 YYYY-MM-DD` });
       }
+      const finalAttendanceDate = normalizedDate;
 
       console.log('createAttendance - finalAttendanceDate:', finalAttendanceDate);
 
@@ -206,28 +195,15 @@ class AttendanceController {
       console.log('updateAttendance - attendance_date type:', typeof attendance_date);
 
       // 需要提供 attendance_date，以及 user_id 或 employee_number
-      // 處理 attendance_date：可能是字符串、Date 對象或空值
-      let finalAttendanceDate = attendance_date;
-      
-      if (!finalAttendanceDate) {
+      if (!attendance_date) {
         console.error('updateAttendance - attendance_date is missing or empty');
         return res.status(400).json({ message: '請提供 attendance_date' });
       }
 
-      // 如果是 Date 對象，轉換為 YYYY-MM-DD 格式字符串
-      if (finalAttendanceDate instanceof Date) {
-        const year = finalAttendanceDate.getFullYear();
-        const month = String(finalAttendanceDate.getMonth() + 1).padStart(2, '0');
-        const day = String(finalAttendanceDate.getDate()).padStart(2, '0');
-        finalAttendanceDate = `${year}-${month}-${day}`;
-      } else if (typeof finalAttendanceDate === 'string') {
-        // 如果是字符串，移除時間部分（如果有）
-        finalAttendanceDate = finalAttendanceDate.split('T')[0].split(' ')[0];
-        // 驗證格式是否為 YYYY-MM-DD
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(finalAttendanceDate)) {
-          console.error('updateAttendance - invalid date format:', finalAttendanceDate);
-          return res.status(400).json({ message: `attendance_date 格式不正確: ${finalAttendanceDate}，應為 YYYY-MM-DD` });
-        }
+      const finalAttendanceDate = toHKCalendarDate(attendance_date);
+      if (!finalAttendanceDate) {
+        console.error('updateAttendance - invalid date format:', attendance_date);
+        return res.status(400).json({ message: `attendance_date 格式不正確: ${attendance_date}，應為 YYYY-MM-DD` });
       }
 
       console.log('updateAttendance - finalAttendanceDate:', finalAttendanceDate);
@@ -402,7 +378,7 @@ class AttendanceController {
         .where('attendance_date', attendance_date)
         .delete();
 
-      const finalDate = typeof attendance_date === 'string' ? attendance_date.split('T')[0] : attendance_date;
+      const finalDate = toHKCalendarDate(attendance_date) || attendance_date;
       const monthlySummaryController = require('./monthlyAttendanceSummary.controller');
       monthlySummaryController.syncAttendanceToMonthlySummary(user.id, finalDate).catch(e => console.error('[deleteAttendance] sync monthly summary:', e));
 
@@ -487,62 +463,31 @@ class AttendanceController {
 
           // 將假期申請轉換為按用戶和日期索引的格式
           validApplications.forEach(app => {
-            // 確保日期格式正確
-            let startDateStr = app.start_date;
-            let endDateStr = app.end_date;
-            
-            // 如果日期是Date對象，轉換為字符串
-            if (startDateStr instanceof Date) {
-              const year = startDateStr.getFullYear();
-              const month = String(startDateStr.getMonth() + 1).padStart(2, '0');
-              const day = String(startDateStr.getDate()).padStart(2, '0');
-              startDateStr = `${year}-${month}-${day}`;
-            } else if (typeof startDateStr === 'string') {
-              startDateStr = startDateStr.split('T')[0].split(' ')[0];
-            }
-            
-            if (endDateStr instanceof Date) {
-              const year = endDateStr.getFullYear();
-              const month = String(endDateStr.getMonth() + 1).padStart(2, '0');
-              const day = String(endDateStr.getDate()).padStart(2, '0');
-              endDateStr = `${year}-${month}-${day}`;
-            } else if (typeof endDateStr === 'string') {
-              endDateStr = endDateStr.split('T')[0].split(' ')[0];
+            const startDateStr = toHKCalendarDate(app.start_date);
+            const endDateStr = toHKCalendarDate(app.end_date);
+            if (!startDateStr || !endDateStr) {
+              return;
             }
 
-            const startDate = new Date(startDateStr + 'T00:00:00');
-            const endDate = new Date(endDateStr + 'T23:59:59');
-            let currentDate = new Date(startDate);
-
-            while (currentDate <= endDate) {
-              const year = currentDate.getFullYear();
-              const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-              const day = String(currentDate.getDate()).padStart(2, '0');
-              const dateStr = `${year}-${month}-${day}`;
-              // 確保 user_id 是數字類型，以便匹配
+            for (const dateStr of eachHKCalendarDate(startDateStr, endDateStr)) {
               const userId = Number(app.user_id);
               const key = `${userId}_${dateStr}`;
 
-              // 初始化數組（如果不存在）
               if (!approvedLeaves[key]) {
                 approvedLeaves[key] = [];
               }
               
-              // 避免重複添加相同的假期申請
               const existing = approvedLeaves[key].find(l => l.id === app.id);
               if (!existing) {
-                // 使用 LeaveApplication.getSessionForDate 來計算該日期的時段
                 const leaveSession = LeaveApplication.getSessionForDate(app, dateStr);
                 approvedLeaves[key].push({
                   id: app.id,
                   leave_type_name_zh: app.leave_type_name_zh || app.leave_type_name || '',
-                  leave_session: leaveSession, // 使用正確的邏輯計算時段
+                  leave_session: leaveSession,
                   start_date: startDateStr,
                   end_date: endDateStr
                 });
               }
-
-              currentDate.setDate(currentDate.getDate() + 1);
             }
           });
 
@@ -565,23 +510,7 @@ class AttendanceController {
         console.error('Get approved outdoor work for attendance comparison error:', owErr);
       }
 
-      // 生成日期列表（避免時區轉換問題，直接使用字符串日期）
-      const dates = [];
-      const start = new Date(start_date + 'T00:00:00'); // 明確指定為本地時間
-      const end = new Date(end_date + 'T23:59:59'); // 明確指定為本地時間
-      
-      // 使用日期字符串直接處理，避免時區轉換
-      let currentDate = new Date(start);
-      const endDate = new Date(end);
-      
-      while (currentDate <= endDate) {
-        // 使用本地時間的年份、月份、日期，避免UTC轉換
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        dates.push(`${year}-${month}-${day}`);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+      const dates = eachHKCalendarDate(start_date, end_date);
 
       // 批量獲取所有打卡記錄（從 clock_records 表）
       // 獲取基於 employee_number 的打卡記錄（從CSV導入的原始數據）
@@ -628,16 +557,9 @@ class AttendanceController {
           rawClockRecords.forEach(record => {
             // 確保 employee_number 和 attendance_date 都是字符串格式
             const empNum = String(record.employee_number).trim();
-            let dateStr;
-            if (record.attendance_date instanceof Date) {
-              // 使用本地時間的年份、月份、日期，避免UTC轉換
-              const year = record.attendance_date.getFullYear();
-              const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
-              const day = String(record.attendance_date.getDate()).padStart(2, '0');
-              dateStr = `${year}-${month}-${day}`;
-            } else {
-              // 已經是字符串格式，直接使用（移除時間部分）
-              dateStr = String(record.attendance_date).split('T')[0].split(' ')[0];
+            const dateStr = toHKCalendarDate(record.attendance_date);
+            if (!dateStr) {
+              return;
             }
             const key = `${empNum}_${dateStr}`;
             
@@ -713,16 +635,9 @@ class AttendanceController {
               // 從 clock_records 構建考勤信息
               // 確保 employee_number 和 date 都是字符串格式
               const empNum = member.employee_number ? String(member.employee_number).trim() : '';
-              let dateStr;
-              if (date instanceof Date) {
-                // 使用本地時間的年份、月份、日期，避免UTC轉換
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                dateStr = `${year}-${month}-${day}`;
-              } else {
-                // 已經是字符串格式，直接使用（移除時間部分）
-                dateStr = String(date).split('T')[0].split(' ')[0];
+              const dateStr = toHKCalendarDate(date);
+              if (!dateStr) {
+                return null;
               }
               const employeeKey = `${empNum}_${dateStr}`;
               
@@ -777,14 +692,9 @@ class AttendanceController {
             clock_records: (() => {
               // 使用基於 employee_number 的打卡記錄，並明確帶出 branch_code、remarks（避免前端第二次進入時消失）
               const empNum = member.employee_number ? String(member.employee_number).trim() : '';
-              let dateStr;
-              if (date instanceof Date) {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                dateStr = `${year}-${month}-${day}`;
-              } else {
-                dateStr = String(date).split('T')[0].split(' ')[0];
+              const dateStr = toHKCalendarDate(date);
+              if (!dateStr) {
+                return [];
               }
               const employeeKey = `${empNum}_${dateStr}`;
               const rawRecords = clockRecordsByEmployee[employeeKey] || [];
@@ -951,7 +861,7 @@ class AttendanceController {
       const toSync = [];
       const seen = new Set();
       for (const r of clockRecords) {
-        const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : r.attendance_date;
+        const dateStr = toHKCalendarDate(r.attendance_date);
         const key = `${r.employee_number}_${dateStr}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -1076,7 +986,7 @@ class AttendanceController {
       const toSync = [];
       for (const r of existingRecords) {
         if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
-          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          const dateStr = toHKCalendarDate(r.attendance_date);
           toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
         }
       }
@@ -1212,7 +1122,7 @@ class AttendanceController {
       const toSync = [];
       for (const r of existingRecords) {
         if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
-          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          const dateStr = toHKCalendarDate(r.attendance_date);
           toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
         }
       }
@@ -1383,7 +1293,7 @@ class AttendanceController {
       const toSync = [];
       for (const r of existingRecords) {
         if (updatedIds.has(r.id) && r.employee_number && r.attendance_date) {
-          const dateStr = typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : `${r.attendance_date.getFullYear()}-${String(r.attendance_date.getMonth() + 1).padStart(2, '0')}-${String(r.attendance_date.getDate()).padStart(2, '0')}`;
+          const dateStr = toHKCalendarDate(r.attendance_date);
           toSync.push({ employee_number: r.employee_number, attendance_date: dateStr });
         }
       }
@@ -1468,18 +1378,9 @@ class AttendanceController {
         return res.status(403).json({ message: '您沒有權限更新此用戶的考勤備註（必須是該用戶所屬群組的 checker、approver1、approver2 或 approver3）' });
       }
 
-      // 處理 attendance_date：確保是 YYYY-MM-DD 格式
-      let finalAttendanceDate = attendance_date;
-      if (finalAttendanceDate instanceof Date) {
-        const year = finalAttendanceDate.getFullYear();
-        const month = String(finalAttendanceDate.getMonth() + 1).padStart(2, '0');
-        const day = String(finalAttendanceDate.getDate()).padStart(2, '0');
-        finalAttendanceDate = `${year}-${month}-${day}`;
-      } else if (typeof finalAttendanceDate === 'string') {
-        finalAttendanceDate = finalAttendanceDate.split('T')[0].split(' ')[0];
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(finalAttendanceDate)) {
-          return res.status(400).json({ message: `attendance_date 格式不正確: ${finalAttendanceDate}，應為 YYYY-MM-DD` });
-        }
+      const finalAttendanceDate = toHKCalendarDate(attendance_date);
+      if (!finalAttendanceDate) {
+        return res.status(400).json({ message: `attendance_date 格式不正確: ${attendance_date}，應為 YYYY-MM-DD` });
       }
 
       // 查找該日期和員工的所有打卡記錄
@@ -1609,14 +1510,9 @@ class AttendanceController {
       // 按日期組織數據
       const dateMap = new Map();
       clockRecords.forEach(record => {
-        let dateStr;
-        if (record.attendance_date instanceof Date) {
-          const year = record.attendance_date.getFullYear();
-          const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
-          const day = String(record.attendance_date.getDate()).padStart(2, '0');
-          dateStr = `${year}-${month}-${day}`;
-        } else {
-          dateStr = String(record.attendance_date).split('T')[0].split(' ')[0].substring(0, 10);
+        const dateStr = toHKCalendarDate(record.attendance_date);
+        if (!dateStr) {
+          return;
         }
 
         if (!dateMap.has(dateStr)) {
@@ -1698,62 +1594,23 @@ class AttendanceController {
 
       // 按日期組織數據
       const dateMap = new Map();
-      
-      // 初始化日期範圍內的所有日期（使用本地日期格式，避免時區問題）
-      // 使用 dayjs 或直接解析日期字符串，避免時區轉換問題
-      const startParts = start_date.split('-');
-      const endParts = end_date.split('-');
-      const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
-      const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
-      
-      let currentDate = new Date(start);
-      while (currentDate <= end) {
-        // 使用本地時間的年份、月份、日期，避免UTC轉換
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        
-        // 確保日期格式正確
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          console.warn(`Invalid date format generated: ${dateStr}`);
-          currentDate.setDate(currentDate.getDate() + 1);
-          continue;
-        }
-        
+      for (const dateStr of eachHKCalendarDate(start_date, end_date)) {
         dateMap.set(dateStr, {
           attendance_date: dateStr,
           schedule: null,
           clock_records: [],
           attendance: null
         });
-        currentDate.setDate(currentDate.getDate() + 1);
       }
       
       console.log(`Initialized ${dateMap.size} dates in dateMap from ${start_date} to ${end_date}`);
 
       // 添加排班數據
       schedules.forEach(schedule => {
-        let dateStr;
-        if (schedule.schedule_date instanceof Date) {
-          // 使用本地時間的年份、月份、日期
-          const year = schedule.schedule_date.getFullYear();
-          const month = String(schedule.schedule_date.getMonth() + 1).padStart(2, '0');
-          const day = String(schedule.schedule_date.getDate()).padStart(2, '0');
-          dateStr = `${year}-${month}-${day}`;
-        } else {
-          // 已經是字符串格式，直接使用（移除時間部分）
-          dateStr = String(schedule.schedule_date).split('T')[0].split(' ')[0];
-          // 確保格式為 YYYY-MM-DD
-          if (dateStr.length > 10) {
-            dateStr = dateStr.substring(0, 10);
-          }
-        }
-        
-        // 確保日期格式正確（YYYY-MM-DD）
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          console.warn(`Invalid date format for schedule: ${dateStr}, schedule ID: ${schedule.id}`);
-          return; // 跳過格式不正確的記錄
+        const dateStr = toHKCalendarDate(schedule.schedule_date);
+        if (!dateStr) {
+          console.warn(`Invalid date format for schedule: ${schedule.schedule_date}, schedule ID: ${schedule.id}`);
+          return;
         }
         
         if (dateMap.has(dateStr)) {
@@ -1788,40 +1645,11 @@ class AttendanceController {
       let skippedClockRecordsCount = 0;
       
       clockRecords.forEach(record => {
-        let dateStr;
-        
-        // 處理日期格式
-        if (record.attendance_date instanceof Date) {
-          // 使用本地時間的年份、月份、日期
-          const year = record.attendance_date.getFullYear();
-          const month = String(record.attendance_date.getMonth() + 1).padStart(2, '0');
-          const day = String(record.attendance_date.getDate()).padStart(2, '0');
-          dateStr = `${year}-${month}-${day}`;
-        } else if (record.attendance_date) {
-          // 已經是字符串格式，直接使用（移除時間部分）
-          dateStr = String(record.attendance_date);
-          // 移除時間部分
-          if (dateStr.includes('T')) {
-            dateStr = dateStr.split('T')[0];
-          }
-          if (dateStr.includes(' ')) {
-            dateStr = dateStr.split(' ')[0];
-          }
-          // 確保格式為 YYYY-MM-DD
-          if (dateStr.length > 10) {
-            dateStr = dateStr.substring(0, 10);
-          }
-        } else {
-          console.warn(`Clock record ${record.id} has no attendance_date`);
+        const dateStr = toHKCalendarDate(record.attendance_date);
+        if (!dateStr) {
+          console.warn(`Clock record ${record.id} has invalid attendance_date: ${record.attendance_date}`);
           skippedClockRecordsCount++;
           return;
-        }
-        
-        // 確保日期格式正確（YYYY-MM-DD）
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          console.warn(`Invalid date format for clock record: ${dateStr}, record ID: ${record.id}, original: ${record.attendance_date}`);
-          skippedClockRecordsCount++;
-          return; // 跳過格式不正確的記錄
         }
         
         if (dateMap.has(dateStr)) {

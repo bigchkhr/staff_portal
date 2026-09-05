@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import Swal from 'sweetalert2';
 import YearSelector from '../components/YearSelector';
 import UserSearchDialog from '../components/UserSearchDialog';
+import { toHKCalendarDate } from '../utils/dateFormat';
 
 const AdminPaperFlow = () => {
   const { user } = useAuth();
@@ -445,10 +446,7 @@ const AdminPaperFlow = () => {
       // 檢查是否為日期範圍重疊錯誤
       if (error.response?.data?.overlapping_applications && error.response.data.overlapping_applications.length > 0) {
         const overlappingApps = error.response.data.overlapping_applications;
-        const formatDate = (dateStr) => {
-          const date = new Date(dateStr);
-          return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        };
+        const formatDate = (dateStr) => toHKCalendarDate(dateStr) || '-';
         
         const overlappingList = overlappingApps.map(app => 
           `<div style="text-align: left; margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">

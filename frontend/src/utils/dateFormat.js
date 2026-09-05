@@ -1,79 +1,68 @@
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.tz.setDefault('Asia/Hong_Kong');
+
+export const HK_TZ = 'Asia/Hong_Kong';
+
 /**
- * 格式化日期時間為 YYYY-MM-DD HH:mm 格式
- * @param {string|Date} date - ISO 日期字符串或 Date 對象
- * @returns {string} 格式化後的日期時間字符串，格式：YYYY-MM-DD HH:mm
+ * 將任意日期值正規化為香港（UTC+8）日曆的 YYYY-MM-DD。
+ * 純日期字串（無時間）視為香港日曆日，不作時區換算。
+ * Date / ISO datetime / dayjs 則先當成時間點，再轉成 UTC+8 日曆日。
+ */
+export const toHKCalendarDate = (val) => {
+  if (val == null || val === '') return null;
+
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const d = dayjs(trimmed);
+    if (!d.isValid()) return null;
+    return d.tz(HK_TZ).format('YYYY-MM-DD');
+  }
+
+  if (dayjs.isDayjs(val)) {
+    if (!val.isValid()) return null;
+    return val.tz(HK_TZ).format('YYYY-MM-DD');
+  }
+
+  const d = dayjs(val);
+  if (!d.isValid()) return null;
+  return d.tz(HK_TZ).format('YYYY-MM-DD');
+};
+
+export const toHKDayjs = (val) => {
+  const dateStr = toHKCalendarDate(val);
+  if (!dateStr) return null;
+  const d = dayjs.tz(dateStr, 'YYYY-MM-DD', HK_TZ);
+  return d.isValid() ? d.startOf('day') : null;
+};
+
+export const todayHK = () => toHKCalendarDate(new Date());
+
+/**
+ * 格式化日期時間為 YYYY-MM-DD HH:mm 格式（UTC+8）
  */
 export const formatDateTime = (date) => {
   if (!date) return '-';
-  
-  try {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    
-    // 檢查日期是否有效
-    if (isNaN(dateObj.getTime())) {
-      return '-';
-    }
-    
-    // 獲取本地時間的各個部分
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const hours = String(dateObj.getHours()).padStart(2, '0');
-    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
-  } catch (error) {
-    console.error('日期格式化錯誤:', error);
-    return '-';
-  }
+  const d = dayjs(date);
+  if (!d.isValid()) return '-';
+  return d.tz(HK_TZ).format('YYYY-MM-DD HH:mm');
 };
 
 /**
  * 將日期以 UTC+8 顯示為 YYYY-MM-DD
- * @param {string|Date} date - ISO 日期字符串或 Date 對象
- * @returns {string} 格式化後的日期字符串，格式：YYYY-MM-DD（UTC+8）
  */
 export const formatDateUTC8 = (date) => {
-  if (!date) return '-';
-  try {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    if (isNaN(dateObj.getTime())) return '-';
-    const utcMs = dateObj.getTime();
-    const utc8 = new Date(utcMs + 8 * 60 * 60 * 1000);
-    const y = utc8.getUTCFullYear();
-    const m = String(utc8.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(utc8.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  } catch (error) {
-    console.error('日期格式化錯誤:', error);
-    return '-';
-  }
+  return toHKCalendarDate(date) || '-';
 };
 
 /**
- * 格式化日期為 YYYY-MM-DD 格式（不包含時間）
- * @param {string|Date} date - ISO 日期字符串或 Date 對象
- * @returns {string} 格式化後的日期字符串，格式：YYYY-MM-DD
+ * 格式化日期為 YYYY-MM-DD 格式（UTC+8 日曆）
  */
 export const formatDate = (date) => {
-  if (!date) return '-';
-  
-  try {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    
-    // 檢查日期是否有效
-    if (isNaN(dateObj.getTime())) {
-      return '-';
-    }
-    
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
-  } catch (error) {
-    console.error('日期格式化錯誤:', error);
-    return '-';
-  }
+  return toHKCalendarDate(date) || '-';
 };
-

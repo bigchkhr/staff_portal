@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { toHKCalendarDate } = require('../../utils/hkDate');
 const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
 const APPROVAL_STAGE_CONFIG = [
@@ -924,27 +925,14 @@ class LeaveApplication {
       return null;
     }
 
-    // 格式化日期字符串
-    const formatDate = (date) => {
-      if (!date) return null;
-      if (date instanceof Date) {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-      }
-      if (typeof date === 'string') {
-        return date.split('T')[0].substring(0, 10);
-      }
-      return date;
-    };
-
-    const startDateStr = formatDate(leaveApplication.start_date);
-    const endDateStr = formatDate(leaveApplication.end_date);
+    const startDateStr = toHKCalendarDate(leaveApplication.start_date);
+    const endDateStr = toHKCalendarDate(leaveApplication.end_date);
     const startSession = leaveApplication.start_session;
     const endSession = leaveApplication.end_session;
 
-    // 確保日期格式一致（移除可能的時間部分）
-    const normalizedTargetDate = targetDateStr ? targetDateStr.split('T')[0].substring(0, 10) : null;
-    const normalizedStartDate = startDateStr ? startDateStr.split('T')[0].substring(0, 10) : null;
-    const normalizedEndDate = endDateStr ? endDateStr.split('T')[0].substring(0, 10) : null;
+    const normalizedTargetDate = toHKCalendarDate(targetDateStr);
+    const normalizedStartDate = startDateStr;
+    const normalizedEndDate = endDateStr;
 
     // 確保目標日期在假期範圍內
     if (!normalizedStartDate || !normalizedEndDate || !normalizedTargetDate || 

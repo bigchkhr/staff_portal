@@ -42,6 +42,7 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import { toHKCalendarDate, toHKDayjs } from '../utils/dateFormat';
 
 dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
@@ -292,17 +293,7 @@ const GroupLeaveCalendar = () => {
             });
             const outdoorApps = (outRes.data.applications || []).filter(a => a.status === 'approved');
             outdoorApps.forEach(app => {
-              const parseOd = (d) => {
-                if (d == null || d === '') return null;
-                const ds = String(d);
-                if (ds.includes('T') && ds.includes('Z')) {
-                  return dayjs.utc(ds).tz('Asia/Hong_Kong').startOf('day');
-                }
-                if (ds.includes('T')) {
-                  return dayjs.tz(ds, 'Asia/Hong_Kong').startOf('day');
-                }
-                return dayjs.tz(ds.split('T')[0], 'Asia/Hong_Kong').startOf('day');
-              };
+              const parseOd = (d) => toHKDayjs(d);
               const oStart = parseOd(app.start_date);
               const oEnd = parseOd(app.end_date);
               if (!oStart || !oEnd || !oStart.isValid() || !oEnd.isValid()) return;
@@ -414,34 +405,18 @@ const GroupLeaveCalendar = () => {
   };
 
   const getScheduleForUserAndDate = (userId, date) => {
-    // 確保日期格式一致，使用香港時區
-    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = toHKCalendarDate(date);
     const userIdNum = Number(userId);
     
     return schedules.find(s => {
       const sUserId = Number(s.user_id);
       if (sUserId !== userIdNum) return false;
-      
-      let sDateStr = s.schedule_date;
-      if (sDateStr instanceof Date) {
-        sDateStr = dayjs(sDateStr).format('YYYY-MM-DD');
-      } else if (sDateStr && typeof sDateStr === 'string') {
-        // 如果包含時間部分，只取日期部分
-        if (sDateStr.includes('T')) {
-          sDateStr = sDateStr.split('T')[0];
-        }
-        // 確保格式是 YYYY-MM-DD
-        if (sDateStr.length > 10) {
-          sDateStr = sDateStr.substring(0, 10);
-        }
-      }
-      
-      return sDateStr === dateStr;
+      return toHKCalendarDate(s.schedule_date) === dateStr;
     });
   };
 
   const getOutdoorWorkForUserAndDate = (userId, date) => {
-    const dateStr = dayjs(date).tz('Asia/Hong_Kong').format('YYYY-MM-DD');
+    const dateStr = toHKCalendarDate(date);
     const key = `${Number(userId)}_${dateStr}`;
     return outdoorWorkByCell[key] || [];
   };

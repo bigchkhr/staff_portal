@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
+import { todayHK } from '../utils/dateFormat';
 
 const ExtraWorkingHoursApplication = () => {
   const { t } = useTranslation();
@@ -86,7 +87,7 @@ const ExtraWorkingHoursApplication = () => {
         total_hours: parseFloat(formData.total_hours),
         reason: formData.reason || null,
         description: formData.description || null,
-        application_date: new Date().toISOString().split('T')[0]
+        application_date: todayHK()
       };
 
       const response = await axios.post('/api/extra-working-hours', payload);

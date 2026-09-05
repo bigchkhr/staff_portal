@@ -29,6 +29,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import { AddCircleOutline, DeleteOutline, ContentCopy } from '@mui/icons-material';
+import { todayHK } from '../utils/dateFormat';
 
 const DEFAULT_BATCH_ROW_COUNT = 5;
 
@@ -224,7 +225,7 @@ const OutdoorWorkApplication = () => {
         transportation: row.transportation || null,
         expense: row.expense ? parseFloat(row.expense) : null,
         purpose: row.purpose || null,
-        application_date: new Date().toISOString().split('T')[0]
+        application_date: todayHK()
       }));
 
       const results = await Promise.allSettled(payloads.map(p => axios.post('/api/outdoor-work', p)));
@@ -298,7 +299,7 @@ const OutdoorWorkApplication = () => {
         transportation: formData.transportation || null,
         expense: formData.expense ? parseFloat(formData.expense) : null,
         purpose: formData.purpose || null,
-        application_date: new Date().toISOString().split('T')[0]
+        application_date: todayHK()
       };
 
       const response = await axios.post('/api/outdoor-work', payload);

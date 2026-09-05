@@ -8,42 +8,9 @@ const knex = require('../config/database');
 const monthlyAttendanceSummaryController = require('./monthlyAttendanceSummary.controller');
 
 class ScheduleController {
-  // 將日期轉換為 UTC+8 時區的 YYYY-MM-DD 格式
+  // 將日期轉換為香港 UTC+8 日曆的 YYYY-MM-DD
   formatDateToUTC8(date) {
-    if (!date) return null;
-    
-    // 如果是字符串格式 YYYY-MM-DD，直接返回
-    if (typeof date === 'string') {
-      const dateStr = date.split('T')[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return dateStr;
-      }
-    }
-    
-    let dateObj;
-    if (date instanceof Date) {
-      dateObj = date;
-    } else {
-      dateObj = new Date(date);
-    }
-    
-    if (isNaN(dateObj.getTime())) {
-      return null;
-    }
-    
-    // 獲取本地時區偏移（毫秒）
-    const localOffset = dateObj.getTimezoneOffset() * 60 * 1000;
-    // UTC+8 時區偏移（毫秒）
-    const utc8Offset = 8 * 60 * 60 * 1000;
-    // 計算 UTC+8 時區的時間
-    const utc8Time = new Date(dateObj.getTime() - localOffset + utc8Offset);
-    
-    // 使用 UTC 方法獲取日期，這樣可以確保是 UTC+8 的日期
-    const year = utc8Time.getUTCFullYear();
-    const month = String(utc8Time.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(utc8Time.getUTCDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
+    return Schedule._normalizeDateStr(date);
   }
 
   // 取得原本群組的排班列表（原舖），或員工自己嘅更表（/my-roster）
@@ -152,13 +119,8 @@ class ScheduleController {
         });
         
         // 為每個成員和每個日期檢查是否有假期但沒有排班記錄
-        const start = new Date(start_date);
-        const end = new Date(end_date);
-        const current = new Date(start);
-        
-        while (current <= end) {
-          const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-          
+        const { eachHKCalendarDate } = require('../utils/hkDate');
+        for (const dateStr of eachHKCalendarDate(start_date, end_date)) {
           for (const member of groupMembers) {
             const userId = Number(member.id);
             const key = `${userId}_${dateStr}`;
@@ -172,8 +134,6 @@ class ScheduleController {
               }
             }
           }
-          
-          current.setDate(current.getDate() + 1);
         }
       }
       
@@ -518,15 +478,7 @@ class ScheduleController {
       // 格式化日期和時間
       const helperSchedules = helperSchedulesQuery.map(schedule => {
         if (schedule.schedule_date) {
-          if (schedule.schedule_date instanceof Date) {
-            const date = schedule.schedule_date;
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            schedule.schedule_date = `${year}-${month}-${day}`;
-          } else if (typeof schedule.schedule_date === 'string') {
-            schedule.schedule_date = schedule.schedule_date.split('T')[0].substring(0, 10);
-          }
+          schedule.schedule_date = this.formatDateToUTC8(schedule.schedule_date) || schedule.schedule_date;
         }
         // 格式化時間
         if (schedule.start_time instanceof Date) {
@@ -915,32 +867,42 @@ class ScheduleController {
         return res.status(400).json({ message: '請提供有效的排班資料' });
       }
 
-      // 驗證所有記錄的群組是否相同，並檢查權限
       const departmentGroupIds = [...new Set(schedules.map(s => s.department_group_id))];
       if (departmentGroupIds.length > 1) {
         return res.status(400).json({ message: '批量排班只能針對單一群組' });
       }
 
       const departmentGroupId = departmentGroupIds[0];
-
       const actorRole = await Schedule.getActorRole(userId, departmentGroupId, req.user.is_system_admin);
+      const knex = require('../config/database');
+      const group = actorRole.group || await knex('department_groups').where('id', departmentGroupId).first();
 
-      // 驗證所有用戶是否屬於該群組，且每筆排班日期在 checker 可編輯範圍內（UTC+8）
+      const canEditGroup = !!(
+        actorRole.isAdmin ||
+        actorRole.isApprover ||
+        (actorRole.isChecker && group && group.allow_checker_edit !== false)
+      );
+      if (!canEditGroup) {
+        return res.status(403).json({
+          message: '您沒有權限編輯此群組的排班表，或日期不在 Checker 可編輯範圍內（UTC+8）'
+        });
+      }
+
+      const restrictCheckerDates = !actorRole.isAdmin && !actorRole.isApprover && actorRole.isChecker;
+      const memberIdSet = new Set(Schedule.parseGroupUserIds(group));
+
       for (const schedule of schedules) {
-        const canEditThis = await Schedule.canEditSchedule(userId, departmentGroupId, schedule.schedule_date);
-        if (!canEditThis) {
+        if (!schedule.user_id || !schedule.schedule_date) {
+          return res.status(400).json({ message: '每筆排班記錄必須包含 user_id 和 schedule_date' });
+        }
+        if (restrictCheckerDates && !Schedule.isDateInCheckerEditableRange(group, schedule.schedule_date)) {
           return res.status(403).json({
             message: `您沒有權限編輯此群組的排班表，或日期 ${schedule.schedule_date} 不在 Checker 可編輯範圍內（UTC+8）`
           });
         }
-        if (!schedule.user_id || !schedule.schedule_date) {
-          return res.status(400).json({ message: '每筆排班記錄必須包含 user_id 和 schedule_date' });
-        }
-
-        const isInGroup = await Schedule.isUserInGroup(schedule.user_id, departmentGroupId);
-        if (!isInGroup) {
-          return res.status(400).json({ 
-            message: `用戶 ID ${schedule.user_id} 不屬於指定的群組` 
+        if (!memberIdSet.has(Number(schedule.user_id))) {
+          return res.status(400).json({
+            message: `用戶 ID ${schedule.user_id} 不屬於指定的群組`
           });
         }
       }
@@ -959,21 +921,18 @@ class ScheduleController {
         })));
       }
 
-      // 驗證所有 store_id（如果提供）
-      const knex = require('../config/database');
       const storeIds = [...new Set(schedules.map(s => s.store_id).filter(id => id !== undefined && id !== null && id !== ''))];
       if (storeIds.length > 0) {
         const validStores = await knex('stores').whereIn('id', storeIds).select('id');
         const validStoreIds = validStores.map(s => s.id);
         const invalidStoreIds = storeIds.filter(id => !validStoreIds.includes(Number(id)));
         if (invalidStoreIds.length > 0) {
-          return res.status(400).json({ 
-            message: `無效的店舖ID: ${invalidStoreIds.join(', ')}` 
+          return res.status(400).json({
+            message: `無效的店舖ID: ${invalidStoreIds.join(', ')}`
           });
         }
       }
 
-      // 準備批量資料
       const schedulesData = schedules.map(s => ({
         user_id: s.user_id,
         department_group_id: departmentGroupId,
@@ -988,17 +947,21 @@ class ScheduleController {
       }));
 
       const createdSchedules = await Schedule.createBatch(schedulesData);
-      for (const s of createdSchedules) {
-        await this._logDirectScheduleChange(departmentGroupId, userId, s.user_id, s.schedule_date, null, s);
-        await this._syncOfficialSchedule(s);
-      }
-      res.status(201).json({ 
-        schedules: createdSchedules, 
-        message: `成功建立 ${createdSchedules.length} 筆排班記錄` 
+      await this._logDirectScheduleChangesBatch(departmentGroupId, userId, createdSchedules);
+
+      res.status(201).json({
+        schedules: createdSchedules,
+        message: `成功建立 ${createdSchedules.length} 筆排班記錄`
+      });
+
+      Promise.all(createdSchedules.map((s) => this._syncOfficialSchedule(s))).catch((error) => {
+        console.error('Batch sync official schedule error:', error);
       });
     } catch (error) {
       console.error('Create batch schedules error:', error);
-      res.status(500).json({ message: '批量建立排班記錄失敗', error: error.message });
+      if (!res.headersSent) {
+        res.status(500).json({ message: '批量建立排班記錄失敗', error: error.message });
+      }
     }
   }
 
@@ -1608,6 +1571,23 @@ class ScheduleController {
       });
     } catch (error) {
       console.error('Log direct schedule change error:', error);
+    }
+  }
+
+  async _logDirectScheduleChangesBatch(departmentGroupId, actorId, createdSchedules) {
+    if (!createdSchedules || createdSchedules.length === 0) return;
+    try {
+      await ScheduleChange.addLogs(createdSchedules.map((s) => ({
+        department_group_id: departmentGroupId,
+        user_id: s.user_id,
+        schedule_date: Schedule._normalizeDateStr(s.schedule_date),
+        actor_id: actorId,
+        action: 'direct_edit',
+        before_payload: null,
+        after_payload: Schedule.snapshot(s)
+      })));
+    } catch (error) {
+      console.error('Log direct schedule changes batch error:', error);
     }
   }
 

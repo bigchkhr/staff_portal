@@ -5,42 +5,9 @@ const User = require('../database/models/User');
 const knex = require('../config/database');
 
 class MonthlyAttendanceSummaryController {
-  // 將日期轉換為 UTC+8 時區的 YYYY-MM-DD 格式
+  // 將日期轉換為香港 UTC+8 日曆的 YYYY-MM-DD
   formatDateToUTC8(date) {
-    if (!date) return null;
-    
-    // 如果是字符串格式 YYYY-MM-DD，直接返回
-    if (typeof date === 'string') {
-      const dateStr = date.split('T')[0];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return dateStr;
-      }
-    }
-    
-    let dateObj;
-    if (date instanceof Date) {
-      dateObj = date;
-    } else {
-      dateObj = new Date(date);
-    }
-    
-    if (isNaN(dateObj.getTime())) {
-      return null;
-    }
-    
-    // 獲取本地時區偏移（毫秒）
-    const localOffset = dateObj.getTimezoneOffset() * 60 * 1000;
-    // UTC+8 時區偏移（毫秒）
-    const utc8Offset = 8 * 60 * 60 * 1000;
-    // 計算 UTC+8 時區的時間
-    const utc8Time = new Date(dateObj.getTime() - localOffset + utc8Offset);
-    
-    // 使用 UTC 方法獲取日期，這樣可以確保是 UTC+8 的日期
-    const year = utc8Time.getUTCFullYear();
-    const month = String(utc8Time.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(utc8Time.getUTCDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
+    return Schedule._normalizeDateStr(date);
   }
 
   // 獲取 UTC+8 時區的月份最後一天
@@ -602,9 +569,7 @@ class MonthlyAttendanceSummaryController {
           );
           freshClockRecords.forEach(r => {
             const rawDate = r.attendance_date;
-            const dateStr = rawDate && typeof rawDate === 'string'
-              ? (rawDate.includes('T') ? rawDate.split('T')[0] : rawDate.split(' ')[0])
-              : this.formatDateToUTC8(rawDate);
+            const dateStr = this.formatDateToUTC8(rawDate);
             if (!dateStr) return;
             if (!clockRecordsByDate.has(dateStr)) clockRecordsByDate.set(dateStr, []);
             clockRecordsByDate.get(dateStr).push(r);
@@ -754,7 +719,7 @@ class MonthlyAttendanceSummaryController {
                   endDate
                 );
                 freshClockRecords.forEach(r => {
-                  const dateStr = r.attendance_date && (typeof r.attendance_date === 'string' ? r.attendance_date.split('T')[0] : null) || this.formatDateToUTC8(r.attendance_date);
+                  const dateStr = this.formatDateToUTC8(r.attendance_date);
                   if (dateStr) {
                     if (!clockRecordsByDate.has(dateStr)) clockRecordsByDate.set(dateStr, []);
                     clockRecordsByDate.get(dateStr).push(r);
@@ -1647,17 +1612,6 @@ class MonthlyAttendanceSummaryController {
   }
 
   toDateString(val) {
-    if (val == null || val === '') return null;
-    if (typeof val === 'string') {
-      const dateStr = val.split('T')[0].split(' ')[0];
-      return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : this.formatDateToUTC8(val);
-    }
-    if (val instanceof Date && !isNaN(val.getTime())) {
-      const y = val.getFullYear();
-      const m = String(val.getMonth() + 1).padStart(2, '0');
-      const d = String(val.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
     return this.formatDateToUTC8(val);
   }
 

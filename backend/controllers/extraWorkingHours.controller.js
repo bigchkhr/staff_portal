@@ -5,6 +5,7 @@ const LeaveApplication = require('../database/models/LeaveApplication');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
+const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
 
 class ExtraWorkingHoursController {
   async createApplication(req, res) {
@@ -50,9 +51,9 @@ class ExtraWorkingHoursController {
       }
 
       // 對於 e-flow 申請，如果沒有提供申請日期，自動設置為當前日期
-      let finalApplicationDate = application_date;
+      let finalApplicationDate = toHKCalendarDate(application_date);
       if (actualFlowType === 'e-flow' && !finalApplicationDate) {
-        finalApplicationDate = new Date().toISOString().split('T')[0];
+        finalApplicationDate = todayHK();
       }
 
       const applicationData = {
