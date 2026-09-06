@@ -16,6 +16,7 @@ router.get('/user-schedules', scheduleController.getUserSchedulesForApprover.bin
 router.get('/change-logs', scheduleController.getScheduleChangeLogs.bind(scheduleController));
 router.get('/changes/pending-count', scheduleController.getPendingChangeCount.bind(scheduleController));
 router.post('/changes/:id/submit', scheduleController.submitScheduleChange.bind(scheduleController));
+router.post('/changes/:id/withdraw', scheduleController.withdrawScheduleChange.bind(scheduleController));
 router.post('/changes/:id/approve', scheduleController.approveScheduleChange.bind(scheduleController));
 router.post('/changes/:id/return', scheduleController.returnScheduleChange.bind(scheduleController));
 router.delete('/changes/items/:itemId', scheduleController.deleteScheduleChangeItem.bind(scheduleController));

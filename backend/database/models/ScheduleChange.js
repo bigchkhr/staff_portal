@@ -135,13 +135,6 @@ class ScheduleChange {
 
     if (!isAdmin && !isApprover) {
       query = query.where('s.submitted_by_id', viewerUserId);
-    } else {
-      query = query.where(function () {
-        this.whereIn('s.status', ['pending', 'returned'])
-          .orWhere(function () {
-            this.where('s.status', 'draft').andWhere('s.submitted_by_id', viewerUserId);
-          });
-      });
     }
 
     const submissions = await query;
@@ -228,7 +221,7 @@ class ScheduleChange {
     return created;
   }
 
-  static async upsertDraftItems(departmentGroupId, submittedById, items) {
+  static async upsertDraftItems(departmentGroupId, submittedById, items, actorId = submittedById) {
     const submission = await this.getOrCreateOpenSubmission(departmentGroupId, submittedById);
     if (!items || items.length === 0) {
       return this.findSubmissionById(submission.id);
@@ -307,7 +300,23 @@ class ScheduleChange {
         .update({ updated_at: trx.fn.now() });
     });
 
-    return this.findSubmissionById(submission.id);
+    const result = await this.findSubmissionById(submission.id);
+    const loggedItems = (result.items || []).filter((item) =>
+      uniqueItems.has(`${Number(item.user_id)}_${item.schedule_date}`)
+    );
+    if (loggedItems.length > 0) {
+      await this.addLogs(loggedItems.map((item) => ({
+        department_group_id: departmentGroupId,
+        submission_id: result.id,
+        user_id: item.user_id,
+        schedule_date: item.schedule_date,
+        actor_id: actorId,
+        action: 'draft_save',
+        before_payload: item.before_payload,
+        after_payload: proposedPayload(item)
+      })));
+    }
+    return result;
   }
 
   static async removeDraftItem(itemId, actorId) {
@@ -365,6 +374,45 @@ class ScheduleChange {
       schedule_date: item.schedule_date,
       actor_id: actorId,
       action: 'submit',
+      before_payload: item.before_payload,
+      after_payload: proposedPayload(item)
+    })));
+
+    return this.findSubmissionById(submissionId);
+  }
+
+  static async withdraw(submissionId, actorId) {
+    const submission = await this.findSubmissionById(submissionId);
+    if (!submission) return null;
+    if (Number(submission.submitted_by_id) !== Number(actorId)) {
+      const error = new Error('FORBIDDEN');
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+    if (submission.status !== 'pending') {
+      const error = new Error('INVALID_STATUS');
+      error.code = 'INVALID_STATUS';
+      throw error;
+    }
+
+    await knex('schedule_change_submissions')
+      .where('id', submissionId)
+      .update({
+        status: 'draft',
+        submitted_at: null,
+        reviewed_by_id: null,
+        reviewed_at: null,
+        return_reason: null,
+        updated_at: knex.fn.now()
+      });
+
+    await this.addLogs((submission.items || []).map((item) => ({
+      department_group_id: submission.department_group_id,
+      submission_id: submissionId,
+      user_id: item.user_id,
+      schedule_date: item.schedule_date,
+      actor_id: actorId,
+      action: 'withdraw',
       before_payload: item.before_payload,
       after_payload: proposedPayload(item)
     })));

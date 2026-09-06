@@ -1084,43 +1084,20 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限刪除此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
-      const actorRole = await Schedule.getActorRole(userId, schedule.department_group_id, req.user.is_system_admin);
-      if (actorRole.requireApproval) {
-        return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
-          user_id: schedule.user_id,
-          schedule_date: schedule.schedule_date,
-          action: 'delete',
-          department_group_id: schedule.department_group_id,
-          start_time: null,
-          end_time: null,
-          leave_type_id: null,
-          leave_session: null,
-          store_id: null,
-          remarks: null
-        }]);
-      }
-
-      await Schedule.delete(id);
-      await this._logDirectScheduleChange(
-        schedule.department_group_id,
-        userId,
-        schedule.user_id,
-        schedule.schedule_date,
-        schedule,
-        { action: 'delete' }
-      );
-      await this._syncOfficialSchedule({
+      return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
         user_id: schedule.user_id,
         schedule_date: schedule.schedule_date,
-        id: null,
-        store_id: null,
+        action: 'delete',
+        department_group_id: schedule.department_group_id,
         start_time: null,
         end_time: null,
-        leave_type_name_zh: null,
-        leave_session: null
-      });
-      res.json({ message: '排班記錄刪除成功' });
+        leave_type_id: null,
+        leave_session: null,
+        store_id: null,
+        remarks: null
+      }]);
     } catch (error) {
+      if (this._handleChangeError(error, res)) return;
       console.error('Delete schedule error:', error);
       res.status(500).json({ message: '刪除排班記錄失敗', error: error.message });
     }
@@ -1142,18 +1119,49 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限刪除此群組的排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
-      const filters = { department_group_id };
-      if (user_id) filters.user_id = user_id;
-      if (start_date) filters.start_date = start_date;
-      if (end_date) filters.end_date = end_date;
-      if (schedule_date) filters.schedule_date = schedule_date;
+      let query = knex('schedules').where('department_group_id', department_group_id);
+      if (user_id) query = query.andWhere('user_id', user_id);
+      if (start_date) query = query.andWhere('schedule_date', '>=', start_date);
+      if (end_date) query = query.andWhere('schedule_date', '<=', end_date);
+      if (schedule_date) query = query.andWhere('schedule_date', schedule_date);
+      const rows = await query.select('*');
 
-      const deletedCount = await Schedule.deleteBatch(filters);
-      res.json({ 
-        deleted_count: deletedCount, 
-        message: `成功刪除 ${deletedCount} 筆排班記錄` 
-      });
+      if (rows.length === 0) {
+        return res.json({
+          requires_approval: true,
+          submission: null,
+          deleted_count: 0,
+          message: '沒有可刪除的排班記錄'
+        });
+      }
+
+      const actorRole = await Schedule.getActorRole(userId, department_group_id, req.user.is_system_admin);
+      const restrictCheckerDates = !actorRole.isAdmin && !actorRole.isApprover && actorRole.isChecker;
+      const group = actorRole.group || await knex('department_groups').where('id', department_group_id).first();
+      if (restrictCheckerDates) {
+        for (const row of rows) {
+          if (!Schedule.isDateInCheckerEditableRange(group, row.schedule_date)) {
+            return res.status(403).json({
+              message: `您沒有權限刪除此群組的排班記錄，或日期 ${Schedule._normalizeDateStr(row.schedule_date)} 不在 Checker 可編輯範圍內`
+            });
+          }
+        }
+      }
+
+      return await this._respondCheckerDraft(req, res, department_group_id, rows.map((s) => ({
+        user_id: s.user_id,
+        schedule_date: s.schedule_date,
+        action: 'delete',
+        department_group_id: s.department_group_id,
+        start_time: null,
+        end_time: null,
+        leave_type_id: null,
+        leave_session: null,
+        store_id: null,
+        remarks: null
+      })));
     } catch (error) {
+      if (this._handleChangeError(error, res)) return;
       console.error('Delete batch schedules error:', error);
       res.status(500).json({ message: '批量刪除排班記錄失敗', error: error.message });
     }
@@ -1436,6 +1444,10 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限修改此設置' });
       }
 
+      if (require_checker_schedule_approval !== undefined && !req.user.is_system_admin) {
+        return res.status(403).json({ message: '只有 HR Group 成員可以修改 Checker 編更批核設置' });
+      }
+
       const updatePayload = {};
       if (allow_checker_edit !== undefined) {
         updatePayload.allow_checker_edit = Boolean(allow_checker_edit);
@@ -1478,6 +1490,10 @@ class ScheduleController {
 
       if (Object.keys(updatePayload).length === 0) {
         return res.status(400).json({ message: '請提供 allow_checker_edit、require_checker_schedule_approval 或 checker_editable_start_date / checker_editable_end_date' });
+      }
+
+      if (require_checker_schedule_approval !== undefined && !req.user.is_system_admin) {
+        return res.status(403).json({ message: '只有 HR Group 成員可以修改 Checker 編更批核設置' });
       }
 
       // 獲取用戶所屬的授權群組
@@ -1525,7 +1541,7 @@ class ScheduleController {
 
   _handleChangeError(error, res) {
     const messages = {
-      PENDING_SUBMISSION_EXISTS: { status: 409, message: '已有待批核呈交，請等待 Approver 批核或退回後再修改' },
+      PENDING_SUBMISSION_EXISTS: { status: 409, message: '已有待批核呈交，請先撤回呈交，或等待 Approver 批核／退回後再修改' },
       ITEM_NOT_EDITABLE: { status: 409, message: '此草稿項目目前不可修改' },
       FORBIDDEN: { status: 403, message: '您沒有權限執行此操作' },
       INVALID_STATUS: { status: 409, message: '呈交狀態不正確，無法執行此操作' },
@@ -1610,6 +1626,7 @@ class ScheduleController {
 
   async _assertCanReviewSubmission(req, submission) {
     if (!submission) return false;
+    if (Number(submission.submitted_by_id) === Number(req.user.id)) return false;
     const role = await Schedule.getActorRole(req.user.id, submission.department_group_id, req.user.is_system_admin);
     return role.isAdmin || role.isApprover;
   }
@@ -1629,6 +1646,21 @@ class ScheduleController {
     }
   }
 
+  async withdrawScheduleChange(req, res) {
+    try {
+      const submission = await ScheduleChange.findSubmissionById(req.params.id);
+      if (!submission) {
+        return res.status(404).json({ message: '呈交記錄不存在' });
+      }
+      const withdrawn = await ScheduleChange.withdraw(req.params.id, req.user.id);
+      res.json({ submission: withdrawn, message: '已撤回呈交，草稿已保留，可修改後再呈交' });
+    } catch (error) {
+      if (this._handleChangeError(error, res)) return;
+      console.error('Withdraw schedule change error:', error);
+      res.status(500).json({ message: '撤回失敗', error: error.message });
+    }
+  }
+
   async approveScheduleChange(req, res) {
     try {
       const submission = await ScheduleChange.findSubmissionById(req.params.id);
@@ -1636,6 +1668,9 @@ class ScheduleController {
         return res.status(404).json({ message: '呈交記錄不存在' });
       }
       const canReview = await this._assertCanReviewSubmission(req, submission);
+      if (Number(submission.submitted_by_id) === Number(req.user.id)) {
+        return res.status(403).json({ message: '不可批核自己呈交的編更，請由其他 Approver 處理，或先撤回呈交' });
+      }
       if (!canReview) {
         return res.status(403).json({ message: '只有 Approver 可以批核編更' });
       }
@@ -1683,6 +1718,9 @@ class ScheduleController {
         return res.status(404).json({ message: '呈交記錄不存在' });
       }
       const canReview = await this._assertCanReviewSubmission(req, submission);
+      if (Number(submission.submitted_by_id) === Number(req.user.id)) {
+        return res.status(403).json({ message: '不可退回自己呈交的編更，請由其他 Approver 處理，或先撤回呈交' });
+      }
       if (!canReview) {
         return res.status(403).json({ message: '只有 Approver 可以退回編更' });
       }
@@ -1692,7 +1730,7 @@ class ScheduleController {
         req.user.id,
         req.body?.reason || req.body?.return_reason || null
       );
-      res.json({ submission: returned, message: '已退回，草稿已保留供 Checker 修改後再呈交' });
+      res.json({ submission: returned, message: '已退回，草稿已保留，可修改後再呈交' });
     } catch (error) {
       if (this._handleChangeError(error, res)) return;
       console.error('Return schedule change error:', error);

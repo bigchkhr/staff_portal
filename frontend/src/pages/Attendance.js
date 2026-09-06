@@ -247,6 +247,21 @@ const Attendance = ({ noLayout = false }) => {
     }
   };
 
+  const isApprover123OfGroup = (group) => {
+    if (!group) return false;
+    if (user?.is_system_admin) return true;
+    const userDelegationGroupIds = (user?.delegation_groups || []).map((g) => Number(g.id));
+    return Boolean(
+      (group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id))) ||
+      (group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id))) ||
+      (group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id)))
+    );
+  };
+
+  const canImportAttendanceCsv = Boolean(
+    user?.is_system_admin || canEdit || departmentGroups.some((group) => isApprover123OfGroup(group))
+  );
+
   const canViewEmployeeTerminationDate = () => {
     if (user?.is_system_admin) return true;
     const group = departmentGroups.find((g) => g.id === selectedGroupId);
@@ -768,6 +783,7 @@ const Attendance = ({ noLayout = false }) => {
 
   // 處理 CSV 匯入
   const handleCsvImport = async () => {
+    if (!canImportAttendanceCsv) return;
     if (!csvFile) {
       Swal.fire({
         icon: 'warning',
@@ -981,6 +997,7 @@ const Attendance = ({ noLayout = false }) => {
   };
 
   const ensureExportReady = () => {
+    if (!canEdit) return false;
     if (!selectedGroupId || groupMembers.length === 0) {
       Swal.fire({
         icon: 'warning',
@@ -1285,7 +1302,7 @@ const Attendance = ({ noLayout = false }) => {
                       {isEditMode ? t('schedule.exitEdit') : t('common.edit')}
                     </Button>
                   )}
-                  {departmentGroups.length > 0 && (
+                  {canImportAttendanceCsv && (
                     <Button
                       variant="outlined"
                       color="secondary"
@@ -1306,44 +1323,48 @@ const Attendance = ({ noLayout = false }) => {
                       {t('attendance.importCSV')}
                     </Button>
                   )}
-                  <Button
-                    variant="outlined"
-                    onClick={handleExportMatrixCsv}
-                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
-                    startIcon={<FileDownloadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s',
-                      },
-                    }}
-                  >
-                    {t('attendance.exportCsvTable')}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={handleExportCsv}
-                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
-                    startIcon={<FileDownloadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s',
-                      },
-                    }}
-                  >
-                    {t('attendance.exportCsvDetail')}
-                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button
+                        variant="outlined"
+                        onClick={handleExportMatrixCsv}
+                        disabled={!selectedGroupId || groupMembers.length === 0 || loading}
+                        startIcon={<FileDownloadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {t('attendance.exportCsvTable')}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={handleExportCsv}
+                        disabled={!selectedGroupId || groupMembers.length === 0 || loading}
+                        startIcon={<FileDownloadIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {t('attendance.exportCsvDetail')}
+                      </Button>
+                    </>
+                  )}
                 </Box>
               </Grid>
             </Grid>
@@ -2171,7 +2192,7 @@ const Attendance = ({ noLayout = false }) => {
 
         {/* CSV 匯入對話框 */}
         <Dialog 
-          open={csvImportDialogOpen} 
+          open={csvImportDialogOpen && canImportAttendanceCsv} 
           onClose={() => {
             if (!importing) {
               setCsvImportDialogOpen(false);

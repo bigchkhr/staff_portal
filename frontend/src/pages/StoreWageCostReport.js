@@ -18,14 +18,18 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Typography
+  Typography,
+  CircularProgress
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { useTranslation } from 'react-i18next';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -38,6 +42,12 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
 const StoreWageCostReport = () => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
@@ -49,6 +59,7 @@ const StoreWageCostReport = () => {
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [groupInfo, setGroupInfo] = useState(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
 
@@ -352,6 +363,203 @@ const StoreWageCostReport = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportPdf = async () => {
+    if (!employees.length || exportingPdf) return;
+
+    const groupLabel = (isChinese ? groupInfo?.name_zh : groupInfo?.name) || groupInfo?.name || selectedGroupId || '';
+    const rangeLabel = `${dayjs(startDate).format('YYYY-MM-DD')} – ${dayjs(endDate).format('YYYY-MM-DD')}`;
+    const leaveBadge = (text) =>
+      `<span style="display:inline-block;background:#c62828;color:#fff;padding:1px 4px;border-radius:3px;font-weight:700;line-height:1.25;">${escapeHtml(text)}</span>`;
+
+    const buildPdfCellHtml = (emp, date) => {
+      const cell = emp.days?.[date.format('YYYY-MM-DD')];
+      if (!cell) return '';
+      const lines = [];
+      if (cell.clock_start_time || cell.clock_end_time) {
+        lines.push(`<span style="color:#1565c0;font-weight:700;">${escapeHtml(`${cell.clock_start_time || '--:--'} - ${cell.clock_end_time || '--:--'}`)}</span>`);
+      } else if (cell.schedule_start_time || cell.schedule_end_time) {
+        lines.push(`<span style="color:#666;font-weight:600;">${escapeHtml(`${cell.schedule_start_time || '--:--'} - ${cell.schedule_end_time || '--:--'}`)}</span>`);
+      }
+      const leaveLabel = formatLeaveLabel(cell);
+      if (leaveLabel) lines.push(leaveBadge(leaveLabel));
+      const storeLabel = cell.store_short_name_ || cell.store_code || '';
+      if (storeLabel) {
+        const extra = cell.store_short_name_ && cell.store_code ? ` ${cell.store_code}` : '';
+        lines.push(escapeHtml(`${storeLabel}${extra}`));
+      }
+      const hasValue = cell.minutes != null && !Number.isNaN(cell.minutes) && cell.minutes >= 0;
+      if (hasValue) {
+        const isPt = cell.hours_type === 'work';
+        const color = isPt ? '#dc004e' : '#e65100';
+        lines.push(`<span style="color:${color};font-weight:700;">${escapeHtml(formatMinutes(cell.minutes))}</span>`);
+      }
+      return lines.join('<br>');
+    };
+
+    const cellBase = 'border:0.4px solid #9e9e9e;padding:3px;vertical-align:middle;word-break:break-word;font-size:8px;line-height:1.2;';
+    const dateColW = 56;
+    const empColW = 108;
+    const totalColW = 56;
+    const daysColW = 72;
+    const tableWidth = empColW + dates.length * dateColW + totalColW + daysColW;
+
+    const dateHeaders = dates.map((date) => {
+      const weekend = date.day() === 0 || date.day() === 6;
+      const bg = weekend ? '#1565c0' : '#1976d2';
+      return `<th style="${cellBase}width:${dateColW}px;min-width:${dateColW}px;background:${bg};color:#fff;font-weight:700;text-align:center;">${escapeHtml(formatDateHeader(date))}<br><span style="font-weight:500;opacity:0.9;">${escapeHtml(date.format('ddd'))}</span></th>`;
+    }).join('');
+
+    const bodyRows = employees.map((emp) => {
+      const name = getEmployeeName(emp);
+      const position = getPositionLabel(emp);
+      const helperTag = !emp.is_group_member
+        ? `<div style="color:#c62828;font-size:7px;font-weight:700;">${escapeHtml(t('storeWageCostReport.helper'))}</div>`
+        : '';
+      const cells = dates.map((date) => {
+        const weekend = date.day() === 0 || date.day() === 6;
+        const bg = weekend ? '#fff3e0' : '#fff';
+        return `<td style="${cellBase}width:${dateColW}px;min-width:${dateColW}px;text-align:center;background:${bg};">${buildPdfCellHtml(emp, date)}</td>`;
+      }).join('');
+      const counts = employeeDayCounts[emp.user_id] || { withLeave: 0, withoutLeave: 0 };
+      return `<tr>
+        <td style="${cellBase}width:${empColW}px;min-width:${empColW}px;max-width:${empColW}px;text-align:left;background:#f5f5f5;color:#222;">
+          <div style="font-weight:700;color:#1565c0;">${escapeHtml(emp.employee_number || '')}</div>
+          <div style="font-weight:600;">${escapeHtml(name)}</div>
+          <div style="font-size:7px;color:#666;">${escapeHtml(emp.employment_mode === 'PT' ? 'PT' : 'FT')}${position ? ` · ${escapeHtml(position)}` : ''}</div>
+          ${helperTag}
+        </td>
+        ${cells}
+        <td style="${cellBase}width:${totalColW}px;text-align:center;background:#f5f5f5;font-weight:700;">${escapeHtml(formatMinutes(employeeTotals[emp.user_id] || 0))}</td>
+        <td style="${cellBase}width:${daysColW}px;text-align:center;background:#f5f5f5;">
+          <div>${escapeHtml(t('storeWageCostReport.daysWithLeave'))}: ${counts.withLeave}</div>
+          <div style="color:#666;">${escapeHtml(t('storeWageCostReport.daysWithoutLeave'))}: ${counts.withoutLeave}</div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const summaryCells = dates.map((date) => {
+      const dateStr = date.format('YYYY-MM-DD');
+      const tot = dailyTotals[dateStr] || { overtime: 0, work: 0 };
+      const head = dailyHeadcounts[dateStr] || { ft: 0, pt: 0 };
+      const weekend = date.day() === 0 || date.day() === 6;
+      const bg = weekend ? '#ffe0b2' : '#eeeeee';
+      return `<td style="${cellBase}text-align:center;background:${bg};font-weight:700;">
+        <div style="color:#e65100;">OT: ${escapeHtml(formatMinutes(tot.overtime))}</div>
+        <div style="color:#dc004e;">PT: ${escapeHtml(formatMinutes(tot.work))}</div>
+        <div style="color:#1565c0;">${escapeHtml(t('storeWageCostReport.headcountFt'))}: ${head.ft}</div>
+        <div style="color:#9c27b0;">${escapeHtml(t('storeWageCostReport.headcountPt'))}: ${head.pt}</div>
+      </td>`;
+    }).join('');
+
+    const storeRows = storeTotals.map((row) => {
+      const label = `${row.store_short_name_ || row.store_code || '--'}${row.store_short_name_ && row.store_code ? ` (${row.store_code})` : ''}`;
+      return `<tr>
+        <td style="${cellBase}text-align:left;">${escapeHtml(label)}</td>
+        <td style="${cellBase}text-align:center;color:#e65100;font-weight:700;">${escapeHtml(formatMinutes(row.overtime))}</td>
+        <td style="${cellBase}text-align:center;color:#dc004e;font-weight:700;">${escapeHtml(formatMinutes(row.work))}</td>
+        <td style="${cellBase}text-align:center;font-weight:700;">${escapeHtml(formatMinutes((row.overtime || 0) + (row.work || 0)))}</td>
+      </tr>`;
+    }).join('');
+
+    const storeSummaryHtml = storeTotals.length > 0 ? `
+      <div style="font-size:12px;font-weight:700;margin:10px 0 4px;">${escapeHtml(t('storeWageCostReport.storeSummary'))}</div>
+      <table style="border-collapse:collapse;font-size:8px;width:420px;">
+        <thead>
+          <tr>
+            <th style="${cellBase}background:#1976d2;color:#fff;text-align:left;">${escapeHtml(t('storeWageCostReport.store'))}</th>
+            <th style="${cellBase}background:#1976d2;color:#fff;text-align:center;">${escapeHtml(t('storeWageCostReport.legendOt'))}</th>
+            <th style="${cellBase}background:#1976d2;color:#fff;text-align:center;">${escapeHtml(t('storeWageCostReport.legendPt'))}</th>
+            <th style="${cellBase}background:#1976d2;color:#fff;text-align:center;">${escapeHtml(t('storeWageCostReport.total'))}</th>
+          </tr>
+        </thead>
+        <tbody>${storeRows}</tbody>
+      </table>
+    ` : '';
+
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:0;top:0;opacity:0.01;pointer-events:none;z-index:-1;background:#fff;';
+    holder.innerHTML = `
+      <div id="wage-cost-pdf-root" style="background:#fff;color:#222;width:${tableWidth + 24}px;font-family:'Microsoft JhengHei','PingFang TC','Noto Sans TC','Microsoft YaHei',sans-serif;padding:10px 12px;box-sizing:border-box;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:2px;">${escapeHtml(t('storeWageCostReport.title'))}${groupLabel ? ` · ${escapeHtml(groupLabel)}` : ''}</div>
+        <div style="font-size:10px;color:#555;margin-bottom:8px;">${escapeHtml(rangeLabel)}</div>
+        <table style="border-collapse:collapse;table-layout:fixed;width:${tableWidth}px;font-size:8px;line-height:1.2;">
+          <thead>
+            <tr>
+              <th style="${cellBase}width:${empColW}px;min-width:${empColW}px;background:#1976d2;color:#fff;font-weight:700;text-align:center;">${escapeHtml(t('storeWageCostReport.employee'))}</th>
+              ${dateHeaders}
+              <th style="${cellBase}width:${totalColW}px;background:#1976d2;color:#fff;font-weight:700;text-align:center;">${escapeHtml(t('storeWageCostReport.total'))}</th>
+              <th style="${cellBase}width:${daysColW}px;background:#1976d2;color:#fff;font-weight:700;text-align:center;">${escapeHtml(t('storeWageCostReport.days'))}<br><span style="font-weight:500;opacity:0.9;font-size:7px;">${escapeHtml(t('storeWageCostReport.daysWithLeave'))} / ${escapeHtml(t('storeWageCostReport.daysWithoutLeave'))}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bodyRows}
+            <tr>
+              <td style="${cellBase}text-align:left;background:#eeeeee;font-weight:700;">${escapeHtml(t('storeWageCostReport.summary'))}</td>
+              ${summaryCells}
+              <td style="${cellBase}text-align:center;background:#eeeeee;font-weight:700;">
+                <div style="color:#e65100;">OT: ${escapeHtml(formatMinutes(grandTotals.overtime))}</div>
+                <div style="color:#dc004e;">PT: ${escapeHtml(formatMinutes(grandTotals.work))}</div>
+              </td>
+              <td style="${cellBase}background:#eeeeee;"></td>
+            </tr>
+          </tbody>
+        </table>
+        ${storeSummaryHtml}
+      </div>
+    `;
+
+    setExportingPdf(true);
+    document.body.appendChild(holder);
+    try {
+      const root = holder.querySelector('#wage-cost-pdf-root');
+      const canvas = await html2canvas(root, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        width: tableWidth + 24,
+        windowWidth: tableWidth + 24
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const margin = 5;
+      const cssPxToMm = 25.4 / 96;
+      const cssWidthMm = (canvas.width / 2) * cssPxToMm;
+      const fitOn = (pageW, pageH) => {
+        const usableW = pageW - margin * 2;
+        const usableH = pageH - margin * 2;
+        let imgW = usableW;
+        let imgH = (canvas.height * imgW) / canvas.width;
+        if (imgH > usableH) {
+          imgH = usableH;
+          imgW = (canvas.width * imgH) / canvas.height;
+        }
+        return {
+          imgW,
+          imgH,
+          x: margin + (usableW - imgW) / 2,
+          y: margin + (usableH - imgH) / 2,
+          shrink: imgW / cssWidthMm
+        };
+      };
+      const a4Fit = fitOn(297, 210);
+      const useA3 = a4Fit.shrink < 0.72;
+      const fit = useA3 ? fitOn(420, 297) : a4Fit;
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: useA3 ? 'a3' : 'a4' });
+      pdf.addImage(imgData, 'PNG', fit.x, fit.y, fit.imgW, fit.imgH);
+      const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
+      pdf.save(`store-wage-cost-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.pdf`);
+    } catch (error) {
+      console.error('Export PDF error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('storeWageCostReport.error'),
+        text: t('storeWageCostReport.exportPdfFailed')
+      });
+    } finally {
+      holder.remove();
+      setExportingPdf(false);
+    }
+  };
+
   const renderCell = (emp, date) => {
     const cell = emp.days?.[date.format('YYYY-MM-DD')];
     if (!cell) {
@@ -475,15 +683,26 @@ const StoreWageCostReport = () => {
                 />
               </Grid>
               <Grid item xs={12} md={3}>
-                <Button
-                  variant="outlined"
-                  startIcon={<FileDownloadIcon />}
-                  onClick={handleExportCsv}
-                  disabled={!employees.length}
-                  sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, bgcolor: 'background.paper' }}
-                >
-                  {t('storeWageCostReport.exportCsv')}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: { xs: 'wrap', sm: 'nowrap' }, alignItems: 'center' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FileDownloadIcon />}
+                    onClick={handleExportCsv}
+                    disabled={!employees.length || exportingPdf}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', bgcolor: 'background.paper' }}
+                  >
+                    {t('storeWageCostReport.exportCsv')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={exportingPdf ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
+                    onClick={handleExportPdf}
+                    disabled={!employees.length || exportingPdf}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', bgcolor: 'background.paper' }}
+                  >
+                    {t('storeWageCostReport.exportPdf')}
+                  </Button>
+                </Box>
               </Grid>
             </Grid>
             <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>

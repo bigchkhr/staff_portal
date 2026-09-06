@@ -31,6 +31,7 @@ import {
   CardContent,
   Divider,
   Collapse,
+  CircularProgress,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -47,10 +48,14 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   FileDownload as FileDownloadIcon,
-  Send as SendIcon
+  PictureAsPdf as PictureAsPdfIcon,
+  Send as SendIcon,
+  Undo as UndoIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -68,7 +73,7 @@ dayjs.extend(timezone);
 // 設置默認時區為香港（UTC+8）
 dayjs.tz.setDefault('Asia/Hong_Kong');
 
-const MAX_EDIT_DAYS = 7;
+const MAX_EDIT_DAYS = 31;
 
 const buildDateRange = (from, to) => {
   const start = toHKDayjs(from);
@@ -92,9 +97,16 @@ const parseCellKey = (key) => {
   return { userId: Number(text.slice(0, idx)), dateStr: text.slice(idx + 1) };
 };
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
 const Schedule = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const isHRMember = Boolean(user?.is_hr_member || user?.is_system_admin);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -164,6 +176,7 @@ const Schedule = ({ noLayout = false }) => {
   const [editRangeEnd, setEditRangeEnd] = useState(null);
   const [selectedCellKeys, setSelectedCellKeys] = useState([]);
   const [selectionAnchor, setSelectionAnchor] = useState(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const viewDates = useMemo(() => buildDateRange(startDate, endDate), [startDate, endDate]);
   const editDates = useMemo(() => buildDateRange(editRangeStart, editRangeEnd), [editRangeStart, editRangeEnd]);
@@ -525,6 +538,8 @@ const Schedule = ({ noLayout = false }) => {
   const changeByCellKey = useMemo(() => {
     const map = new Map();
     (changeSubmissions || []).forEach((submission) => {
+      const isOwn = Number(submission.submitted_by_id) === Number(user?.id);
+      if (submission.status === 'draft' && !isOwn) return;
       (submission.items || []).forEach((item) => {
         const itemDate = scheduleDateKey(item.schedule_date);
         if (!itemDate) return;
@@ -540,7 +555,7 @@ const Schedule = ({ noLayout = false }) => {
       });
     });
     return map;
-  }, [changeSubmissions]);
+  }, [changeSubmissions, user?.id]);
 
   const enrichScheduleDisplay = (schedule) => {
     if (!schedule) return schedule;
@@ -636,7 +651,12 @@ const Schedule = ({ noLayout = false }) => {
     ) || null;
   };
 
+  const isOwnSubmission = (submission) =>
+    !!submission && Number(submission.submitted_by_id) === Number(user?.id);
+
   const getPendingSubmissions = () => changeSubmissions.filter(s => s.status === 'pending');
+
+  const getDraftSubmissions = () => changeSubmissions.filter(s => s.status === 'draft');
 
   const isCheckerPendingLocked = () => {
     return !!(isChecker && requireCheckerApproval && getMyPendingSubmission());
@@ -693,17 +713,7 @@ const Schedule = ({ noLayout = false }) => {
   const getChangeBadgeColor = (change) => {
     if (!change) return 'default';
     if (change.status === 'pending') return 'warning';
-    if (change.status === 'returned') return 'error';
-    return 'info';
-  };
-
-  const dateHasPendingChange = (date) => {
-    const dateStr = formatCellDateStr(date);
-    if (!dateStr) return false;
-    return changeSubmissions.some((submission) =>
-      submission.status === 'pending' &&
-      (submission.items || []).some((item) => formatCellDateStr(item.schedule_date) === dateStr)
-    );
+    return 'error';
   };
 
   const wrapWithChangeBadge = (change, children) => (
@@ -724,13 +734,25 @@ const Schedule = ({ noLayout = false }) => {
           fontWeight: 700,
           whiteSpace: 'nowrap',
           top: 2,
-          right: 2
+          right: 2,
+          ...((change?.status === 'draft' || change?.status === 'returned')
+            ? { bgcolor: '#c62828', color: '#ffffff' }
+            : {})
         }
       }}
     >
       {children}
     </Badge>
   );
+
+  const dateHasPendingChange = (date) => {
+    const dateStr = formatCellDateStr(date);
+    if (!dateStr) return false;
+    return changeSubmissions.some((submission) =>
+      submission.status === 'pending' &&
+      (submission.items || []).some((item) => formatCellDateStr(item.schedule_date) === dateStr)
+    );
+  };
 
   const formatHistoryPayload = (payload) => {
     if (!payload) return '—';
@@ -747,6 +769,7 @@ const Schedule = ({ noLayout = false }) => {
       direct_delete: t('schedule.changeActionDirectDelete'),
       draft_save: t('schedule.changeActionDraftSave'),
       submit: t('schedule.changeActionSubmit'),
+      withdraw: t('schedule.changeActionWithdraw'),
       approve: t('schedule.changeActionApprove'),
       return: t('schedule.changeActionReturn')
     };
@@ -787,6 +810,37 @@ const Schedule = ({ noLayout = false }) => {
         icon: 'success',
         title: t('schedule.success'),
         text: t('schedule.submitSuccess')
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: error.response?.data?.message || t('schedule.updateFailed')
+      });
+    }
+  };
+
+  const handleWithdrawMyChanges = async () => {
+    const pending = getMyPendingSubmission();
+    if (!pending) return;
+    const result = await Swal.fire({
+      icon: 'question',
+      title: t('schedule.withdrawChanges'),
+      text: t('schedule.confirmWithdraw'),
+      showCancelButton: true,
+      confirmButtonText: t('schedule.withdrawChanges'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const response = await axios.post(`/api/schedules/changes/${pending.id}/withdraw`);
+      const withdrawn = response.data.submission;
+      upsertLocalSubmission(withdrawn);
+      bumpGroupPendingCount(-((withdrawn?.items || []).length));
+      Swal.fire({
+        icon: 'success',
+        title: t('schedule.success'),
+        text: t('schedule.withdrawSuccess')
       });
     } catch (error) {
       Swal.fire({
@@ -900,6 +954,7 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const handleToggleCheckerApproval = async (event) => {
+    if (!isHRMember) return;
     const newValue = event.target.checked;
     if (!selectedGroupId) return;
     try {
@@ -928,6 +983,7 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const handleBatchUpdateCheckerApproval = async (enable) => {
+    if (!isHRMember) return;
     const result = await Swal.fire({
       icon: 'warning',
       title: t('schedule.confirmBatchUpdate'),
@@ -1047,10 +1103,7 @@ const Schedule = ({ noLayout = false }) => {
   const handleOpenEditSetup = () => {
     if (!canEdit || !selectedGroupId || groupMembers.length === 0) return;
     const defaultStart = startDate;
-    const { start, end } = clampSetupRange(
-      defaultStart,
-      defaultStart ? defaultStart.add(MAX_EDIT_DAYS - 1, 'day') : endDate
-    );
+    const { start, end } = clampSetupRange(defaultStart, endDate);
     setSetupMemberIds(groupMembers.map((m) => m.id));
     setSetupStartDate(start);
     setSetupEndDate(end);
@@ -1206,9 +1259,18 @@ const Schedule = ({ noLayout = false }) => {
           </Typography>
         )}
         {leaveText && (
-          <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'primary.main', fontWeight: 600, lineHeight: 1.2 }}>
-            {leaveText}
-          </Typography>
+          <Chip
+            label={leaveText}
+            size="small"
+            sx={{
+              fontSize: '0.65rem',
+              height: '18px',
+              bgcolor: '#c62828',
+              color: '#ffffff',
+              fontWeight: 600,
+              '& .MuiChip-label': { color: '#ffffff', px: 0.75 },
+            }}
+          />
         )}
         {storeLabel && (
           <Typography variant="caption" sx={{ fontSize: '0.62rem', color: 'text.secondary', lineHeight: 1.2 }}>
@@ -1250,14 +1312,22 @@ const Schedule = ({ noLayout = false }) => {
           cursor: editMode ? (editable ? 'cell' : 'not-allowed') : (canViewLeaveTypeDetail() ? 'pointer' : 'default'),
           bgcolor: selected
             ? 'rgba(25, 118, 210, 0.22)'
-            : (schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.12)' : undefined),
+            : (schedule?._change?.status === 'pending'
+              ? 'rgba(237, 108, 2, 0.12)'
+              : (schedule?._change?.status === 'draft' || schedule?._change?.status === 'returned'
+                ? 'rgba(198, 40, 40, 0.12)'
+                : undefined)),
           outline: selected ? '2px solid' : undefined,
           outlineColor: selected ? 'primary.main' : undefined,
           outlineOffset: '-2px',
           '&:hover': {
             bgcolor: selected
               ? 'rgba(25, 118, 210, 0.28)'
-              : (schedule?._change?.status === 'pending' ? 'rgba(237, 108, 2, 0.2)' : 'action.hover'),
+              : (schedule?._change?.status === 'pending'
+                ? 'rgba(237, 108, 2, 0.2)'
+                : (schedule?._change?.status === 'draft' || schedule?._change?.status === 'returned'
+                  ? 'rgba(198, 40, 40, 0.2)'
+                  : 'action.hover')),
           },
         }}
       >
@@ -2502,7 +2572,7 @@ const Schedule = ({ noLayout = false }) => {
         Swal.fire({
           icon: 'success',
           title: t('schedule.success'),
-          text: t('schedule.deleteSuccess')
+          text: response.data?.requires_approval ? t('schedule.draftSaved') : t('schedule.deleteSuccess')
         });
       } catch (error) {
         console.error('Delete schedule error:', error);
@@ -2566,7 +2636,7 @@ const Schedule = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.deleteSuccess')
+        text: t('schedule.draftSaved')
       });
     } catch (error) {
       Swal.fire({
@@ -2757,15 +2827,16 @@ const Schedule = ({ noLayout = false }) => {
     return Object.values(helperByUser);
   };
 
-  const getExportGroupFilenamePrefix = (prefix) => {
+  const getExportGroupFilenamePrefix = (prefix, ext = 'csv') => {
     const group = departmentGroups.find((g) => g.id === selectedGroupId);
     const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
     const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
     const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
-    return `${prefix}-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.csv`;
+    return `${prefix}-${safeGroup}-${dayjs(startDate).format('YYYYMMDD')}-${dayjs(endDate).format('YYYYMMDD')}.${ext}`;
   };
 
-  const ensureExportReady = () => {
+  const ensureExportReady = ({ allowChecker = false } = {}) => {
+    if (!(isApprover || (allowChecker && isChecker))) return false;
     if (!selectedGroupId || groupMembers.length === 0) {
       Swal.fire({
         icon: 'warning',
@@ -2897,6 +2968,175 @@ const Schedule = ({ noLayout = false }) => {
     downloadCsvFile(headers, rows, getExportGroupFilenamePrefix('schedule-table'));
   };
 
+  const handleExportPdf = async () => {
+    if (!ensureExportReady({ allowChecker: true }) || exportingPdf) return;
+
+    const helperUsers = getHelperUsersForExport();
+    const exportRows = [
+      ...groupMembers.map((member) => ({ member, isHelper: false })),
+      ...helperUsers.map((member) => ({ member, isHelper: true }))
+    ];
+    if (exportRows.length === 0 || viewDates.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: t('schedule.warning'),
+        text: t('schedule.noDataToExport')
+      });
+      return;
+    }
+
+    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
+    const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || '';
+    const rangeLabel = `${dayjs(startDate).format('YYYY-MM-DD')} – ${dayjs(endDate).format('YYYY-MM-DD')}`;
+
+    const pdfLeaveBadge = (text) =>
+      `<span style="display:inline-block;background:#c62828;color:#fff;padding:1px 4px;border-radius:3px;font-weight:700;line-height:1.25;">${escapeHtml(text)}</span>`;
+
+    const buildPdfCellHtml = (member, date, schedule, isHelper) => {
+      const lines = [];
+      const change = schedule?._change;
+      if (change && (change.status === 'draft' || change.status === 'returned')) {
+        lines.push(pdfLeaveBadge(getChangeStatusLabel(change.status, change.action)));
+      }
+      if (schedule?._proposedDelete) {
+        lines.push(pdfLeaveBadge(t('schedule.proposedDelete')));
+      }
+      if (schedule?.start_time || schedule?.end_time) {
+        lines.push(
+          escapeHtml(
+            `${schedule?.start_time ? formatCsvTime(schedule.start_time) : '--:--'}-${schedule?.end_time ? formatEndTimeForDisplay(schedule.end_time) : '--:--'}`
+          )
+        );
+        const hours = formatCsvHours(schedule?.start_time, schedule?.end_time);
+        if (hours) lines.push(escapeHtml(hours));
+      }
+      const leaveText = getLeaveTypeDisplayText(schedule);
+      if (leaveText) lines.push(pdfLeaveBadge(leaveText));
+      const storeLabel = schedule?.store_short_name || schedule?.store_code;
+      if (storeLabel) lines.push(escapeHtml(storeLabel));
+      const outdoorText = formatOutdoorWorkCsv(
+        getOutdoorWorkForUserAndDate(isHelper ? member.user_id : member.id, date)
+      );
+      if (outdoorText) lines.push(escapeHtml(outdoorText));
+      if (canViewLeaveTypeDetail() && schedule?.remarks) {
+        lines.push(escapeHtml(schedule.remarks));
+      }
+      if (lines.length === 0) return '';
+      return lines.join('<br>');
+    };
+
+    const cellBase = 'border:0.4px solid #9e9e9e;padding:3px;vertical-align:middle;word-break:break-word;font-size:8px;line-height:1.2;';
+    const dateColW = 56;
+    const empColW = 108;
+    const tableWidth = empColW + viewDates.length * dateColW;
+
+    const dateHeaders = viewDates.map((date) => {
+      const weekend = date.day() === 0 || date.day() === 6;
+      const bg = weekend ? '#1565c0' : '#1976d2';
+      return `<th style="${cellBase}width:${dateColW}px;min-width:${dateColW}px;background:${bg};color:#fff;font-weight:700;text-align:center;">${escapeHtml(formatDateDisplay(date))}<br><span style="font-weight:500;opacity:0.9;">${escapeHtml(date.format('ddd'))}</span></th>`;
+    }).join('');
+
+    const bodyRows = exportRows.map(({ member, isHelper }) => {
+      const name = member.display_name || member.name_zh || member.name || '';
+      const position = getMemberPositionLabel(member);
+      const helperTag = isHelper
+        ? `<div style="color:#666;font-size:7px;">${escapeHtml(t('schedule.helper'))}</div>`
+        : '';
+      const cells = viewDates.map((date) => {
+        const schedule = isHelper
+          ? (member.schedules?.[toHKCalendarDate(date)] || null)
+          : getDisplaySchedule(member.id, date);
+        const weekend = date.day() === 0 || date.day() === 6;
+        const isDraft = schedule?._change?.status === 'draft' || schedule?._change?.status === 'returned';
+        let bg = '#fff';
+        if (isDraft) bg = '#ffebee';
+        else if (weekend) bg = '#fff3e0';
+        return `<td style="${cellBase}width:${dateColW}px;min-width:${dateColW}px;text-align:center;background:${bg};">${buildPdfCellHtml(member, date, schedule, isHelper)}</td>`;
+      }).join('');
+      return `<tr>
+        <td style="${cellBase}width:${empColW}px;min-width:${empColW}px;max-width:${empColW}px;text-align:left;background:#f5f5f5;color:#222;">
+          <div style="font-weight:700;color:#1565c0;">${escapeHtml(member.employee_number || '')}</div>
+          <div style="font-weight:600;">${escapeHtml(name)}</div>
+          ${position ? `<div style="color:#666;font-size:7px;">${escapeHtml(position)}</div>` : ''}
+          ${helperTag}
+        </td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:0;top:0;opacity:0.01;pointer-events:none;z-index:-1;background:#fff;';
+    holder.innerHTML = `
+      <div id="schedule-pdf-root" style="background:#fff;color:#222;width:${tableWidth + 24}px;font-family:'Microsoft JhengHei','PingFang TC','Noto Sans TC','Microsoft YaHei',sans-serif;padding:10px 12px;box-sizing:border-box;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:2px;">${escapeHtml(t('schedule.title'))}${groupLabel ? ` · ${escapeHtml(groupLabel)}` : ''}</div>
+        <div style="font-size:10px;color:#555;margin-bottom:8px;">${escapeHtml(rangeLabel)}</div>
+        <table style="border-collapse:collapse;table-layout:fixed;width:${tableWidth}px;font-size:8px;line-height:1.2;">
+          <thead>
+            <tr>
+              <th style="${cellBase}width:${empColW}px;min-width:${empColW}px;background:#1976d2;color:#fff;font-weight:700;text-align:center;">${escapeHtml(t('schedule.employee'))}</th>
+              ${dateHeaders}
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    `;
+
+    setExportingPdf(true);
+    document.body.appendChild(holder);
+    try {
+      const root = holder.querySelector('#schedule-pdf-root');
+      const canvas = await html2canvas(root, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        width: tableWidth + 24,
+        windowWidth: tableWidth + 24
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const margin = 5;
+      const cssPxToMm = 25.4 / 96;
+      const cssWidthMm = (canvas.width / 2) * cssPxToMm;
+
+      const fitOn = (pageW, pageH) => {
+        const usableW = pageW - margin * 2;
+        const usableH = pageH - margin * 2;
+        let imgW = usableW;
+        let imgH = (canvas.height * imgW) / canvas.width;
+        if (imgH > usableH) {
+          imgH = usableH;
+          imgW = (canvas.width * imgH) / canvas.height;
+        }
+        return {
+          imgW,
+          imgH,
+          x: margin + (usableW - imgW) / 2,
+          y: margin + (usableH - imgH) / 2,
+          shrink: imgW / cssWidthMm
+        };
+      };
+
+      const a4Fit = fitOn(297, 210);
+      const useA3 = a4Fit.shrink < 0.72;
+      const format = useA3 ? 'a3' : 'a4';
+      const fit = useA3 ? fitOn(420, 297) : a4Fit;
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format });
+      pdf.addImage(imgData, 'PNG', fit.x, fit.y, fit.imgW, fit.imgH);
+      pdf.save(getExportGroupFilenamePrefix('schedule-table', 'pdf'));
+    } catch (error) {
+      console.error('Export PDF error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: t('schedule.error'),
+        text: t('schedule.exportPdfFailed')
+      });
+    } finally {
+      holder.remove();
+      setExportingPdf(false);
+    }
+  };
+
   const content = (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Container maxWidth="xl" sx={noLayout ? { mt: 0, mb: 0 } : { mt: 4, mb: 4 }}>
@@ -3026,7 +3266,7 @@ const Schedule = ({ noLayout = false }) => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
                   {canEdit && (
                     <Button
@@ -3084,7 +3324,7 @@ const Schedule = ({ noLayout = false }) => {
                       </Button>
                     </>
                   )}
-                  {isChecker && requireCheckerApproval && getMyOpenSubmission() && (
+                  {getMyOpenSubmission() && (
                     <Button
                       variant="contained"
                       color="warning"
@@ -3095,44 +3335,93 @@ const Schedule = ({ noLayout = false }) => {
                       {t('schedule.submitChanges')} ({t('schedule.itemCount', { count: (getMyOpenSubmission().items || []).length })})
                     </Button>
                   )}
-                  <Button
-                    variant="outlined"
-                    onClick={handleExportMatrixCsv}
-                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
-                    startIcon={<FileDownloadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s',
-                      },
-                    }}
-                  >
-                    {t('schedule.exportCsvTable')}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={handleExportCsv}
-                    disabled={!selectedGroupId || groupMembers.length === 0 || loading}
-                    startIcon={<FileDownloadIcon />}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      bgcolor: 'background.paper',
-                      '&:hover': {
-                        boxShadow: 3,
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s',
-                      },
-                    }}
-                  >
-                    {t('schedule.exportCsvDetail')}
-                  </Button>
+                  {getMyPendingSubmission() && (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleWithdrawMyChanges}
+                      startIcon={<UndoIcon />}
+                      sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                    >
+                      {t('schedule.withdrawChanges')} ({t('schedule.itemCount', { count: (getMyPendingSubmission().items || []).length })})
+                    </Button>
+                  )}
+                  {(isApprover || isChecker) && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                        gap: 1.5,
+                        alignItems: 'center',
+                      }}
+                    >
+                      {isApprover && (
+                        <>
+                          <Button
+                            variant="outlined"
+                            onClick={handleExportMatrixCsv}
+                            disabled={!selectedGroupId || groupMembers.length === 0 || loading || exportingPdf}
+                            startIcon={<FileDownloadIcon />}
+                            sx={{
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              bgcolor: 'background.paper',
+                              '&:hover': {
+                                boxShadow: 3,
+                                transform: 'translateY(-2px)',
+                                transition: 'all 0.2s',
+                              },
+                            }}
+                          >
+                            {t('schedule.exportCsvTable')}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            onClick={handleExportCsv}
+                            disabled={!selectedGroupId || groupMembers.length === 0 || loading || exportingPdf}
+                            startIcon={<FileDownloadIcon />}
+                            sx={{
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              bgcolor: 'background.paper',
+                              '&:hover': {
+                                boxShadow: 3,
+                                transform: 'translateY(-2px)',
+                                transition: 'all 0.2s',
+                              },
+                            }}
+                          >
+                            {t('schedule.exportCsvDetail')}
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="outlined"
+                        onClick={handleExportPdf}
+                        disabled={!selectedGroupId || groupMembers.length === 0 || loading || exportingPdf}
+                        startIcon={exportingPdf ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          bgcolor: 'background.paper',
+                          '&:hover': {
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s',
+                          },
+                        }}
+                      >
+                        {t('schedule.exportPdf')}
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               </Grid>
               {/* Checker 排班設定（橫線下，可摺疊，預設收起） */}
@@ -3176,22 +3465,24 @@ const Schedule = ({ noLayout = false }) => {
                           }
                           sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
                         />
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={requireCheckerApproval}
-                              onChange={handleToggleCheckerApproval}
-                              color="warning"
-                              size="small"
-                            />
-                          }
-                          label={
-                            <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
-                              {t('schedule.requireCheckerApproval')}
-                            </Typography>
-                          }
-                          sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
-                        />
+                        {isHRMember && (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={requireCheckerApproval}
+                                onChange={handleToggleCheckerApproval}
+                                color="warning"
+                                size="small"
+                              />
+                            }
+                            label={
+                              <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                                {t('schedule.requireCheckerApproval')}
+                              </Typography>
+                            }
+                            sx={{ ml: 0, mr: 0, alignSelf: 'flex-start' }}
+                          />
+                        )}
                         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {t('schedule.batchControl')}
@@ -3214,23 +3505,27 @@ const Schedule = ({ noLayout = false }) => {
                           >
                             {t('schedule.disableAll')}
                           </Button>
-                          <Button
-                            variant="outlined"
-                            color="warning"
-                            size="small"
-                            onClick={() => handleBatchUpdateCheckerApproval(true)}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                          >
-                            {t('schedule.requireCheckerApproval')} · {t('schedule.enableAll')}
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => handleBatchUpdateCheckerApproval(false)}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                          >
-                            {t('schedule.requireCheckerApproval')} · {t('schedule.disableAll')}
-                          </Button>
+                          {isHRMember && (
+                            <>
+                              <Button
+                                variant="outlined"
+                                color="warning"
+                                size="small"
+                                onClick={() => handleBatchUpdateCheckerApproval(true)}
+                                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                              >
+                                {t('schedule.requireCheckerApproval')} · {t('schedule.enableAll')}
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleBatchUpdateCheckerApproval(false)}
+                                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                              >
+                                {t('schedule.requireCheckerApproval')} · {t('schedule.disableAll')}
+                              </Button>
+                            </>
+                          )}
                           <Typography variant="body2" sx={{ fontWeight: 500, ml: 1 }}>
                             {t('schedule.checkerEditableRange')}
                           </Typography>
@@ -3295,14 +3590,25 @@ const Schedule = ({ noLayout = false }) => {
             </Grid>
           </Card>
 
-          {isChecker && requireCheckerApproval && getMyPendingSubmission() && (
+          {getMyPendingSubmission() && (
             <Card elevation={1} sx={{ mt: 2, p: 2, bgcolor: '#fff8e1' }}>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {t('schedule.pendingLocked')}
-              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
+                  {t('schedule.pendingLocked')}
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  onClick={handleWithdrawMyChanges}
+                  startIcon={<UndoIcon />}
+                >
+                  {t('schedule.withdrawChanges')}
+                </Button>
+              </Box>
             </Card>
           )}
-          {isChecker && requireCheckerApproval && getMyOpenSubmission()?.status === 'returned' && (
+          {getMyOpenSubmission()?.status === 'returned' && (
             <Card elevation={1} sx={{ mt: 2, p: 2, bgcolor: '#ffebee' }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {t('schedule.statusReturned')}
@@ -3336,27 +3642,72 @@ const Schedule = ({ noLayout = false }) => {
                   }}
                 >
                   <Typography variant="body2" sx={{ flex: 1, minWidth: 220 }}>
-                    {t('schedule.submittedBy')}: {submission.submitted_by_name_zh || submission.submitted_by_name}
+                    {t('schedule.submittedBy')}: {submission.submitted_by_name || submission.submitted_by_name_zh}
                     {' · '}
                     {t('schedule.itemCount', { count: (submission.items || []).length })}
                     {submission.submitted_at ? ` · ${dayjs(submission.submitted_at).tz('Asia/Hong_Kong').format('YYYY-MM-DD HH:mm')}` : ''}
                   </Typography>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="success"
-                    onClick={() => handleApproveSubmission(submission.id)}
-                  >
-                    {t('schedule.approveChanges')}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="error"
-                    onClick={() => handleReturnSubmission(submission.id)}
-                  >
-                    {t('schedule.returnChanges')}
-                  </Button>
+                  {isOwnSubmission(submission) ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {t('schedule.waitingOtherApprover')}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        onClick={() => handleApproveSubmission(submission.id)}
+                      >
+                        {t('schedule.approveChanges')}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => handleReturnSubmission(submission.id)}
+                      >
+                        {t('schedule.returnChanges')}
+                      </Button>
+                    </>
+                  )}
+                </Box>
+              ))}
+            </Card>
+          )}
+          {isApprover && getDraftSubmissions().length > 0 && (
+            <Card elevation={1} sx={{ mt: 2, p: 2 }}>
+              <Badge
+                badgeContent={getDraftSubmissions().reduce((sum, s) => sum + ((s.items || []).length), 0)}
+                color="default"
+                max={999}
+                sx={{ mb: 1.5, '& .MuiBadge-badge': { fontWeight: 700 } }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, pr: 1.5 }}>
+                  {t('schedule.draftSubmissions')}
+                </Typography>
+              </Badge>
+              {getDraftSubmissions().map((submission) => (
+                <Box
+                  key={submission.id}
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 1,
+                    py: 1,
+                    borderTop: '1px solid',
+                    borderColor: 'divider'
+                  }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 220 }}>
+                    {t('schedule.submittedBy')}: {submission.submitted_by_name || submission.submitted_by_name_zh}
+                    {' · '}
+                    {t('schedule.statusDraft')}
+                    {' · '}
+                    {t('schedule.itemCount', { count: (submission.items || []).length })}
+                    {submission.updated_at ? ` · ${dayjs(submission.updated_at).tz('Asia/Hong_Kong').format('YYYY-MM-DD HH:mm')}` : ''}
+                  </Typography>
                 </Box>
               ))}
             </Card>
@@ -3631,6 +3982,21 @@ const Schedule = ({ noLayout = false }) => {
                                       </Typography>
                                       {renderRosterTotalHoursCaption(schedule.start_time, schedule.end_time, '0.65rem')}
                                     </>
+                                  )}
+                                  {getLeaveTypeDisplayText(schedule) && (
+                                    <Chip
+                                      label={getLeaveTypeDisplayText(schedule)}
+                                      size="small"
+                                      sx={{
+                                        fontSize: '0.65rem',
+                                        height: '18px',
+                                        mb: 0.5,
+                                        bgcolor: '#c62828',
+                                        color: '#ffffff',
+                                        fontWeight: 600,
+                                        '& .MuiChip-label': { color: '#ffffff', px: 0.75 },
+                                      }}
+                                    />
                                   )}
                                   {schedule.store_short_name && (
                                     <Chip 
@@ -4000,7 +4366,7 @@ const Schedule = ({ noLayout = false }) => {
           </DialogActions>
         </Dialog>
 
-        {/* 進入編輯前：選擇同事與最多 7 日 */}
+        {/* 進入編輯前：選擇同事與最多一個月 */}
         <Dialog
           open={editSetupOpen}
           onClose={() => setEditSetupOpen(false)}
@@ -4040,7 +4406,13 @@ const Schedule = ({ noLayout = false }) => {
                     setSetupEndDate(end);
                   }}
                   minDate={setupStartDate || startDate}
-                  maxDate={setupStartDate ? setupStartDate.add(MAX_EDIT_DAYS - 1, 'day') : endDate}
+                  maxDate={
+                    setupStartDate && endDate
+                      ? (setupStartDate.add(MAX_EDIT_DAYS - 1, 'day').isAfter(endDate, 'day')
+                        ? endDate
+                        : setupStartDate.add(MAX_EDIT_DAYS - 1, 'day'))
+                      : endDate
+                  }
                   format="DD/MM/YYYY"
                   slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                 />

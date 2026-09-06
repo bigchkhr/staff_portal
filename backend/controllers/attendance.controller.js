@@ -740,21 +740,19 @@ class AttendanceController {
         return res.status(400).json({ message: '請提供有效的CSV數據' });
       }
 
-      // 檢查用戶是否有權限匯入考勤（必須是系統管理員或批核成員）
-      // 注意：CSV 匯入不特定於某個群組，所以我們檢查用戶是否至少是一個群組的批核成員
+      // 檢查用戶是否有權限匯入考勤（必須是系統管理員或 approver1 / approver2 / approver3）
       if (!isSystemAdmin) {
-        // 獲取所有未關閉的群組，檢查用戶是否至少是一個群組的批核成員
         const allGroups = await DepartmentGroup.findAll({ closed: false });
         let hasPermission = false;
         for (const group of allGroups) {
-          const canView = await this.canViewGroupAttendance(userId, group.id, false);
-          if (canView) {
+          const isApprover123 = await DepartmentGroup.isApprover123(userId, group.id);
+          if (isApprover123) {
             hasPermission = true;
             break;
           }
         }
         if (!hasPermission) {
-          return res.status(403).json({ message: '您沒有權限匯入考勤記錄（必須是群組的 checker、approver1、approver2 或 approver3）' });
+          return res.status(403).json({ message: '您沒有權限匯入考勤記錄（必須是群組的 approver1、approver2 或 approver3）' });
         }
       }
 
