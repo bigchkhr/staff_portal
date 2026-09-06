@@ -25,7 +25,8 @@ class MonthlyAttendanceSummaryController {
     return lastDayUTC8.getUTCDate();
   }
   // 計算一天的考勤數據
-  async calculateDailyAttendance(attendanceData, scheduleData, employmentMode = null) {
+  async calculateDailyAttendance(attendanceData, scheduleData, employmentMode = null, options = {}) {
+    const skipStoreLookup = options.skipStoreLookup === true;
     // 確保日期使用 UTC+8 時區格式化
     const attendanceDate = attendanceData.attendance_date;
     const dateStr = this.formatDateToUTC8(attendanceDate);
@@ -77,7 +78,7 @@ class MonthlyAttendanceSummaryController {
       });
 
     // 調試日誌
-    if (allClockRecords.length > 0) {
+    if (!skipStoreLookup && allClockRecords.length > 0) {
       console.log(`[calculateDailyAttendance] Date ${dateStr}:`, {
         totalRecords: allClockRecords.length,
         validRecordsCount: validRecords.length,
@@ -106,7 +107,7 @@ class MonthlyAttendanceSummaryController {
 
     // 根據第一個有效打卡記錄的 branch_code（實際上是 store_code）查找對應的 store_short_name_
     // 注意：clock_records.branch_code 的值就是 stores.store_code
-    if (validRecords.length > 0) {
+    if (!skipStoreLookup && validRecords.length > 0) {
       // 從第一個有效記錄中獲取 store_code（存儲在 branch_code 欄位中）
       const storeCode = validRecords[0].branch_code ? String(validRecords[0].branch_code).trim() : null;
       

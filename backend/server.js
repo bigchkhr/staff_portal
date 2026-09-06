@@ -42,7 +42,7 @@ const corsOptions = {
   origin: true, // 允許所有來源
   credentials: true, // 允許發送 cookies
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Boss-Api-Key'],
   exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Type', 'Content-Disposition']
 };
 
@@ -52,6 +52,9 @@ app.use(cors(corsOptions));
 // 請求大小限制（防止記憶體耗盡攻擊）
 app.use(express.json(requestSizeLimit.json));
 app.use(express.urlencoded(requestSizeLimit.urlencoded));
+
+const payrollHoursRoutes = require('./routes/payrollHours.routes');
+app.use('/api/internal/payroll-hours', payrollHoursRoutes);
 
 // API Rate Limiting
 app.use('/api', apiLimiter);
