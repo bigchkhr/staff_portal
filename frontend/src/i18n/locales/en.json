@@ -1544,6 +1544,7 @@
     "timeAndLeave": "Time and Leave",
     "csvImportFailed": "CSV import failed",
     "allowCheckerEdit": "Checker Schedule Permission",
+    "checkerEditDisabledHint": "Checker editing is disabled for this group. Ask an approver to turn on Checker Schedule Permission.",
     "requireCheckerApproval": "Checker edits require approval",
     "checkerApprovalEnabled": "Checker schedule approval enabled",
     "checkerApprovalDisabled": "Checker schedule approval disabled; checkers can edit directly",

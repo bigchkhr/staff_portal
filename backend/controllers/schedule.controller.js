@@ -168,12 +168,17 @@ class ScheduleController {
             endDate: end_date || null,
             viewerUserId: req.user.id,
             isApprover: actorRole.isApprover,
-            isAdmin: actorRole.isAdmin
+            isAdmin: actorRole.isAdmin,
+            isChecker: actorRole.isChecker
           });
         } catch (changeErr) {
           console.error('獲取編更呈交時發生錯誤:', changeErr);
         }
       }
+
+      const canEdit = actorRole.isAdmin
+        ? true
+        : await Schedule.canEditSchedule(req.user.id, groupId);
 
       res.json({ 
         schedules: sanitizedSchedules,
@@ -181,7 +186,13 @@ class ScheduleController {
         schedule_change_submissions,
         require_checker_schedule_approval: groupRow
           ? groupRow.require_checker_schedule_approval === true
-          : false
+          : false,
+        actor: {
+          can_edit: !!canEdit,
+          is_checker: !!(actorRole.isChecker && !actorRole.isApprover && !actorRole.isAdmin),
+          is_approver: !!(actorRole.isApprover || actorRole.isAdmin),
+          can_control_checker_edit: !!(actorRole.isApprover || actorRole.isAdmin)
+        }
       });
     } catch (error) {
       console.error('Get schedules error:', error);
@@ -1281,13 +1292,9 @@ class ScheduleController {
       return true;
     }
 
-    // 檢查是否為批核成員
-    const canEdit = await Schedule.canEditSchedule(userId, departmentGroupId);
-    if (canEdit) {
-      return true;
-    }
-
-    return false;
+    // 批核成員（checker / approver）即使暫時不可編輯，仍可查看更表
+    const isApproverMember = await DepartmentGroup.isApproverMember(userId, departmentGroupId);
+    return !!isApproverMember;
   }
 
   _sanitizeScheduleRemarks(schedule, canViewRemarks) {
@@ -1327,6 +1334,38 @@ class ScheduleController {
     return out;
   }
 
+  _attachActorFlags(groups, userDelegationGroupIds, isSystemAdmin, options = {}) {
+    const ids = (userDelegationGroupIds || []).map(Number);
+    const userId = options.userId != null ? Number(options.userId) : null;
+    const isStoreSupervisor = options.isStoreSupervisor === true;
+    return (groups || []).map((group) => {
+      if (isSystemAdmin) {
+        return {
+          ...group,
+          can_edit: true,
+          is_checker: false,
+          is_approver: true,
+          can_control_checker_edit: true
+        };
+      }
+
+      const isMember = userId != null && Schedule.parseGroupUserIds(group).includes(userId);
+      const isChecker = !!(group.checker_id && ids.includes(Number(group.checker_id))) || (isStoreSupervisor && isMember);
+      const isApprover =
+        !!(group.approver_1_id && ids.includes(Number(group.approver_1_id))) ||
+        !!(group.approver_2_id && ids.includes(Number(group.approver_2_id))) ||
+        !!(group.approver_3_id && ids.includes(Number(group.approver_3_id)));
+
+      return {
+        ...group,
+        can_edit: isApprover || (isChecker && group.allow_checker_edit !== false),
+        is_checker: isChecker && !isApprover,
+        is_approver: isApprover,
+        can_control_checker_edit: isApprover
+      };
+    });
+  }
+
   async _attachPendingItemCounts(groups, userId, isSystemAdmin) {
     const counts = await ScheduleChange.countPendingItemsByGroupForUser(userId, isSystemAdmin);
     return (groups || []).map((group) => ({
@@ -1347,7 +1386,7 @@ class ScheduleController {
       if (isSystemAdmin) {
         const allGroups = await DepartmentGroup.findAll({ closed: false });
         const groupsWithDateStr = await this._attachPendingItemCounts(
-          allGroups.map(g => this._formatGroupDateFields(g)),
+          this._attachActorFlags(allGroups.map(g => this._formatGroupDateFields(g)), [], true),
           userId,
           true
         );
@@ -1360,6 +1399,8 @@ class ScheduleController {
       // 獲取用戶所屬的授權群組
       const userDelegationGroups = await User.getDelegationGroups(userId);
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+      const currentUser = await User.findById(userId);
+      const isStoreSupervisor = Schedule.isStoreSupervisorPosition(currentUser);
       
       // 獲取所有未關閉的部門群組
       const allDepartmentGroups = await DepartmentGroup.findAll({ closed: false });
@@ -1378,17 +1419,24 @@ class ScheduleController {
       });
       
       // 合併並去重（使用 id 作為唯一標識），並將 DATE 欄位格式為 YYYY-MM-DD 再回傳
-      const directGroupIds = directDepartmentGroups.map(g => g.id);
+      const directGroupIds = new Set(directDepartmentGroups.map(g => Number(g.id)));
       const allAccessibleGroups = [...directDepartmentGroups.filter(g => !g.closed)].map(g => this._formatGroupDateFields(g));
       
       accessibleViaDelegation.forEach(group => {
-        if (!directGroupIds.includes(group.id)) {
+        if (!directGroupIds.has(Number(group.id))) {
           allAccessibleGroups.push(this._formatGroupDateFields(group));
         }
       });
       
       res.json({
-        groups: await this._attachPendingItemCounts(allAccessibleGroups, userId, false)
+        groups: await this._attachPendingItemCounts(
+          this._attachActorFlags(allAccessibleGroups, userDelegationGroupIds, false, {
+            userId,
+            isStoreSupervisor
+          }),
+          userId,
+          false
+        )
       });
     } catch (error) {
       console.error('Get accessible schedule groups error:', error);
@@ -1637,7 +1685,7 @@ class ScheduleController {
       if (!submission) {
         return res.status(404).json({ message: '呈交記錄不存在' });
       }
-      const submitted = await ScheduleChange.submit(req.params.id, req.user.id);
+      const submitted = await ScheduleChange.submit(req.params.id, req.user.id, req.user.is_system_admin);
       res.json({ submission: submitted, message: '已呈交，等待 Approver 批核' });
     } catch (error) {
       if (this._handleChangeError(error, res)) return;
@@ -1652,7 +1700,7 @@ class ScheduleController {
       if (!submission) {
         return res.status(404).json({ message: '呈交記錄不存在' });
       }
-      const withdrawn = await ScheduleChange.withdraw(req.params.id, req.user.id);
+      const withdrawn = await ScheduleChange.withdraw(req.params.id, req.user.id, req.user.is_system_admin);
       res.json({ submission: withdrawn, message: '已撤回呈交，草稿已保留，可修改後再呈交' });
     } catch (error) {
       if (this._handleChangeError(error, res)) return;

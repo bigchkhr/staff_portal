@@ -1553,6 +1553,7 @@
     "hours": "工時",
     "noDataToExport": "沒有可匯出的資料，請先選擇群組",
     "allowCheckerEdit": "Checker排班權限",
+    "checkerEditDisabledHint": "此群組已關閉 Checker 編更。請聯絡 Approver 開啟「Checker排班權限」。",
     "requireCheckerApproval": "Checker編更須經批核",
     "checkerApprovalEnabled": "已開啟 Checker 編更批核",
     "checkerApprovalDisabled": "已關閉 Checker 編更批核，Checker 可直接改更",

@@ -32,6 +32,7 @@ import {
   Divider,
   Collapse,
   CircularProgress,
+  Alert,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -105,7 +106,7 @@ const escapeHtml = (value) => String(value ?? '')
 
 const Schedule = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const isHRMember = Boolean(user?.is_hr_member || user?.is_system_admin);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -187,11 +188,23 @@ const Schedule = ({ noLayout = false }) => {
     return groupMembers.filter((m) => idSet.has(Number(m.id)));
   }, [editMode, groupMembers, editMemberIds]);
   const selectedCellKeySet = useMemo(() => new Set(selectedCellKeys), [selectedCellKeys]);
+  const findSelectedGroup = (groups = departmentGroups) =>
+    (groups || []).find((g) => Number(g.id) === Number(selectedGroupId));
 
   useEffect(() => {
-    fetchDepartmentGroups();
-    fetchLeaveTypes();
-    fetchStores();
+    const init = async () => {
+      if (typeof refreshUser === 'function') {
+        try {
+          await refreshUser();
+        } catch (error) {
+          console.error('Refresh current user error:', error);
+        }
+      }
+      fetchDepartmentGroups();
+      fetchLeaveTypes();
+      fetchStores();
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -208,9 +221,14 @@ const Schedule = ({ noLayout = false }) => {
     if (selectedGroupId) {
       fetchGroupMembers();
       fetchSchedules();
-      checkEditPermission();
     }
   }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
+
+  useEffect(() => {
+    if (selectedGroupId) {
+      checkEditPermission();
+    }
+  }, [selectedGroupId, departmentGroups, user]);
 
   // 處理開始日期變更，自動將結束日期設定為該月的最後一天
   const handleStartDateChange = (newValue) => {
@@ -236,7 +254,7 @@ const Schedule = ({ noLayout = false }) => {
   // 當群組改變時，更新 allow_checker_edit 及 checker 可編輯日期範圍（一律以 UTC+8 香港日曆解讀）
   useEffect(() => {
     if (selectedGroupId) {
-      const group = departmentGroups.find(g => g.id === selectedGroupId);
+      const group = findSelectedGroup();
       if (group) {
         setAllowCheckerEdit(group.allow_checker_edit !== false);
         setRequireCheckerApproval(group.require_checker_schedule_approval === true);
@@ -274,7 +292,7 @@ const Schedule = ({ noLayout = false }) => {
       
       // 如果用戶只屬於一個群組，自動選擇
       if (response.data.groups && response.data.groups.length === 1) {
-        setSelectedGroupId(response.data.groups[0].id);
+        setSelectedGroupId(Number(response.data.groups[0].id));
       }
     } catch (error) {
       console.error('Fetch department groups error:', error);
@@ -381,6 +399,9 @@ const Schedule = ({ noLayout = false }) => {
       if (schedulesResponse.data.require_checker_schedule_approval !== undefined) {
         setRequireCheckerApproval(schedulesResponse.data.require_checker_schedule_approval === true);
       }
+      if (schedulesResponse.data.actor) {
+        applyActorFromApi(schedulesResponse.data.actor);
+      }
       setHelperSchedules(helperSchedulesData);
     } catch (error) {
       console.error('Fetch schedules error:', error);
@@ -395,10 +416,18 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
+  const applyActorFromApi = (actor) => {
+    if (!actor || user?.is_system_admin) return;
+    setCanEdit(!!actor.can_edit);
+    setIsApprover(!!actor.is_approver);
+    setIsChecker(!!actor.is_checker && !actor.is_approver);
+    setCanControlCheckerEdit(!!actor.can_control_checker_edit);
+  };
+
   const checkEditPermission = async () => {
-    // 檢查用戶是否為批核成員
+    // 以即時群組標記為準，唔好只靠登入時快取嘅 delegation_groups
     try {
-      const group = departmentGroups.find(g => g.id === selectedGroupId);
+      const group = findSelectedGroup();
       if (!group) {
         setCanEdit(false);
         setCanControlCheckerEdit(false);
@@ -409,38 +438,40 @@ const Schedule = ({ noLayout = false }) => {
         return;
       }
 
-      // 設置 allow_checker_edit 狀態
       setAllowCheckerEdit(group.allow_checker_edit !== false);
       setRequireCheckerApproval(group.require_checker_schedule_approval === true);
 
-      // 檢查用戶是否為系統管理員
-      if (user.is_system_admin) {
+      if (user?.is_system_admin) {
         setCanEdit(true);
         setCanControlCheckerEdit(true);
-        setIsApprover(true); // 系統管理員視為 approver
+        setIsApprover(true);
         setIsChecker(false);
         return;
       }
 
-      // 檢查用戶是否為批核成員（checker, approver_1, approver_2, approver_3）
-      const userDelegationGroups = user.delegation_groups || [];
-      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+      const hasApiRoleFlags = group.is_checker !== undefined || group.is_approver !== undefined || group.can_edit !== undefined;
+      if (hasApiRoleFlags) {
+        const isApproverFlag = group.is_approver === true;
+        const isCheckerFlag = group.is_checker === true;
+        setIsApprover(isApproverFlag);
+        setIsChecker(isCheckerFlag && !isApproverFlag);
+        setCanControlCheckerEdit(group.can_control_checker_edit === true || isApproverFlag);
+        setCanEdit(isApproverFlag || (isCheckerFlag && group.allow_checker_edit !== false));
+        return;
+      }
 
-      const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
+      const userDelegationGroups = user?.delegation_groups || [];
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+      const isCheckerRole = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
       const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
       const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+      const isApproverRole = !!(isApprover1 || isApprover2 || isApprover3);
 
-      // 只有 approver1, approver2, approver3 可以控制 checker 編輯權限
-      setCanControlCheckerEdit(isApprover1 || isApprover2 || isApprover3);
-      setIsApprover(isApprover1 || isApprover2 || isApprover3);
-      setIsChecker(!!isChecker && !(isApprover1 || isApprover2 || isApprover3));
-
-      if (isChecker) {
-        setCanEdit(group.allow_checker_edit !== false);
-      } else {
-        setCanEdit(isApprover1 || isApprover2 || isApprover3);
-      }
+      setCanControlCheckerEdit(isApproverRole);
+      setIsApprover(isApproverRole);
+      setIsChecker(!!isCheckerRole && !isApproverRole);
+      setCanEdit(isApproverRole || (!!isCheckerRole && group.allow_checker_edit !== false));
     } catch (error) {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
@@ -450,27 +481,11 @@ const Schedule = ({ noLayout = false }) => {
     }
   };
 
-  // 檢查用戶是否為 checker、approver1、approver2、approver3
   const canViewLeaveTypeDetail = () => {
-    // 系統管理員可以看到詳細假期類別
-    if (user.is_system_admin) {
+    if (user?.is_system_admin) {
       return true;
     }
-
-    const group = departmentGroups.find(g => g.id === selectedGroupId);
-    if (!group) {
-      return false;
-    }
-
-    const userDelegationGroups = user.delegation_groups || [];
-    const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
-
-    const isChecker = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
-    const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
-    const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
-    const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-
-    return isChecker || isApprover1 || isApprover2 || isApprover3;
+    return isApprover || isChecker;
   };
 
   const renderTerminationDateBelowPosition = (terminationDate, fontSizeRem) => {
@@ -537,9 +552,11 @@ const Schedule = ({ noLayout = false }) => {
 
   const changeByCellKey = useMemo(() => {
     const map = new Map();
+    const hideProposalOverlay = (isApprover || user?.is_system_admin) && !isChecker;
     (changeSubmissions || []).forEach((submission) => {
       const isOwn = Number(submission.submitted_by_id) === Number(user?.id);
-      if (submission.status === 'draft' && !isOwn) return;
+      if ((submission.status === 'draft' || submission.status === 'returned') && hideProposalOverlay) return;
+      if (submission.status === 'draft' && !isOwn && !isChecker) return;
       (submission.items || []).forEach((item) => {
         const itemDate = scheduleDateKey(item.schedule_date);
         if (!itemDate) return;
@@ -555,7 +572,7 @@ const Schedule = ({ noLayout = false }) => {
       });
     });
     return map;
-  }, [changeSubmissions, user?.id]);
+  }, [changeSubmissions, user?.id, isApprover, isChecker, user?.is_system_admin]);
 
   const enrichScheduleDisplay = (schedule) => {
     if (!schedule) return schedule;
@@ -640,14 +657,17 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const getMyOpenSubmission = () => {
-    return changeSubmissions.find(s =>
-      ['draft', 'returned'].includes(s.status) && Number(s.submitted_by_id) === Number(user?.id)
-    ) || null;
+    const open = (changeSubmissions || []).filter((s) =>
+      ['draft', 'returned'].includes(s.status) &&
+      (isChecker || Number(s.submitted_by_id) === Number(user?.id))
+    );
+    return open.find((s) => s.status === 'returned') || open[0] || null;
   };
 
   const getMyPendingSubmission = () => {
-    return changeSubmissions.find(s =>
-      s.status === 'pending' && Number(s.submitted_by_id) === Number(user?.id)
+    return (changeSubmissions || []).find((s) =>
+      s.status === 'pending' &&
+      (isChecker || Number(s.submitted_by_id) === Number(user?.id))
     ) || null;
   };
 
@@ -963,7 +983,7 @@ const Schedule = ({ noLayout = false }) => {
       });
       setRequireCheckerApproval(newValue);
       setDepartmentGroups(prev => prev.map(g =>
-        g.id === selectedGroupId ? { ...g, require_checker_schedule_approval: newValue } : g
+        Number(g.id) === Number(selectedGroupId) ? { ...g, require_checker_schedule_approval: newValue } : g
       ));
       Swal.fire({
         icon: 'success',
@@ -1019,7 +1039,7 @@ const Schedule = ({ noLayout = false }) => {
   const canEditDate = (date) => {
     if (isApprover || user?.is_system_admin) return true;
     if (isCheckerPendingLocked()) return false;
-    const group = departmentGroups.find(g => g.id === selectedGroupId);
+    const group = findSelectedGroup();
     if (!group || !allowCheckerEdit) return false;
     const startStr = toHKDateStr(group.checker_editable_start_date);
     const endStr = toHKDateStr(group.checker_editable_end_date);
@@ -2665,7 +2685,7 @@ const Schedule = ({ noLayout = false }) => {
       // 更新本地群組數據
       setDepartmentGroups(prevGroups => 
         prevGroups.map(g => 
-          g.id === selectedGroupId 
+          Number(g.id) === Number(selectedGroupId) 
             ? { ...g, allow_checker_edit: newValue }
             : g
         )
@@ -2828,7 +2848,7 @@ const Schedule = ({ noLayout = false }) => {
   };
 
   const getExportGroupFilenamePrefix = (prefix, ext = 'csv') => {
-    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const group = findSelectedGroup();
     const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
     const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || selectedGroupId;
     const safeGroup = String(groupLabel).replace(/[\\/:*?"<>|]/g, '_');
@@ -2985,7 +3005,7 @@ const Schedule = ({ noLayout = false }) => {
       return;
     }
 
-    const group = departmentGroups.find((g) => g.id === selectedGroupId);
+    const group = findSelectedGroup();
     const isChinese = i18n.language === 'zh-TW' || i18n.language === 'zh-CN';
     const groupLabel = (isChinese ? (group?.name_zh || group?.name) : (group?.name || group?.name_zh)) || '';
     const rangeLabel = `${dayjs(startDate).format('YYYY-MM-DD')} – ${dayjs(endDate).format('YYYY-MM-DD')}`;
@@ -3182,7 +3202,10 @@ const Schedule = ({ noLayout = false }) => {
                   <InputLabel>{t('schedule.selectGroup')}</InputLabel>
                   <Select
                     value={selectedGroupId}
-                    onChange={(e) => setSelectedGroupId(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSelectedGroupId(v === '' || v == null ? '' : Number(v));
+                    }}
                     label={t('schedule.selectGroup')}
                     disabled={editMode}
                     sx={{
@@ -3268,6 +3291,11 @@ const Schedule = ({ noLayout = false }) => {
               </Grid>
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {isChecker && !canEdit && (
+                    <Alert severity="warning" sx={{ width: '100%' }}>
+                      {t('schedule.checkerEditDisabledHint')}
+                    </Alert>
+                  )}
                   {canEdit && (
                     <Button
                       variant={editMode ? 'contained' : 'outlined'}
@@ -3613,6 +3641,9 @@ const Schedule = ({ noLayout = false }) => {
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {t('schedule.statusReturned')}
                 {getMyOpenSubmission().return_reason ? `：${getMyOpenSubmission().return_reason}` : ''}
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5, color: 'text.secondary' }}>
+                {t('schedule.submittedBy')}: {getMyOpenSubmission().submitted_by_name_zh || getMyOpenSubmission().submitted_by_name || '—'}
               </Typography>
             </Card>
           )}

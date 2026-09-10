@@ -193,7 +193,7 @@ class DepartmentGroup {
   // 取得使用者所屬的部門群組
   static async findByUserId(userId) {
     const groups = await knex('department_groups')
-      .whereRaw('? = ANY(department_groups.user_ids)', [userId])
+      .whereRaw('? = ANY(department_groups.user_ids)', [Number(userId)])
       .leftJoin('delegation_groups as checker', 'department_groups.checker_id', 'checker.id')
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')

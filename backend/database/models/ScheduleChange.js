@@ -41,17 +41,29 @@ class ScheduleChange {
     return this._formatSubmission(submission);
   }
 
-  static async findOpenSubmission(departmentGroupId, submittedById) {
-    const submission = await knex('schedule_change_submissions')
-      .where({
-        department_group_id: departmentGroupId,
-        submitted_by_id: submittedById
-      })
+  static async findOpenSubmission(departmentGroupId, submittedById = null) {
+    const query = knex('schedule_change_submissions')
+      .where({ department_group_id: departmentGroupId })
       .whereIn('status', OPEN_STATUSES)
-      .orderBy('id', 'desc')
-      .first();
+      .orderByRaw("case when status = 'returned' then 0 else 1 end")
+      .orderBy('updated_at', 'desc')
+      .orderBy('id', 'desc');
+    if (submittedById != null) {
+      query.andWhere('submitted_by_id', submittedById);
+    }
+    const submission = await query.first();
     if (!submission) return null;
     return this.findSubmissionById(submission.id);
+  }
+
+  static async findPendingByGroup(departmentGroupId) {
+    return knex('schedule_change_submissions')
+      .where({
+        department_group_id: departmentGroupId,
+        status: 'pending'
+      })
+      .orderBy('id', 'desc')
+      .first();
   }
 
   static async findPendingBySubmitter(departmentGroupId, submittedById) {
@@ -62,6 +74,13 @@ class ScheduleChange {
         status: 'pending'
       })
       .first();
+  }
+
+  static async canCheckerManageSubmission(userId, submission, isSystemAdmin = false) {
+    if (!submission) return false;
+    if (Number(submission.submitted_by_id) === Number(userId)) return true;
+    const role = await Schedule.getActorRole(userId, submission.department_group_id, isSystemAdmin);
+    return !!role.isChecker;
   }
 
   static _applyPendingVisibility(query, userId, isSystemAdmin, approverGroupIds) {
@@ -118,7 +137,27 @@ class ScheduleChange {
     return Object.values(byGroup).reduce((sum, n) => sum + n, 0);
   }
 
-  static async listForGroup(departmentGroupId, { startDate, endDate, viewerUserId, isApprover, isAdmin } = {}) {
+  static async supersedeStaleOpenSubmissions(departmentGroupId) {
+    const latestApproved = await knex('schedule_change_submissions')
+      .where({
+        department_group_id: departmentGroupId,
+        status: 'approved'
+      })
+      .orderBy('updated_at', 'desc')
+      .first();
+    if (!latestApproved) return;
+    await knex('schedule_change_submissions')
+      .where({ department_group_id: departmentGroupId })
+      .whereIn('status', OPEN_STATUSES)
+      .andWhere('updated_at', '<=', latestApproved.updated_at)
+      .update({
+        status: 'superseded',
+        updated_at: knex.fn.now()
+      });
+  }
+
+  static async listForGroup(departmentGroupId, { startDate, endDate, viewerUserId, isApprover, isAdmin, isChecker } = {}) {
+    await this.supersedeStaleOpenSubmissions(departmentGroupId);
     let query = knex('schedule_change_submissions as s')
       .leftJoin('users as submitter', 's.submitted_by_id', 'submitter.id')
       .leftJoin('users as reviewer', 's.reviewed_by_id', 'reviewer.id')
@@ -133,7 +172,7 @@ class ScheduleChange {
       .whereIn('s.status', VISIBLE_STATUSES)
       .orderBy('s.updated_at', 'desc');
 
-    if (!isAdmin && !isApprover) {
+    if (!isAdmin && !isApprover && !isChecker) {
       query = query.where('s.submitted_by_id', viewerUserId);
     }
 
@@ -194,7 +233,7 @@ class ScheduleChange {
   }
 
   static async getOrCreateOpenSubmission(departmentGroupId, submittedById) {
-    const pending = await this.findPendingBySubmitter(departmentGroupId, submittedById);
+    const pending = await this.findPendingByGroup(departmentGroupId);
     if (pending) {
       const error = new Error('PENDING_SUBMISSION_EXISTS');
       error.code = 'PENDING_SUBMISSION_EXISTS';
@@ -202,11 +241,10 @@ class ScheduleChange {
     }
 
     const existing = await knex('schedule_change_submissions')
-      .where({
-        department_group_id: departmentGroupId,
-        submitted_by_id: submittedById
-      })
+      .where({ department_group_id: departmentGroupId })
       .whereIn('status', OPEN_STATUSES)
+      .orderByRaw("case when status = 'returned' then 0 else 1 end")
+      .orderBy('updated_at', 'desc')
       .orderBy('id', 'desc')
       .first();
     if (existing) return existing;
@@ -328,7 +366,7 @@ class ScheduleChange {
       error.code = 'ITEM_NOT_EDITABLE';
       throw error;
     }
-    if (Number(submission.submitted_by_id) !== Number(actorId)) {
+    if (!(await this.canCheckerManageSubmission(actorId, submission))) {
       const error = new Error('FORBIDDEN');
       error.code = 'FORBIDDEN';
       throw error;
@@ -338,10 +376,10 @@ class ScheduleChange {
     return this.findSubmissionById(submission.id);
   }
 
-  static async submit(submissionId, actorId) {
+  static async submit(submissionId, actorId, isSystemAdmin = false) {
     const submission = await this.findSubmissionById(submissionId);
     if (!submission) return null;
-    if (Number(submission.submitted_by_id) !== Number(actorId)) {
+    if (!(await this.canCheckerManageSubmission(actorId, submission, isSystemAdmin))) {
       const error = new Error('FORBIDDEN');
       error.code = 'FORBIDDEN';
       throw error;
@@ -364,6 +402,7 @@ class ScheduleChange {
         submitted_at: knex.fn.now(),
         reviewed_by_id: null,
         reviewed_at: null,
+        return_reason: null,
         updated_at: knex.fn.now()
       });
 
@@ -381,10 +420,10 @@ class ScheduleChange {
     return this.findSubmissionById(submissionId);
   }
 
-  static async withdraw(submissionId, actorId) {
+  static async withdraw(submissionId, actorId, isSystemAdmin = false) {
     const submission = await this.findSubmissionById(submissionId);
     if (!submission) return null;
-    if (Number(submission.submitted_by_id) !== Number(actorId)) {
+    if (!(await this.canCheckerManageSubmission(actorId, submission, isSystemAdmin))) {
       const error = new Error('FORBIDDEN');
       error.code = 'FORBIDDEN';
       throw error;
@@ -475,6 +514,15 @@ class ScheduleChange {
           status: 'approved',
           reviewed_by_id: actorId,
           reviewed_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        });
+
+      await trx('schedule_change_submissions')
+        .where({ department_group_id: submission.department_group_id })
+        .whereIn('status', OPEN_STATUSES)
+        .whereNot('id', submissionId)
+        .update({
+          status: 'superseded',
           updated_at: trx.fn.now()
         });
     });

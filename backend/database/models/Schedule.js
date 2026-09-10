@@ -252,6 +252,21 @@ class Schedule {
     return Array.isArray(userIds) ? userIds.map(Number) : [];
   }
 
+  static isStoreSupervisorPosition(user) {
+    if (!user) return false;
+    const name = String(user.position_name || user.name || '').toLowerCase();
+    const nameZh = String(user.position_name_zh || user.name_zh || '');
+    if (nameZh.includes('店舖主任')) return true;
+    return /\bstore supervisor\b/.test(name);
+  }
+
+  static async isMemberStoreSupervisor(userId, group) {
+    if (!this.parseGroupUserIds(group).includes(Number(userId))) return false;
+    const User = require('./User');
+    const user = await User.findById(userId);
+    return this.isStoreSupervisorPosition(user);
+  }
+
   static isDateInCheckerEditableRange(group, scheduleDate) {
     if (!group) return false;
     const startDate = this._normalizeDateStr(group.checker_editable_start_date);
@@ -269,18 +284,8 @@ class Schedule {
     const group = await knex('department_groups')
       .where('id', departmentGroupId)
       .first();
-    
-    if (!group || !group.user_ids) {
-      return false;
-    }
 
-    // 解析 user_ids 數組
-    let userIds = group.user_ids;
-    if (typeof userIds === 'string') {
-      userIds = userIds.replace(/[{}]/g, '').split(',').filter(Boolean).map(Number);
-    }
-
-    return Array.isArray(userIds) && userIds.includes(Number(userId));
+    return this.parseGroupUserIds(group).includes(Number(userId));
   }
 
   // 將日期正規化為香港 UTC+8 日曆的 YYYY-MM-DD
@@ -319,7 +324,8 @@ class Schedule {
       .select('id');
     const delegationGroupIds = delegationGroups.map(g => Number(g.id));
 
-    const isChecker = !!(group.checker_id && delegationGroupIds.includes(Number(group.checker_id)));
+    const isCheckerFromDelegation = !!(group.checker_id && delegationGroupIds.includes(Number(group.checker_id)));
+    const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
     const isApprover1 = !!(group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id)));
     const isApprover2 = !!(group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id)));
     const isApprover3 = !!(group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id)));
@@ -370,10 +376,16 @@ class Schedule {
     const delegationGroupIds = delegationGroups.map(g => Number(g.id));
 
     // 檢查是否為 checker, approver_1, approver_2, 或 approver_3
-    const isChecker = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
+    const isCheckerFromDelegation = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
+    const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
     const isApprover1 = group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id));
     const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
+
+    // approver1, approver2, approver3 可以直接編輯（即使同時係 checker）
+    if (isApprover1 || isApprover2 || isApprover3) {
+      return true;
+    }
 
     // 如果用戶是 checker，需要檢查 allow_checker_edit 及可編輯日期範圍（UTC+8）
     if (isChecker) {
@@ -390,8 +402,7 @@ class Schedule {
       return true;
     }
 
-    // approver1, approver2, approver3 可以直接編輯
-    return isApprover1 || isApprover2 || isApprover3;
+    return false;
   }
 
   // 檢查用戶是否可查看排班備註（checker、approver_1/2/3；checker 須 allow_checker_edit）
@@ -414,7 +425,8 @@ class Schedule {
 
     const delegationGroupIds = delegationGroups.map(g => Number(g.id));
 
-    const isChecker = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
+    const isCheckerFromDelegation = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
+    const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
     const isApprover1 = group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id));
     const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));

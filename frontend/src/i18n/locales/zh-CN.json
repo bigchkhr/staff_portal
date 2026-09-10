@@ -1435,6 +1435,7 @@
     "timeAndLeave": "时间与假期",
     "csvImportFailed": "CSV导入失败",
     "allowCheckerEdit": "Checker排班权限",
+    "checkerEditDisabledHint": "此群组已关闭 Checker 编更。请联络 Approver 开启「Checker排班权限」。",
     "requireCheckerApproval": "Checker编更须经批核",
     "checkerApprovalEnabled": "已开启 Checker 编更批核",
     "checkerApprovalDisabled": "已关闭 Checker 编更批核，Checker 可直接改更",
