@@ -39,11 +39,13 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import YearSelector from '../components/YearSelector';
 import UserSearchDialog from '../components/UserSearchDialog';
 
 const AdminBalances = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
@@ -323,7 +325,7 @@ const AdminBalances = () => {
           </FormControl>
         </Box>
         <Divider sx={{ my: 2 }} />
-        <Box>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button 
             variant="contained" 
             onClick={handleOpen} 
@@ -344,6 +346,14 @@ const AdminBalances = () => {
             }}
           >
             {t('adminBalances.addBalance')}
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => navigate('/admin/annual-leave-bulk')}
+            fullWidth={isMobile}
+            sx={{ py: 1.5, fontWeight: 600, borderRadius: 1 }}
+          >
+            {t('adminBalances.annualLeaveBulk')}
           </Button>
         </Box>
       </Paper>

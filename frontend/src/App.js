@@ -25,6 +25,7 @@ import OutdoorWorkBulkApproval from './pages/OutdoorWorkBulkApproval';
 import AdminUsers from './pages/AdminUsers';
 import AdminLeaveTypes from './pages/AdminLeaveTypes';
 import AdminBalances from './pages/AdminBalances';
+import AdminAnnualLeaveBulk from './pages/AdminAnnualLeaveBulk';
 import AdminDepartments from './pages/AdminDepartments';
 import AdminPositions from './pages/AdminPositions';
 import AdminGroups from './pages/AdminGroups';
@@ -111,6 +112,7 @@ function App() {
             <Route path="/admin/users" element={<PrivateRoute><AdminUsers /></PrivateRoute>} />
             <Route path="/admin/leave-types" element={<PrivateRoute><AdminLeaveTypes /></PrivateRoute>} />
             <Route path="/admin/balances" element={<PrivateRoute><AdminBalances /></PrivateRoute>} />
+            <Route path="/admin/annual-leave-bulk" element={<PrivateRoute><AdminAnnualLeaveBulk /></PrivateRoute>} />
             <Route path="/admin/departments" element={<PrivateRoute><AdminDepartments /></PrivateRoute>} />
             <Route path="/admin/positions" element={<PrivateRoute><AdminPositions /></PrivateRoute>} />
             <Route path="/admin/stores" element={<PrivateRoute><AdminStores /></PrivateRoute>} />

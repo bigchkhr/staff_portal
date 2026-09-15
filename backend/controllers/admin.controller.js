@@ -7,6 +7,8 @@ const Position = require('../database/models/Position');
 const { hashPassword } = require('../utils/password');
 const knex = require('../config/database');
 const { toHKCalendarDate } = require('../utils/hkDate');
+const { normalizeTokenExpires } = require('../utils/jwt');
+const { calculateAnnualLeaveForYear } = require('../utils/annualLeave');
 
 class AdminController {
   async createUser(req, res) {
@@ -24,7 +26,11 @@ class AdminController {
         hire_date,
         termination_date,
         deactivated,
-        force_password_change
+        force_password_change,
+        token_expires_value,
+        token_expires_unit,
+        al_base_days,
+        al_cap_days
       } = req.body;
 
       if (!employee_number || !surname || !given_name || !name_zh || !password) {
@@ -45,6 +51,7 @@ class AdminController {
       }
 
       const passwordHash = await hashPassword(password);
+      const tokenExpires = normalizeTokenExpires(token_expires_value, token_expires_unit);
 
       const userData = {
         employee_number,
@@ -66,7 +73,17 @@ class AdminController {
         // 帳戶是否停用（預設為未停用，可由 HR/System Admin 指定）
         deactivated: deactivated !== undefined ? !!deactivated : false,
         // 是否強制首次登入更改密碼（預設為 false，可由 HR/System Admin 指定）
-        force_password_change: force_password_change !== undefined ? !!force_password_change : false
+        force_password_change: force_password_change !== undefined ? !!force_password_change : false,
+        token_expires_value: tokenExpires.token_expires_value,
+        token_expires_unit: tokenExpires.token_expires_unit,
+        al_base_days:
+          al_base_days === '' || al_base_days === null || al_base_days === undefined
+            ? null
+            : parseFloat(al_base_days),
+        al_cap_days:
+          al_cap_days === '' || al_cap_days === null || al_cap_days === undefined
+            ? null
+            : parseFloat(al_cap_days)
       };
 
       const user = await User.create(userData);
@@ -77,6 +94,9 @@ class AdminController {
       });
     } catch (error) {
       console.error('Create user error:', error);
+      if (error.statusCode === 400) {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({ message: '建立用戶時發生錯誤', error: error.message });
     }
   }
@@ -98,6 +118,29 @@ class AdminController {
           hd && String(hd).trim() ? toHKCalendarDate(String(hd).trim()) : null;
       }
 
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, 'token_expires_unit') ||
+        Object.prototype.hasOwnProperty.call(updateData, 'token_expires_value')
+      ) {
+        const tokenExpires = normalizeTokenExpires(
+          updateData.token_expires_value,
+          updateData.token_expires_unit
+        );
+        updateData.token_expires_value = tokenExpires.token_expires_value;
+        updateData.token_expires_unit = tokenExpires.token_expires_unit;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updateData, 'al_base_days')) {
+        const v = updateData.al_base_days;
+        updateData.al_base_days =
+          v === '' || v === null || v === undefined ? null : parseFloat(v);
+      }
+      if (Object.prototype.hasOwnProperty.call(updateData, 'al_cap_days')) {
+        const v = updateData.al_cap_days;
+        updateData.al_cap_days =
+          v === '' || v === null || v === undefined ? null : parseFloat(v);
+      }
+
       if (updateData.password) {
         updateData.password_hash = await hashPassword(updateData.password);
         delete updateData.password;
@@ -114,6 +157,9 @@ class AdminController {
       });
     } catch (error) {
       console.error('Update user error:', error);
+      if (error.statusCode === 400) {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({ message: '更新用戶時發生錯誤', error: error.message });
     }
   }
@@ -626,6 +672,152 @@ class AdminController {
     } catch (error) {
       console.error('Delete store error:', error);
       res.status(500).json({ message: '刪除店舖時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
+   * 年假批量試算（不寫入資料庫）
+   * GET /api/admin/annual-leave/preview?year=2026&leave_type_id=
+   */
+  async previewAnnualLeaveBulk(req, res) {
+    try {
+      const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+      let leaveTypeId = req.query.leave_type_id ? parseInt(req.query.leave_type_id, 10) : null;
+
+      let leaveType = null;
+      if (leaveTypeId) {
+        leaveType = await LeaveType.findById(leaveTypeId);
+      } else {
+        leaveType =
+          (await LeaveType.findByCode('AL')) ||
+          (await knex('leave_types').where('name_zh', 'like', '%年假%').first());
+        leaveTypeId = leaveType ? leaveType.id : null;
+      }
+
+      if (!leaveType) {
+        return res.status(400).json({ message: '找不到年假假期類型，請先設定 leave type（如 AL）' });
+      }
+
+      const users = await knex('users')
+        .leftJoin('positions', 'users.position_id', 'positions.id')
+        .select(
+          'users.id',
+          'users.employee_number',
+          'users.display_name',
+          'users.name_zh',
+          'users.hire_date',
+          'users.termination_date',
+          'users.deactivated',
+          'users.al_base_days',
+          'users.al_cap_days',
+          'positions.name as position_name',
+          'positions.name_zh as position_name_zh'
+        )
+        .where('users.deactivated', false)
+        .orderBy('users.employee_number', 'asc');
+
+      const existingRows = await knex('leave_balance_transactions')
+        .select('user_id')
+        .sum('amount as total')
+        .where({ leave_type_id: leaveType.id, year })
+        .groupBy('user_id');
+
+      const existingMap = {};
+      existingRows.forEach((row) => {
+        existingMap[row.user_id] = parseFloat(row.total) || 0;
+      });
+
+      const items = users.map((user) => {
+        const calc = calculateAnnualLeaveForYear(user, year);
+        const existingTotal = existingMap[user.id] || 0;
+        if (existingTotal !== 0) {
+          calc.warnings.push('has_existing_balance');
+        }
+        return {
+          ...calc,
+          position_name: user.position_name || null,
+          position_name_zh: user.position_name_zh || null,
+          existing_balance: existingTotal,
+          selected_default:
+            calc.selectable && existingTotal === 0 && !user.deactivated
+        };
+      });
+
+      res.json({
+        year,
+        leave_type: leaveType,
+        start_date: `${year}-01-01`,
+        end_date: `${year}-12-31`,
+        items
+      });
+    } catch (error) {
+      console.error('Preview annual leave bulk error:', error);
+      res.status(500).json({ message: '年假試算時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
+   * 確認後批量寫入年假額度
+   * POST /api/admin/annual-leave/bulk
+   * body: { year, leave_type_id, start_date, end_date, items: [{ user_id, amount }] }
+   */
+  async confirmAnnualLeaveBulk(req, res) {
+    try {
+      const { year, leave_type_id, start_date, end_date, items, remarks } = req.body;
+      const targetYear = parseInt(year, 10) || new Date().getFullYear();
+
+      if (!leave_type_id || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: '請提供假期類型及至少一筆員工資料' });
+      }
+
+      const leaveType = await LeaveType.findById(leave_type_id);
+      if (!leaveType) {
+        return res.status(400).json({ message: '假期類型不存在' });
+      }
+
+      const validStart = start_date || `${targetYear}-01-01`;
+      const validEnd = end_date || `${targetYear}-12-31`;
+      if (new Date(validStart) > new Date(validEnd)) {
+        return res.status(400).json({ message: '有效開始日期不能晚於結束日期' });
+      }
+
+      const created = [];
+      const skipped = [];
+
+      for (const item of items) {
+        const userId = item.user_id;
+        const amount = parseFloat(item.amount);
+        if (!userId || !Number.isFinite(amount) || amount <= 0) {
+          skipped.push({ user_id: userId, reason: 'invalid_amount' });
+          continue;
+        }
+
+        const transaction = await LeaveBalanceTransaction.create({
+          user_id: userId,
+          leave_type_id: leaveType.id,
+          year: targetYear,
+          amount,
+          start_date: validStart,
+          end_date: validEnd,
+          remarks:
+            item.remarks ||
+            remarks ||
+            `${targetYear}年度年假批量發放`,
+          created_by_id: req.user.id
+        });
+        created.push(transaction);
+      }
+
+      res.json({
+        message: `已成功發放 ${created.length} 筆年假額度`,
+        created_count: created.length,
+        skipped_count: skipped.length,
+        created,
+        skipped
+      });
+    } catch (error) {
+      console.error('Confirm annual leave bulk error:', error);
+      res.status(500).json({ message: '批量發放年假時發生錯誤', error: error.message });
     }
   }
 }

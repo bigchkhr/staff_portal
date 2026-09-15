@@ -37,7 +37,11 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
     hire_date: '',
     termination_date: '',
     deactivated: false,
-    force_password_change: false
+    force_password_change: false,
+    token_expires_value: '',
+    token_expires_unit: 'default',
+    al_base_days: '',
+    al_cap_days: ''
   });
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -64,7 +68,11 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           hire_date: toHKCalendarDate(initialData.hire_date) || '',
           termination_date: toHKCalendarDate(initialData.termination_date) || '',
           deactivated: !!initialData.deactivated,
-          force_password_change: !!initialData.force_password_change
+          force_password_change: !!initialData.force_password_change,
+          token_expires_value: initialData.token_expires_value ?? '',
+          token_expires_unit: initialData.token_expires_unit || 'default',
+          al_base_days: initialData.al_base_days ?? '',
+          al_cap_days: initialData.al_cap_days ?? ''
         });
       } else {
         setFormData({
@@ -81,7 +89,11 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           hire_date: '',
           termination_date: '',
           deactivated: false,
-          force_password_change: false
+          force_password_change: false,
+          token_expires_value: '',
+          token_expires_unit: 'default',
+          al_base_days: '',
+          al_cap_days: ''
         });
       }
     }
@@ -120,6 +132,34 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
         delete submitData.password;
       }
 
+      if (submitData.al_base_days === '' || submitData.al_base_days === null || submitData.al_base_days === undefined) {
+        submitData.al_base_days = null;
+      } else {
+        submitData.al_base_days = parseFloat(submitData.al_base_days);
+      }
+      if (submitData.al_cap_days === '' || submitData.al_cap_days === null || submitData.al_cap_days === undefined) {
+        submitData.al_cap_days = null;
+      } else {
+        submitData.al_cap_days = parseFloat(submitData.al_cap_days);
+      }
+
+      const unit = submitData.token_expires_unit || 'default';
+      if (unit === 'default') {
+        submitData.token_expires_unit = 'default';
+        submitData.token_expires_value = null;
+      } else if (unit === 'never') {
+        submitData.token_expires_unit = 'never';
+        submitData.token_expires_value = null;
+      } else {
+        const num = parseInt(submitData.token_expires_value, 10);
+        if (!Number.isFinite(num) || num < 1) {
+          alert(t('adminUsers.tokenExpiresValueRequired'));
+          return;
+        }
+        submitData.token_expires_value = num;
+        submitData.token_expires_unit = unit;
+      }
+
       if (editing) {
         await axios.put(`/api/admin/users/${editing}`, submitData);
       } else {
@@ -137,7 +177,13 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
 
   const handleChange = (field) => (e) => {
     const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [field]: value };
+      if (field === 'token_expires_unit' && (value === 'default' || value === 'never')) {
+        next.token_expires_value = '';
+      }
+      return next;
+    });
   };
 
   const generateRandomPassword = async () => {
@@ -321,6 +367,26 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             }}
             helperText={t('adminUsers.terminationDateHint')}
           />
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              label={t('adminUsers.alBaseDays')}
+              type="number"
+              value={formData.al_base_days}
+              onChange={handleChange('al_base_days')}
+              inputProps={{ min: 0, step: 0.5 }}
+              sx={{ width: 180 }}
+              helperText={t('adminUsers.alBaseDaysHint')}
+            />
+            <TextField
+              label={t('adminUsers.alCapDays')}
+              type="number"
+              value={formData.al_cap_days}
+              onChange={handleChange('al_cap_days')}
+              inputProps={{ min: 0, step: 0.5 }}
+              sx={{ width: 180 }}
+              helperText={t('adminUsers.alCapDaysHint')}
+            />
+          </Box>
           <FormControlLabel
             control={(
               <Switch
@@ -331,6 +397,41 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             )}
             label={formData.deactivated ? t('adminUsers.accountDeactivated') : t('adminUsers.accountActive')}
           />
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <TextField
+              label={t('adminUsers.tokenExpiresValue')}
+              type="number"
+              value={formData.token_expires_value}
+              onChange={handleChange('token_expires_value')}
+              disabled={formData.token_expires_unit === 'default' || formData.token_expires_unit === 'never'}
+              inputProps={{ min: 1, step: 1 }}
+              sx={{ width: 160 }}
+              helperText={
+                formData.token_expires_unit === 'default'
+                  ? t('adminUsers.tokenExpiresDefaultHint')
+                  : formData.token_expires_unit === 'never'
+                    ? t('adminUsers.tokenExpiresNeverHint')
+                    : formData.token_expires_unit === 'mo'
+                      ? t('adminUsers.tokenExpiresMonthHint')
+                      : ' '
+              }
+            />
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>{t('adminUsers.tokenExpiresUnit')}</InputLabel>
+              <Select
+                value={formData.token_expires_unit}
+                label={t('adminUsers.tokenExpiresUnit')}
+                onChange={handleChange('token_expires_unit')}
+              >
+                <MenuItem value="default">{t('adminUsers.tokenExpiresUnitDefault')}</MenuItem>
+                <MenuItem value="m">{t('adminUsers.tokenExpiresUnitMinutes')}</MenuItem>
+                <MenuItem value="h">{t('adminUsers.tokenExpiresUnitHours')}</MenuItem>
+                <MenuItem value="d">{t('adminUsers.tokenExpiresUnitDays')}</MenuItem>
+                <MenuItem value="mo">{t('adminUsers.tokenExpiresUnitMonths')}</MenuItem>
+                <MenuItem value="never">{t('adminUsers.tokenExpiresUnitNever')}</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
           {isHRMember && (
             <FormControlLabel
               control={(

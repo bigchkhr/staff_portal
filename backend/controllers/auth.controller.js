@@ -1,6 +1,6 @@
 const User = require('../database/models/User');
 const { hashPassword, comparePassword } = require('../utils/password');
-const { generateToken } = require('../utils/jwt');
+const { generateToken, resolveTokenExpiresIn } = require('../utils/jwt');
 
 class AuthController {
   async login(req, res) {
@@ -58,7 +58,9 @@ class AuthController {
       try {
         console.log('Generating JWT token for user ID:', user.id);
         console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
-        token = generateToken(user.id);
+        const expiresIn = resolveTokenExpiresIn(user);
+        console.log('Token expiresIn:', expiresIn === null ? 'never' : expiresIn);
+        token = generateToken(user.id, expiresIn);
         console.log('Token generated successfully');
       } catch (tokenError) {
         console.error('❌ Token generation failed:', tokenError.message);

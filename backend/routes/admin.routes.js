@@ -19,6 +19,9 @@ router.post('/balance-transactions', adminController.addBalanceTransaction);
 router.get('/balance-transactions', adminController.getBalanceTransactions);
 router.put('/balance-transactions/:id', adminController.updateBalanceTransaction);
 
+router.get('/annual-leave/preview', adminController.previewAnnualLeaveBulk);
+router.post('/annual-leave/bulk', adminController.confirmAnnualLeaveBulk);
+
 router.post('/departments', adminController.createDepartment);
 router.put('/departments/:id', adminController.updateDepartment);
 router.get('/departments', adminController.getDepartments);

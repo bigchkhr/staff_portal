@@ -7,7 +7,7 @@ DB_PASSWORD=admin
 
 # JWT Configuration
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-2024
-JWT_EXPIRES_IN=3h
+JWT_EXPIRES_IN=1h
 
 # Server Configuration
 PORT=8080

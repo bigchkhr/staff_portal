@@ -15,7 +15,8 @@ import {
   Description as DescriptionIcon,
   Work as WorkIcon,
   Assignment as AssignmentIcon,
-  AccountBalanceWallet as AccountBalanceWalletIcon
+  AccountBalanceWallet as AccountBalanceWalletIcon,
+  EventAvailable as EventAvailableIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -50,6 +51,12 @@ const ManualApproval = () => {
       icon: <AccountBalanceWalletIcon sx={{ fontSize: 48 }} />,
       path: '/admin/balances',
       translationKey: 'balanceManagement'
+    },
+    {
+      key: 'annualLeaveBulk',
+      icon: <EventAvailableIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/annual-leave-bulk',
+      translationKey: 'annualLeaveBulk'
     }
   ];
 
