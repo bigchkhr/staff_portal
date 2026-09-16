@@ -16,7 +16,9 @@ import {
   Work as WorkIcon,
   Assignment as AssignmentIcon,
   AccountBalanceWallet as AccountBalanceWalletIcon,
-  EventAvailable as EventAvailableIcon
+  EventAvailable as EventAvailableIcon,
+  Cake as CakeIcon,
+  Healing as HealingIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -57,6 +59,18 @@ const ManualApproval = () => {
       icon: <EventAvailableIcon sx={{ fontSize: 48 }} />,
       path: '/admin/annual-leave-bulk',
       translationKey: 'annualLeaveBulk'
+    },
+    {
+      key: 'birthdayLeaveBulk',
+      icon: <CakeIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/birthday-leave-bulk',
+      translationKey: 'birthdayLeaveBulk'
+    },
+    {
+      key: 'paidSickLeaveBulk',
+      icon: <HealingIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/paid-sick-leave-bulk',
+      translationKey: 'paidSickLeaveBulk'
     }
   ];
 

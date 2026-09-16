@@ -9,6 +9,9 @@ router.use(authenticate);
 // 生成月報（從月結數據生成）
 router.post('/generate', monthlyAttendanceReportController.generateReport.bind(monthlyAttendanceReportController));
 
+// 指定日期區間內有打卡記錄嘅員工（包括已離職／已停用）
+router.get('/clocked-users', monthlyAttendanceReportController.getClockedUsers.bind(monthlyAttendanceReportController));
+
 // 取得月報列表
 router.get('/', monthlyAttendanceReportController.getReports.bind(monthlyAttendanceReportController));
 

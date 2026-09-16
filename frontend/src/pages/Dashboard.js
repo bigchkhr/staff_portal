@@ -7,12 +7,6 @@ import {
   Card,
   CardContent,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   IconButton,
   Dialog,
   DialogTitle,
@@ -58,6 +52,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { formatDate } from '../utils/dateFormat';
 import Swal from 'sweetalert2';
+import ExternalLinksWidget from '../components/ExternalLinksWidget';
 
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
@@ -65,7 +60,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   // 個人待辦事項狀態
   const [myTodos, setMyTodos] = useState([]);
@@ -102,10 +96,7 @@ const Dashboard = () => {
   const [departmentGroups, setDepartmentGroups] = useState([]);
   const [loadingDepartmentGroups, setLoadingDepartmentGroups] = useState(false);
   const [isNewsGroupManager, setIsNewsGroupManager] = useState(false);
-  const itemsPerPage = 15;
   const newsItemsPerPage = 3;
-  const myTodoItemsPerPage = 5;
-  const [myTodoPage, setMyTodoPage] = useState(1);
 
   const isHRMember = user?.is_hr_member || user?.is_system_admin;
 
@@ -773,6 +764,136 @@ const Dashboard = () => {
         }
       </Typography>
 
+      {/* 待辦事項與外部連結 widgets 平排 */}
+      <Grid container spacing={2} sx={{ mb: 1 }} alignItems="stretch">
+        <Grid item xs={12} md={6}>
+          <Paper
+            variant="outlined"
+            sx={{
+              height: '100%',
+              minHeight: { xs: 280, md: 420 },
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1.5
+              }}
+            >
+              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                <ListIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+                {t('dashboard.myTodo.title')}
+              </Typography>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => handleOpenMyTodoDialog()}
+              >
+                {t('dashboard.myTodo.add')}
+              </Button>
+            </Box>
+            <Divider />
+            <Box sx={{ flex: 1, overflow: 'auto' }}>
+              {loadingMyTodos ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : myTodos.length === 0 ? (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {t('dashboard.myTodo.noTodos')}
+                  </Typography>
+                </Box>
+              ) : (
+                <List disablePadding>
+                  {myTodos.map((todo) => (
+                    <ListItem
+                      key={todo.id}
+                      divider
+                      alignItems="flex-start"
+                      sx={{ opacity: todo.status === 'completed' ? 0.65 : 1 }}
+                      secondaryAction={
+                        <Box>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleOpenMyTodoDialog(todo)}
+                            color="primary"
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteMyTodo(todo.id)}
+                            color="error"
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      }
+                    >
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 6, flexWrap: 'wrap' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {todo.title}
+                            </Typography>
+                            <Chip
+                              label={t(`dashboard.myTodo.status.${todo.status}`)}
+                              color={todo.status === 'completed' ? 'success' : todo.status === 'in_progress' ? 'primary' : 'default'}
+                              size="small"
+                            />
+                            <Chip
+                              label={t(`dashboard.myTodo.priority.${todo.priority}`)}
+                              color={todo.priority === 3 ? 'error' : todo.priority === 2 ? 'warning' : 'default'}
+                              size="small"
+                            />
+                          </Box>
+                        }
+                        secondaryTypographyProps={{ component: 'div' }}
+                        secondary={
+                          <>
+                            {todo.description && (
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                {todo.description}
+                              </Typography>
+                            )}
+                            {todo.due_date && (
+                              <Typography variant="caption" color="text.secondary">
+                                {t('dashboard.myTodo.dueDate')}: {formatDate(todo.due_date)}
+                              </Typography>
+                            )}
+                          </>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <ExternalLinksWidget />
+        </Grid>
+      </Grid>
+
       {/* 最新消息列表 */}
       <Box sx={{ mt: 3 }}>
         <Divider sx={{ mb: 3 }} />
@@ -907,207 +1028,6 @@ const Dashboard = () => {
                   count={Math.ceil(newsList.length / newsItemsPerPage)}
                   page={newsPage}
                   onChange={(event, value) => setNewsPage(value)}
-                  color="primary"
-                  size={isMobile ? 'small' : 'medium'}
-                />
-              </Box>
-            )}
-          </>
-        )}
-      </Box>
-
-      {/* 個人待辦事項清單（所有用戶可見） */}
-      <Box sx={{ mt: 4 }}>
-        <Divider sx={{ mb: 3 }} />
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: isMobile ? 'flex-start' : 'center',
-            flexDirection: isMobile ? 'column' : 'row',
-            gap: isMobile ? 2 : 0,
-            mb: 2 
-          }}
-        >
-          <Typography variant="h5" gutterBottom={isMobile}>
-            <ListIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
-            {t('dashboard.myTodo.title')}
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenMyTodoDialog()}
-            fullWidth={isMobile}
-            size={isMobile ? 'medium' : 'medium'}
-          >
-            {t('dashboard.myTodo.add')}
-          </Button>
-        </Box>
-
-        {loadingMyTodos ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : myTodos.length === 0 ? (
-          <Paper sx={{ p: 3, textAlign: 'center' }}>
-            <Typography variant="body1" color="text.secondary">
-              {t('dashboard.myTodo.noTodos')}
-            </Typography>
-          </Paper>
-        ) : isMobile ? (
-          <>
-            <Stack spacing={2}>
-              {myTodos
-                .slice((myTodoPage - 1) * myTodoItemsPerPage, myTodoPage * myTodoItemsPerPage)
-                .map((todo) => (
-              <Card key={todo.id} variant="outlined">
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      <Chip
-                        label={t(`dashboard.myTodo.status.${todo.status}`)}
-                        color={todo.status === 'completed' ? 'success' : todo.status === 'in_progress' ? 'primary' : 'default'}
-                        size="small"
-                      />
-                      <Chip
-                        label={t(`dashboard.myTodo.priority.${todo.priority}`)}
-                        color={todo.priority === 3 ? 'error' : todo.priority === 2 ? 'warning' : 'default'}
-                        size="small"
-                      />
-                    </Box>
-                    <Box>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenMyTodoDialog(todo)}
-                        color="primary"
-                        sx={{ mr: 0.5 }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteMyTodo(todo.id)}
-                        color="error"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
-                  </Box>
-                  <Stack spacing={1}>
-                    <Box>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                        {todo.title}
-                      </Typography>
-                    </Box>
-                    {todo.description && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">
-                          {todo.description}
-                        </Typography>
-                      </Box>
-                    )}
-                    {todo.due_date && (
-                      <Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {t('dashboard.myTodo.dueDate')}: {formatDate(todo.due_date)}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Stack>
-                </CardContent>
-              </Card>
-                ))}
-            </Stack>
-            {myTodos.length > myTodoItemsPerPage && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Pagination
-                  count={Math.ceil(myTodos.length / myTodoItemsPerPage)}
-                  page={myTodoPage}
-                  onChange={(event, value) => setMyTodoPage(value)}
-                  color="primary"
-                  size={isMobile ? 'small' : 'medium'}
-                />
-              </Box>
-            )}
-          </>
-        ) : (
-          <>
-            <TableContainer 
-              component={Paper}
-              sx={{ 
-                maxHeight: isTablet ? '600px' : 'none',
-                overflowX: 'auto'
-              }}
-            >
-              <Table stickyHeader={isTablet}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ minWidth: 200 }}>{t('dashboard.myTodo.title')}</TableCell>
-                    <TableCell sx={{ minWidth: 150 }}>{t('dashboard.myTodo.description')}</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>{t('dashboard.myTodo.status.label')}</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>{t('dashboard.myTodo.priority.label')}</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>{t('dashboard.myTodo.dueDate')}</TableCell>
-                    <TableCell align="right" sx={{ minWidth: 100 }}>{t('dashboard.myTodo.actions')}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {myTodos
-                    .slice((myTodoPage - 1) * myTodoItemsPerPage, myTodoPage * myTodoItemsPerPage)
-                    .map((todo) => (
-                    <TableRow key={todo.id} hover>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                          {todo.title}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {todo.description || '-'}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={t(`dashboard.myTodo.status.${todo.status}`)}
-                          color={todo.status === 'completed' ? 'success' : todo.status === 'in_progress' ? 'primary' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={t(`dashboard.myTodo.priority.${todo.priority}`)}
-                          color={todo.priority === 3 ? 'error' : todo.priority === 2 ? 'warning' : 'default'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>{formatDate(todo.due_date) || '-'}</TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenMyTodoDialog(todo)}
-                          color="primary"
-                          sx={{ mr: 0.5 }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDeleteMyTodo(todo.id)}
-                          color="error"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            {myTodos.length > myTodoItemsPerPage && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Pagination
-                  count={Math.ceil(myTodos.length / myTodoItemsPerPage)}
-                  page={myTodoPage}
-                  onChange={(event, value) => setMyTodoPage(value)}
                   color="primary"
                   size={isMobile ? 'small' : 'medium'}
                 />

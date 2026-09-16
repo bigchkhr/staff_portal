@@ -3,17 +3,30 @@ const { toHKCalendarDate, eachHKCalendarDate } = require('./hkDate');
 const ENTITLEMENT_WAITING_MONTHS = 3;
 
 /**
- * 以 .25 / .75 為中間數，捨入至最近的整數或 0.5。
- * 等於中間數時向下（≤ → 較低檔）。
+ * 以 0.25 / 0.75 為中位數，捨入至 0.5 單位（含整數）。
+ * - 小數 ≤ 0.25 → round down 至整數（例：12.23 → 12）
+ * - 小數 > 0.25 且 ≤ 0.75 → 靠近 0.5 檔（例：33.33 → 33.5）
+ * - 小數 > 0.75 → round up 至下一整數（例：12.76 → 13）
+ * 等於中位數時向下。
  */
 function roundToHalfDay(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return 0;
 
-  const lower = Math.floor(n * 2) / 2;
-  const mid = lower + 0.25;
-  if (n <= mid) return lower;
-  return lower + 0.5;
+  const scaled = Math.round(n * 10000);
+  const whole = Math.floor(scaled / 10000);
+  const fracScaled = scaled - whole * 10000;
+
+  if (fracScaled <= 2500) return whole;
+  if (fracScaled <= 7500) return whole + 0.5;
+  return whole + 1;
+}
+
+/** 離職按比例：只保留兩位小數，不捨入至 0.5 單位 */
+function roundToTwoDecimals(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n * 100) / 100;
 }
 
 function anniversaryOnYear(hireDateStr, year) {
@@ -70,7 +83,8 @@ function minDate(a, b) {
  * 計算指定曆年之年假試算結果。
  * - 入職日起滿 3 個月才 entitle（以該年在職結束日是否已達資格日判斷）
  * - 年資以該年 1 月 1 日為準：entitlement = min(base + completedYears, cap)
- * - 再按該年實際在職日數（入職／離職）比例，最後 roundToHalfDay
+ * - 再按該年實際在職日數（入職／離職）比例
+ * - 該年有離職日：保留兩位小數，不 round 至 0.5；否則 roundToHalfDay
  */
 function calculateAnnualLeaveForYear(user, year) {
   const y = parseInt(year, 10);
@@ -156,9 +170,13 @@ function calculateAnnualLeaveForYear(user, year) {
   const daysInYear = result.days_in_year;
   const factor = daysInYear > 0 ? daysWorked / daysInYear : 0;
   const rawDays = fullEntitlement * factor;
-  const calculatedDays = roundToHalfDay(rawDays);
+  const terminatedInYear =
+    !!terminationDate && terminationDate >= yearStart && terminationDate <= yearEnd;
+  const calculatedDays = terminatedInYear
+    ? roundToTwoDecimals(rawDays)
+    : roundToHalfDay(rawDays);
 
-  if (terminationDate && terminationDate <= yearEnd && terminationDate >= yearStart) {
+  if (terminatedInYear) {
     warnings.push('adjusted_for_termination');
   }
   if (hireDate > yearStart && hireDate <= yearEnd) {
@@ -187,6 +205,7 @@ function calculateAnnualLeaveForYear(user, year) {
 
 module.exports = {
   roundToHalfDay,
+  roundToTwoDecimals,
   completedYearsAsOf,
   calculateAnnualLeaveForYear,
   anniversaryOnYear,

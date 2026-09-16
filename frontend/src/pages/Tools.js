@@ -12,7 +12,6 @@ import {
 } from '@mui/material';
 import {
   Description as DescriptionIcon,
-  Link as LinkIcon,
   Contacts as ContactsIcon,
   Storefront as StorefrontIcon,
   Payments as PaymentsIcon
@@ -38,12 +37,6 @@ const Tools = () => {
       icon: <DescriptionIcon sx={{ fontSize: 48 }} />,
       path: '/form-library',
       translationKey: 'formLibrary'
-    },
-    {
-      key: 'externalLinks',
-      icon: <LinkIcon sx={{ fontSize: 48 }} />,
-      path: '/external-links',
-      translationKey: 'externalLinks'
     },
     {
       key: 'storeDirectory',

@@ -41,7 +41,9 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
     token_expires_value: '',
     token_expires_unit: 'default',
     al_base_days: '',
-    al_cap_days: ''
+    al_cap_days: '',
+    birthday_month: '',
+    probation_end_date: ''
   });
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -72,7 +74,9 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           token_expires_value: initialData.token_expires_value ?? '',
           token_expires_unit: initialData.token_expires_unit || 'default',
           al_base_days: initialData.al_base_days ?? '',
-          al_cap_days: initialData.al_cap_days ?? ''
+          al_cap_days: initialData.al_cap_days ?? '',
+          birthday_month: initialData.birthday_month ?? '',
+          probation_end_date: toHKCalendarDate(initialData.probation_end_date) || ''
         });
       } else {
         setFormData({
@@ -93,7 +97,9 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           token_expires_value: '',
           token_expires_unit: 'default',
           al_base_days: '',
-          al_cap_days: ''
+          al_cap_days: '',
+          birthday_month: '',
+          probation_end_date: ''
         });
       }
     }
@@ -122,6 +128,14 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
       const submitData = { ...formData };
       if (!submitData.termination_date || !String(submitData.termination_date).trim()) {
         submitData.termination_date = null;
+      }
+      if (!submitData.probation_end_date || !String(submitData.probation_end_date).trim()) {
+        submitData.probation_end_date = null;
+      }
+      if (submitData.birthday_month === '' || submitData.birthday_month === null || submitData.birthday_month === undefined) {
+        submitData.birthday_month = null;
+      } else {
+        submitData.birthday_month = parseInt(submitData.birthday_month, 10);
       }
 
       if (!editing && !submitData.password) {
@@ -366,6 +380,31 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
               shrink: true
             }}
             helperText={t('adminUsers.terminationDateHint')}
+          />
+          <FormControl>
+            <InputLabel>{t('adminUsers.birthdayMonth')}</InputLabel>
+            <Select
+              value={formData.birthday_month}
+              label={t('adminUsers.birthdayMonth')}
+              onChange={handleChange('birthday_month')}
+            >
+              <MenuItem value="">{t('adminUsers.birthdayMonthNone')}</MenuItem>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                <MenuItem key={m} value={m}>
+                  {t(`adminUsers.month${m}`)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            label={t('adminUsers.probationEndDate')}
+            type="date"
+            value={formData.probation_end_date}
+            onChange={handleChange('probation_end_date')}
+            InputLabelProps={{
+              shrink: true
+            }}
+            helperText={t('adminUsers.probationEndDateHint')}
           />
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <TextField

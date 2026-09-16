@@ -4,6 +4,43 @@ const User = require('../database/models/User');
 const LeaveType = require('../database/models/LeaveType');
 const knex = require('../config/database');
 
+const ATTENDANCE_BONUS_AMOUNT = 1300;
+const ATTENDANCE_BONUS_LATE_THRESHOLD_MINUTES = 10;
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_REPORT_RANGE_DAYS = 45;
+
+// 與月結表／payrollHours 勤工獎資格一致
+const DISQUALIFIED_LEAVE_NAMES_ZH = new Set([
+  '無薪事假',
+  '無薪病假',
+  '病假 (疾病津貼)',
+  '全薪病假',
+  '工傷病假',
+  '產假',
+  '侍產假',
+  '恩恤假'
+]);
+const DISQUALIFIED_LEAVE_CODES = new Set([
+  'NPL',
+  'NPSL',
+  'SAL',
+  'FPSL',
+  'IL',
+  'MTL',
+  'PTL',
+  'CPL'
+]);
+const DISQUALIFIED_LEAVE_NAMES_EN = new Set([
+  'No Pay Personal Leave',
+  'No Pay Sick Leave',
+  'Sick Leave (Sickness Allowance)',
+  'Full Paid Sick Leave',
+  'Work Injury Leave',
+  'Maternity Leave',
+  'Paternity Leave',
+  'Compassionate Leave'
+]);
+
 class MonthlyAttendanceReportController {
   // 檢查權限：檢查是否有權限存取該用戶的月報
   // 允許：HR 成員、系統管理員、申請人本人、以及任何作為 checker/approver1/approver2/approver3 的用戶
@@ -119,6 +156,180 @@ class MonthlyAttendanceReportController {
     if (!leaveSession) return 1.0; // 全天假
     if (leaveSession === 'AM' || leaveSession === 'PM') return 0.5; // 半天假
     return 1.0;
+  }
+
+  parseYmdRange(startDate, endDate) {
+    if (!YMD_RE.test(startDate) || !YMD_RE.test(endDate)) {
+      const err = new Error('start_date / end_date 格式不正確，需為 YYYY-MM-DD');
+      err.status = 400;
+      throw err;
+    }
+    const parseYMDToUTCms = (s) => {
+      const [y, m, d] = s.split('-').map(Number);
+      return Date.UTC(y, m - 1, d);
+    };
+    const startMs = parseYMDToUTCms(startDate);
+    const endMs = parseYMDToUTCms(endDate);
+    if (startMs > endMs) {
+      const err = new Error('start_date 不能晚於 end_date');
+      err.status = 400;
+      throw err;
+    }
+    const dayCountInclusive = Math.round((endMs - startMs) / 86400000) + 1;
+    if (dayCountInclusive > MAX_REPORT_RANGE_DAYS) {
+      const err = new Error(`日期區間最多${MAX_REPORT_RANGE_DAYS}天`);
+      err.status = 400;
+      throw err;
+    }
+    return { startDate, endDate, dayCountInclusive };
+  }
+
+  isDisqualifiedLeaveForAttendanceBonus(schedule) {
+    if (!schedule) return false;
+    const code = String(schedule.leave_type_code || '').trim().toUpperCase();
+    const zh = String(schedule.leave_type_name_zh || '').trim();
+    const en = String(schedule.leave_type_name || '').trim();
+    return DISQUALIFIED_LEAVE_CODES.has(code)
+      || DISQUALIFIED_LEAVE_NAMES_ZH.has(zh)
+      || DISQUALIFIED_LEAVE_NAMES_EN.has(en);
+  }
+
+  // FT 符合資格為 1300，否則 0（PT／非 FT 亦為 0）
+  computeAttendanceBonusAmount(employmentMode, dailyData) {
+    const mode = (employmentMode || '').toString().trim().toUpperCase();
+    if (mode !== 'FT') return 0;
+    const days = Array.isArray(dailyData) ? dailyData : [];
+    const lateTotal = days.reduce((sum, day) => sum + (parseFloat(day.late_minutes) || 0), 0);
+    if (lateTotal >= ATTENDANCE_BONUS_LATE_THRESHOLD_MINUTES) return 0;
+    const hasDisqualified = days.some((day) => {
+      const schedule = day.schedule || day.attendance_data?.schedule;
+      return this.isDisqualifiedLeaveForAttendanceBonus(schedule);
+    });
+    return hasDisqualified ? 0 : ATTENDANCE_BONUS_AMOUNT;
+  }
+
+  // 指定日期區間內有打卡記錄嘅員工（包括已離職／已停用）
+  async getClockedUsers(req, res) {
+    try {
+      const currentUserId = req.user.id;
+      const hasPermission = await this.checkAccessPermission(currentUserId);
+      if (!hasPermission) {
+        return res.status(403).json({ message: '無權限存取此功能' });
+      }
+
+      const rangeStart = req.query.start_date || req.query.startDate;
+      const rangeEnd = req.query.end_date || req.query.endDate;
+      if (!rangeStart || !rangeEnd) {
+        return res.status(400).json({ message: '請提供 start_date 與 end_date' });
+      }
+
+      try {
+        this.parseYmdRange(String(rangeStart).slice(0, 10), String(rangeEnd).slice(0, 10));
+      } catch (err) {
+        return res.status(err.status || 400).json({ message: err.message });
+      }
+
+      const startDate = String(rangeStart).slice(0, 10);
+      const endDate = String(rangeEnd).slice(0, 10);
+      const year = req.query.year != null && String(req.query.year).trim() !== ''
+        ? parseInt(req.query.year, 10)
+        : NaN;
+      const month = req.query.month != null && String(req.query.month).trim() !== ''
+        ? parseInt(req.query.month, 10)
+        : NaN;
+      const hasReportYm = !Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12;
+
+      const clockAgg = await knex('clock_records')
+        .select(
+          knex.raw('LOWER(TRIM(employee_number)) as emp_key'),
+          knex.raw('COUNT(*)::int as clock_count'),
+          knex.raw('COUNT(DISTINCT attendance_date)::int as clock_days')
+        )
+        .where('attendance_date', '>=', startDate)
+        .where('attendance_date', '<=', endDate)
+        .whereNotNull('employee_number')
+        .whereRaw("TRIM(COALESCE(employee_number, '')) <> ''")
+        .groupByRaw('LOWER(TRIM(employee_number))');
+
+      if (clockAgg.length === 0) {
+        return res.json({ users: [], start_date: startDate, end_date: endDate });
+      }
+
+      const empKeys = clockAgg.map((row) => row.emp_key).filter(Boolean);
+      const clockByKey = new Map(
+        clockAgg.map((row) => [
+          row.emp_key,
+          {
+            clock_count: parseInt(row.clock_count, 10) || 0,
+            clock_days: parseInt(row.clock_days, 10) || 0
+          }
+        ])
+      );
+
+      const placeholders = empKeys.map(() => '?').join(', ');
+      const users = await knex('users')
+        .leftJoin('positions', 'users.position_id', 'positions.id')
+        .whereRaw(
+          `LOWER(TRIM(users.employee_number)) IN (${placeholders})`,
+          empKeys
+        )
+        .select(
+          'users.id',
+          'users.employee_number',
+          'users.display_name',
+          'users.name_zh',
+          'users.deactivated',
+          'users.termination_date',
+          'positions.employment_mode as position_employment_mode'
+        )
+        .orderBy('users.employee_number', 'asc');
+
+      const userIds = users.map((u) => u.id);
+      const existingByUserId = new Map();
+      if (hasReportYm && userIds.length > 0) {
+        const existing = await knex('monthly_attendance_reports')
+          .whereIn('user_id', userIds)
+          .where('year', year)
+          .where('month', month)
+          .select('user_id', 'id', 'attendance_bonus');
+        existing.forEach((row) => {
+          existingByUserId.set(Number(row.user_id), {
+            report_id: row.id,
+            attendance_bonus: parseFloat(row.attendance_bonus) || 0
+          });
+        });
+      }
+
+      const list = users.map((user) => {
+        const empKey = String(user.employee_number || '').trim().toLowerCase();
+        const clock = clockByKey.get(empKey) || { clock_count: 0, clock_days: 0 };
+        const existing = existingByUserId.get(Number(user.id));
+        return {
+          user_id: user.id,
+          employee_number: user.employee_number,
+          display_name: user.display_name,
+          name_zh: user.name_zh,
+          deactivated: !!user.deactivated,
+          termination_date: user.termination_date || null,
+          position_employment_mode: user.position_employment_mode || null,
+          clock_count: clock.clock_count,
+          clock_days: clock.clock_days,
+          existing_report_id: existing ? existing.report_id : null,
+          existing_attendance_bonus: existing ? existing.attendance_bonus : null
+        };
+      });
+
+      res.json({
+        users: list,
+        start_date: startDate,
+        end_date: endDate,
+        year: hasReportYm ? year : null,
+        month: hasReportYm ? month : null
+      });
+    } catch (error) {
+      console.error('[getClockedUsers] 取得打卡人員時發生錯誤:', error);
+      res.status(500).json({ message: '取得打卡人員失敗', error: error.message });
+    }
   }
 
   // 從月結數據生成月報
@@ -423,9 +634,8 @@ class MonthlyAttendanceReportController {
       // 檢查是否已有報告，如果有則保留手動輸入的津貼
       const existingReport = await MonthlyAttendanceReport.findByUserAndMonth(user_id, year, month);
       if (existingReport) {
-        // 確保所有數值都是數字類型
+        // 確保所有數值都是數字類型；勤工獎由資格條件覆寫，唔沿用舊值
         reportData.store_manager_allowance = parseFloat(existingReport.store_manager_allowance) || 0;
-        reportData.attendance_bonus = parseFloat(existingReport.attendance_bonus) || 0;
         reportData.location_allowance = parseFloat(existingReport.location_allowance) || 0;
         reportData.incentive = parseFloat(existingReport.incentive) || 0;
         reportData.special_allowance = parseFloat(existingReport.special_allowance) || 0;
@@ -564,15 +774,19 @@ class MonthlyAttendanceReportController {
       reportData.late_count = parseInt(reportData.late_count) || 0;
       reportData.work_days = parseFloat(reportData.work_days) || 0;
 
+      // 勤工獎：FT 符合資格 1300，否則 0
+      reportData.attendance_bonus = this.computeAttendanceBonusAmount(employmentMode, summary.daily_data);
+
       // 保存或更新報告
       const report = await MonthlyAttendanceReport.upsert(reportData);
 
       console.log(`[generateReport] 月報生成成功: user_id=${user_id}, year=${year}, month=${month}, report_id=${report.id}`);
-      console.log(`[generateReport] 最終統計: ft_overtime_hours=${reportData.ft_overtime_hours}, pt_work_hours=${reportData.pt_work_hours}`);
+      console.log(`[generateReport] 最終統計: ft_overtime_hours=${reportData.ft_overtime_hours}, pt_work_hours=${reportData.pt_work_hours}, attendance_bonus=${reportData.attendance_bonus}`);
       
       res.json({
         message: existingReport ? '月報已更新' : '月報已生成',
-        report
+        report,
+        attendance_bonus_eligible: reportData.attendance_bonus === ATTENDANCE_BONUS_AMOUNT
       });
     } catch (error) {
       console.error('[generateReport] 生成月報時發生錯誤:', error);

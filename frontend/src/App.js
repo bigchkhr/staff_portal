@@ -26,6 +26,7 @@ import AdminUsers from './pages/AdminUsers';
 import AdminLeaveTypes from './pages/AdminLeaveTypes';
 import AdminBalances from './pages/AdminBalances';
 import AdminAnnualLeaveBulk from './pages/AdminAnnualLeaveBulk';
+import AdminEntitlementBulk from './pages/AdminEntitlementBulk';
 import AdminDepartments from './pages/AdminDepartments';
 import AdminPositions from './pages/AdminPositions';
 import AdminGroups from './pages/AdminGroups';
@@ -43,7 +44,6 @@ import MyApprovals from './pages/MyApprovals';
 import SystemMaintenance from './pages/SystemMaintenance';
 import ManualApproval from './pages/ManualApproval';
 import PublicHolidayManagement from './pages/PublicHolidayManagement';
-import ExternalLinks from './pages/ExternalLinks';
 import Tools from './pages/Tools';
 import CashSettlement from './pages/CashSettlement';
 import Schedule from './pages/Schedule';
@@ -57,6 +57,7 @@ import MyContacts from './pages/MyContacts';
 import MonthlyAttendanceSummary from './pages/MonthlyAttendanceSummary';
 import MonthlyAttendanceReport from './pages/MonthlyAttendanceReport';
 import MonthlyAttendanceReportExport from './pages/MonthlyAttendanceReportExport';
+import MonthlyAttendanceReportBulk from './pages/MonthlyAttendanceReportBulk';
 import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 import StoreHoursReport from './pages/StoreHoursReport';
@@ -113,6 +114,8 @@ function App() {
             <Route path="/admin/leave-types" element={<PrivateRoute><AdminLeaveTypes /></PrivateRoute>} />
             <Route path="/admin/balances" element={<PrivateRoute><AdminBalances /></PrivateRoute>} />
             <Route path="/admin/annual-leave-bulk" element={<PrivateRoute><AdminAnnualLeaveBulk /></PrivateRoute>} />
+            <Route path="/admin/birthday-leave-bulk" element={<PrivateRoute><AdminEntitlementBulk /></PrivateRoute>} />
+            <Route path="/admin/paid-sick-leave-bulk" element={<PrivateRoute><AdminEntitlementBulk /></PrivateRoute>} />
             <Route path="/admin/departments" element={<PrivateRoute><AdminDepartments /></PrivateRoute>} />
             <Route path="/admin/positions" element={<PrivateRoute><AdminPositions /></PrivateRoute>} />
             <Route path="/admin/stores" element={<PrivateRoute><AdminStores /></PrivateRoute>} />
@@ -123,7 +126,7 @@ function App() {
             <Route path="/tools/transaction-settlement" element={<PrivateRoute><CashSettlement /></PrivateRoute>} />
             <Route path="/tools/cash-settlement" element={<Navigate to="/tools/transaction-settlement" replace />} />
             <Route path="/form-library" element={<PrivateRoute><FormLibrary /></PrivateRoute>} />
-            <Route path="/external-links" element={<PrivateRoute><ExternalLinks /></PrivateRoute>} />
+            <Route path="/external-links" element={<Navigate to="/" replace />} />
             <Route path="/department-group-balances" element={<PrivateRoute><DepartmentGroupBalances /></PrivateRoute>} />
             <Route path="/change-password" element={<PrivateRoute><ChangePassword /></PrivateRoute>} />
             <Route path="/schedule" element={<PrivateRoute><Schedule /></PrivateRoute>} />
@@ -138,6 +141,7 @@ function App() {
             <Route path="/my-contacts" element={<PrivateRoute><MyContacts /></PrivateRoute>} />
             <Route path="/tools/stores" element={<PrivateRoute><StoreDirectory /></PrivateRoute>} />
             <Route path="/monthly-attendance-summary" element={<PrivateRoute><MonthlyAttendanceSummary /></PrivateRoute>} />
+            <Route path="/shift-management/monthly-report-bulk" element={<PrivateRoute><MonthlyAttendanceReportBulk /></PrivateRoute>} />
             <Route path="/monthly-attendance-report/:id" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
             <Route path="/monthly-attendance-report" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
             <Route path="/monthly-attendance-report-export" element={<PrivateRoute><MonthlyAttendanceReportExport /></PrivateRoute>} />

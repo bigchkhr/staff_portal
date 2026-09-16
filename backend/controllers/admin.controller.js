@@ -9,6 +9,28 @@ const knex = require('../config/database');
 const { toHKCalendarDate } = require('../utils/hkDate');
 const { normalizeTokenExpires } = require('../utils/jwt');
 const { calculateAnnualLeaveForYear } = require('../utils/annualLeave');
+const { syncAnnualLeaveForTermination } = require('../services/annualLeaveBalance.service');
+const {
+  calculateBirthdayLeaveForYear,
+  calculatePaidSickLeaveForYear
+} = require('../utils/leaveEntitlements');
+
+async function resolveEntitlementLeaveType(kind) {
+  if (kind === 'birthday') {
+    return (
+      (await LeaveType.findByCode('BL')) ||
+      (await knex('leave_types').where('name_zh', 'like', '%生日假%').first())
+    );
+  }
+  if (kind === 'sick') {
+    return (
+      (await LeaveType.findByCode('FPSL')) ||
+      (await knex('leave_types').where('name_zh', '全薪病假').first()) ||
+      (await knex('leave_types').where('name_zh', 'like', '%有薪病假%').first())
+    );
+  }
+  return null;
+}
 
 class AdminController {
   async createUser(req, res) {
@@ -30,7 +52,9 @@ class AdminController {
         token_expires_value,
         token_expires_unit,
         al_base_days,
-        al_cap_days
+        al_cap_days,
+        birthday_month,
+        probation_end_date
       } = req.body;
 
       if (!employee_number || !surname || !given_name || !name_zh || !password) {
@@ -83,14 +107,31 @@ class AdminController {
         al_cap_days:
           al_cap_days === '' || al_cap_days === null || al_cap_days === undefined
             ? null
-            : parseFloat(al_cap_days)
+            : parseFloat(al_cap_days),
+        birthday_month: (() => {
+          if (birthday_month === '' || birthday_month === null || birthday_month === undefined) {
+            return null;
+          }
+          const n = parseInt(birthday_month, 10);
+          return Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
+        })(),
+        probation_end_date:
+          probation_end_date && String(probation_end_date).trim()
+            ? toHKCalendarDate(String(probation_end_date).trim())
+            : null
       };
 
       const user = await User.create(userData);
 
+      let annualLeaveSync = null;
+      if (user.termination_date) {
+        annualLeaveSync = await syncAnnualLeaveForTermination(user, req.user.id);
+      }
+
       res.status(201).json({
         message: '用戶已建立',
-        user
+        user,
+        annual_leave_sync: annualLeaveSync
       });
     } catch (error) {
       console.error('Create user error:', error);
@@ -140,6 +181,20 @@ class AdminController {
         updateData.al_cap_days =
           v === '' || v === null || v === undefined ? null : parseFloat(v);
       }
+      if (Object.prototype.hasOwnProperty.call(updateData, 'birthday_month')) {
+        const v = updateData.birthday_month;
+        if (v === '' || v === null || v === undefined) {
+          updateData.birthday_month = null;
+        } else {
+          const n = parseInt(v, 10);
+          updateData.birthday_month = Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(updateData, 'probation_end_date')) {
+        const pd = updateData.probation_end_date;
+        updateData.probation_end_date =
+          pd && String(pd).trim() ? toHKCalendarDate(String(pd).trim()) : null;
+      }
 
       if (updateData.password) {
         updateData.password_hash = await hashPassword(updateData.password);
@@ -149,11 +204,23 @@ class AdminController {
       // display_name 和 name_zh 是獨立的欄位，不自動同步
       // 只有在新增用戶時（createUser），如果沒有提供 display_name，才使用 name_zh 作為 fallback
 
+      const existing = await User.findById(id);
+      const oldTerminationDate = existing ? toHKCalendarDate(existing.termination_date) : null;
+
       const user = await User.update(id, updateData);
+
+      let annualLeaveSync = null;
+      if (Object.prototype.hasOwnProperty.call(updateData, 'termination_date')) {
+        const newTerminationDate = toHKCalendarDate(user?.termination_date);
+        if (newTerminationDate && newTerminationDate !== oldTerminationDate) {
+          annualLeaveSync = await syncAnnualLeaveForTermination(user, req.user.id);
+        }
+      }
 
       res.json({
         message: '用戶已更新',
-        user
+        user,
+        annual_leave_sync: annualLeaveSync
       });
     } catch (error) {
       console.error('Update user error:', error);
@@ -757,6 +824,36 @@ class AdminController {
   }
 
   /**
+   * 按離職日自動計算並寫入年假餘額（供 /admin/balances 使用）
+   * POST /api/admin/annual-leave/sync-termination
+   * body: { user_id, year? }
+   */
+  async syncAnnualLeaveTermination(req, res) {
+    try {
+      const userId = parseInt(req.body.user_id, 10);
+      const year = req.body.year ? parseInt(req.body.year, 10) : null;
+
+      if (!userId) {
+        return res.status(400).json({ message: '請提供用戶ID' });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: '用戶不存在' });
+      }
+
+      const result = await syncAnnualLeaveForTermination(user, req.user.id, { year });
+      res.json({
+        message: result.skipped ? '無需按離職日調整年假' : '已按離職日計算年假',
+        ...result
+      });
+    } catch (error) {
+      console.error('Sync annual leave termination error:', error);
+      res.status(500).json({ message: '按離職日計算年假時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
    * 確認後批量寫入年假額度
    * POST /api/admin/annual-leave/bulk
    * body: { year, leave_type_id, start_date, end_date, items: [{ user_id, amount }] }
@@ -792,13 +889,20 @@ class AdminController {
           continue;
         }
 
+        const itemStart = item.start_date || validStart;
+        const itemEnd = item.end_date || validEnd;
+        if (new Date(itemStart) > new Date(itemEnd)) {
+          skipped.push({ user_id: userId, reason: 'invalid_dates' });
+          continue;
+        }
+
         const transaction = await LeaveBalanceTransaction.create({
           user_id: userId,
           leave_type_id: leaveType.id,
           year: targetYear,
           amount,
-          start_date: validStart,
-          end_date: validEnd,
+          start_date: itemStart,
+          end_date: itemEnd,
           remarks:
             item.remarks ||
             remarks ||
@@ -818,6 +922,158 @@ class AdminController {
     } catch (error) {
       console.error('Confirm annual leave bulk error:', error);
       res.status(500).json({ message: '批量發放年假時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
+   * 生日假／有薪病假批量試算
+   * GET /api/admin/entitlements/preview?kind=birthday|sick&year=
+   */
+  async previewEntitlementBulk(req, res) {
+    try {
+      const kind = String(req.query.kind || '').trim();
+      const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+      if (kind !== 'birthday' && kind !== 'sick') {
+        return res.status(400).json({ message: '請提供 kind=birthday 或 sick' });
+      }
+
+      const leaveType = await resolveEntitlementLeaveType(kind);
+      if (!leaveType) {
+        return res.status(400).json({
+          message:
+            kind === 'birthday'
+              ? '找不到生日假假期類型（BL）'
+              : '找不到有薪病假假期類型（FPSL／全薪病假）'
+        });
+      }
+
+      const users = await knex('users')
+        .leftJoin('positions', 'users.position_id', 'positions.id')
+        .select(
+          'users.id',
+          'users.employee_number',
+          'users.display_name',
+          'users.name_zh',
+          'users.hire_date',
+          'users.termination_date',
+          'users.deactivated',
+          'users.birthday_month',
+          'users.probation_end_date',
+          'positions.name as position_name',
+          'positions.name_zh as position_name_zh'
+        )
+        .where('users.deactivated', false)
+        .orderBy('users.employee_number', 'asc');
+
+      const existingRows = await knex('leave_balance_transactions')
+        .select('user_id')
+        .sum('amount as total')
+        .where({ leave_type_id: leaveType.id, year })
+        .groupBy('user_id');
+
+      const existingMap = {};
+      existingRows.forEach((row) => {
+        existingMap[row.user_id] = parseFloat(row.total) || 0;
+      });
+
+      const items = users.map((user) => {
+        const calc =
+          kind === 'birthday'
+            ? calculateBirthdayLeaveForYear(user, year)
+            : calculatePaidSickLeaveForYear(user, year);
+        const existingTotal = existingMap[user.id] || 0;
+        if (existingTotal !== 0) {
+          calc.warnings.push('has_existing_balance');
+        }
+        return {
+          ...calc,
+          position_name: user.position_name || null,
+          position_name_zh: user.position_name_zh || null,
+          existing_balance: existingTotal,
+          selected_default:
+            calc.selectable && existingTotal === 0 && !user.deactivated
+        };
+      });
+
+      res.json({
+        kind,
+        year,
+        leave_type: leaveType,
+        items
+      });
+    } catch (error) {
+      console.error('Preview entitlement bulk error:', error);
+      res.status(500).json({ message: '試算時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
+   * 生日假／有薪病假批量發放
+   * POST /api/admin/entitlements/bulk
+   */
+  async confirmEntitlementBulk(req, res) {
+    try {
+      const { kind, year, leave_type_id, items, remarks } = req.body;
+      const targetYear = parseInt(year, 10) || new Date().getFullYear();
+      const grantKind = String(kind || '').trim();
+
+      if (grantKind !== 'birthday' && grantKind !== 'sick') {
+        return res.status(400).json({ message: '請提供 kind=birthday 或 sick' });
+      }
+      if (!leave_type_id || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: '請提供假期類型及至少一筆員工資料' });
+      }
+
+      const leaveType = await LeaveType.findById(leave_type_id);
+      if (!leaveType) {
+        return res.status(400).json({ message: '假期類型不存在' });
+      }
+
+      const defaultRemarks =
+        grantKind === 'birthday'
+          ? `${targetYear}年度生日假批量發放`
+          : `${targetYear}年度有薪病假批量發放`;
+
+      const created = [];
+      const skipped = [];
+
+      for (const item of items) {
+        const userId = item.user_id;
+        const amount = parseFloat(item.amount);
+        const itemStart = item.start_date || `${targetYear}-01-01`;
+        const itemEnd = item.end_date || `${targetYear}-12-31`;
+        if (!userId || !Number.isFinite(amount) || amount <= 0) {
+          skipped.push({ user_id: userId, reason: 'invalid_amount' });
+          continue;
+        }
+        if (new Date(itemStart) > new Date(itemEnd)) {
+          skipped.push({ user_id: userId, reason: 'invalid_dates' });
+          continue;
+        }
+
+        const transaction = await LeaveBalanceTransaction.create({
+          user_id: userId,
+          leave_type_id: leaveType.id,
+          year: targetYear,
+          amount,
+          start_date: itemStart,
+          end_date: itemEnd,
+          remarks: item.remarks || remarks || defaultRemarks,
+          created_by_id: req.user.id
+        });
+        created.push(transaction);
+      }
+
+      res.json({
+        message: `已成功發放 ${created.length} 筆額度`,
+        created_count: created.length,
+        skipped_count: skipped.length,
+        created,
+        skipped
+      });
+    } catch (error) {
+      console.error('Confirm entitlement bulk error:', error);
+      res.status(500).json({ message: '批量發放時發生錯誤', error: error.message });
     }
   }
 }

@@ -43,6 +43,14 @@ import { useNavigate } from 'react-router-dom';
 import YearSelector from '../components/YearSelector';
 import UserSearchDialog from '../components/UserSearchDialog';
 
+const formatDays = (value) => {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n)) return '0.00';
+  const cents = Math.round(n * 100);
+  if (cents % 50 === 0) return (cents / 100).toFixed(1);
+  return (cents / 100).toFixed(2);
+};
+
 const AdminBalances = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -71,6 +79,8 @@ const AdminBalances = () => {
     remarks: ''
   });
 
+  const [alCalcNotice, setAlCalcNotice] = useState(null);
+
   useEffect(() => {
     fetchUsers();
     fetchLeaveTypes();
@@ -84,10 +94,12 @@ const AdminBalances = () => {
   }, [selectedUser]);
 
   useEffect(() => {
-    if (selectedUserId) {
-      fetchBalances();
-      fetchTransactions();
+    if (!selectedUserId) {
+      setAlCalcNotice(null);
+      return;
     }
+    fetchBalances();
+    fetchTransactions();
   }, [selectedUserId, selectedYear, selectedLeaveTypeId]);
 
   const fetchUsers = async () => {
@@ -120,8 +132,26 @@ const AdminBalances = () => {
         params: { user_id: selectedUserId, year: selectedYear }
       });
       setBalances(response.data.balances || []);
+
+      const sync = response.data.annual_leave_sync;
+      if (sync && !sync.skipped) {
+        const yearRow = (sync.years || []).find(
+          (y) => Number(y.year) === Number(selectedYear)
+        ) || sync.years?.[0] || null;
+        setAlCalcNotice({
+          skipped: false,
+          reason: yearRow?.skipped_reason || null,
+          terminationDate: sync.termination_date
+            ? dayjs(sync.termination_date).format('YYYY-MM-DD')
+            : null,
+          yearRow
+        });
+      } else {
+        setAlCalcNotice(null);
+      }
     } catch (error) {
       console.error('Fetch balances error:', error);
+      setAlCalcNotice(null);
     }
   };
 
@@ -291,6 +321,12 @@ const AdminBalances = () => {
                 : t('adminPaperFlow.selectApplicant')
               }
             </Button>
+            {(displayUser?.termination_date || alCalcNotice?.terminationDate) && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                {t('adminUsers.terminationDate')}:{' '}
+                {dayjs(displayUser?.termination_date || alCalcNotice.terminationDate).format('YYYY-MM-DD')}
+              </Typography>
+            )}
           </Box>
           <YearSelector
             value={selectedYear}
@@ -357,6 +393,29 @@ const AdminBalances = () => {
           </Button>
         </Box>
       </Paper>
+
+      {alCalcNotice?.yearRow?.skipped_reason && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {t('adminBalances.terminationCalcMissingData')}
+        </Alert>
+      )}
+      {alCalcNotice && !alCalcNotice.skipped && alCalcNotice.yearRow && !alCalcNotice.yearRow.skipped_reason && (
+        <Alert
+          severity={alCalcNotice.yearRow.applied ? 'success' : 'info'}
+          sx={{ mb: 2 }}
+        >
+          {alCalcNotice.yearRow.applied
+            ? t('adminBalances.terminationCalcApplied', {
+                date: alCalcNotice.terminationDate,
+                calculated: Number(alCalcNotice.yearRow.calculated_days || 0).toFixed(2),
+                adjustment: formatDays(alCalcNotice.yearRow.adjustment)
+              })
+            : t('adminBalances.terminationCalcMatched', {
+                date: alCalcNotice.terminationDate,
+                calculated: Number(alCalcNotice.yearRow.calculated_days || 0).toFixed(2)
+              })}
+        </Alert>
+      )}
 
       {selectedUserId && (
         <>
@@ -440,7 +499,7 @@ const AdminBalances = () => {
                                 color: 'primary.dark'
                               }}
                             >
-                              {parseFloat(balance.total || 0).toFixed(1)}
+                              {formatDays(balance.total || 0)}
                             </Typography>
                           </Grid>
                           <Grid item xs={4}>
@@ -459,7 +518,7 @@ const AdminBalances = () => {
                                 color: 'text.primary'
                               }}
                             >
-                              {parseFloat(balance.taken || 0).toFixed(1)}
+                              {formatDays(balance.taken || 0)}
                             </Typography>
                           </Grid>
                           <Grid item xs={4}>
@@ -478,7 +537,7 @@ const AdminBalances = () => {
                                 color: parseFloat(balance.balance || 0) < 0 ? 'error.main' : 'success.main'
                               }}
                             >
-                              {parseFloat(balance.balance || 0).toFixed(1)}
+                              {formatDays(balance.balance || 0)}
                             </Typography>
                           </Grid>
                         </Grid>
@@ -544,10 +603,10 @@ const AdminBalances = () => {
                               {balance.leave_type_name_zh} ({balance.leave_type_code})
                             </TableCell>
                             <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'primary.dark' }}>
-                              {parseFloat(balance.total || 0).toFixed(1)}
+                              {formatDays(balance.total || 0)}
                             </TableCell>
                             <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                              {parseFloat(balance.taken || 0).toFixed(1)}
+                              {formatDays(balance.taken || 0)}
                             </TableCell>
                             <TableCell 
                               align="right" 
@@ -557,7 +616,7 @@ const AdminBalances = () => {
                                 color: parseFloat(balance.balance || 0) < 0 ? 'error.main' : 'success.main'
                               }}
                             >
-                              {parseFloat(balance.balance || 0).toFixed(1)}
+                              {formatDays(balance.balance || 0)}
                             </TableCell>
                           </TableRow>
                         ))
@@ -614,7 +673,7 @@ const AdminBalances = () => {
                                 {typeData.leave_type_name_zh} ({typeData.leave_type_code})
                               </Typography>
                               <Chip
-                                label={`${t('adminBalances.totalLabel')} ${typeData.total.toFixed(1)}`}
+                                label={`${t('adminBalances.totalLabel')} ${formatDays(typeData.total)}`}
                                 color="primary"
                                 size="medium"
                                 sx={{ 
@@ -816,7 +875,7 @@ const AdminBalances = () => {
                             {typeData.leave_type_name_zh} ({typeData.leave_type_code}):
                           </Typography>
                           <Chip
-                            label={`${t('adminBalances.totalLabel')} ${typeData.total.toFixed(1)}`}
+                            label={`${t('adminBalances.totalLabel')} ${formatDays(typeData.total)}`}
                             color="primary"
                             size="small"
                             sx={{ 

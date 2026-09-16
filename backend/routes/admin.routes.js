@@ -20,7 +20,10 @@ router.get('/balance-transactions', adminController.getBalanceTransactions);
 router.put('/balance-transactions/:id', adminController.updateBalanceTransaction);
 
 router.get('/annual-leave/preview', adminController.previewAnnualLeaveBulk);
+router.post('/annual-leave/sync-termination', adminController.syncAnnualLeaveTermination);
 router.post('/annual-leave/bulk', adminController.confirmAnnualLeaveBulk);
+router.get('/entitlements/preview', adminController.previewEntitlementBulk);
+router.post('/entitlements/bulk', adminController.confirmEntitlementBulk);
 
 router.post('/departments', adminController.createDepartment);
 router.put('/departments/:id', adminController.updateDepartment);

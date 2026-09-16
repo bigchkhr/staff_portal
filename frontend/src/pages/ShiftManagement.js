@@ -19,7 +19,8 @@ import {
   Description as DescriptionIcon,
   FileDownload as FileDownloadIcon,
   TableChart as TableChartIcon,
-  AttachMoney as AttachMoneyIcon
+  AttachMoney as AttachMoneyIcon,
+  PlaylistAddCheck as PlaylistAddCheckIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -196,6 +197,13 @@ const ShiftManagement = () => {
       icon: <AssessmentIcon sx={{ fontSize: 48 }} />,
       path: '/monthly-attendance-summary',
       translationKey: 'monthlyAttendanceSummary',
+      show: canViewApproverFeatures
+    },
+    {
+      key: 'bulkMonthlyAttendanceReport',
+      icon: <PlaylistAddCheckIcon sx={{ fontSize: 48 }} />,
+      path: '/shift-management/monthly-report-bulk',
+      translationKey: 'bulkMonthlyAttendanceReport',
       show: canViewApproverFeatures
     },
     {

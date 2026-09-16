@@ -8,6 +8,7 @@ const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
 const path = require('path');
 const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
+const { syncAnnualLeaveForTermination } = require('../services/annualLeaveBalance.service');
 
 class LeaveController {
   async createApplication(req, res) {
@@ -759,8 +760,8 @@ class LeaveController {
   async getBalances(req, res) {
     try {
       const { user_id, year } = req.query;
-      const userId = user_id ? parseInt(user_id) : req.user.id;
-      const currentYear = year || new Date().getFullYear();
+      const userId = user_id ? parseInt(user_id, 10) : req.user.id;
+      const currentYear = parseInt(year, 10) || new Date().getFullYear();
 
       // 檢查權限：只有 HR 成員可以查看其他用戶的餘額，一般用戶只能查看自己的
       const isHRMember = await User.isHRMember(req.user.id);
@@ -770,9 +771,32 @@ class LeaveController {
         return res.status(403).json({ message: '無權限查看其他用戶的假期餘額' });
       }
 
+      let annualLeaveSync = null;
+      if (isHRMember || isSystemAdmin) {
+        const targetUser = await User.findById(userId);
+        if (targetUser && toHKCalendarDate(targetUser.termination_date)) {
+          annualLeaveSync = await syncAnnualLeaveForTermination(targetUser, req.user.id, {
+            year: currentYear
+          });
+          console.log('getBalances auto-sync AL termination:', {
+            userId,
+            year: currentYear,
+            termination_date: annualLeaveSync.termination_date,
+            skipped: annualLeaveSync.skipped,
+            years: (annualLeaveSync.years || []).map((y) => ({
+              year: y.year,
+              calculated_days: y.calculated_days,
+              applied: y.applied,
+              skipped_reason: y.skipped_reason,
+              adjustment: y.adjustment
+            }))
+          });
+        }
+      }
+
       const balances = await LeaveBalance.findByUser(userId, currentYear);
 
-      res.json({ balances, year: currentYear });
+      res.json({ balances, year: currentYear, annual_leave_sync: annualLeaveSync });
     } catch (error) {
       console.error('Get balances error:', error);
       res.status(500).json({ message: '獲取假期餘額時發生錯誤' });
