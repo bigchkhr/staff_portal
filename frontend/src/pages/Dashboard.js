@@ -771,7 +771,7 @@ const Dashboard = () => {
         }
       </Typography>
 
-      {/* 待辦事項、表格庫、外部連結 widgets 平排 */}
+      {/* 待辦事項、表格庫、連結 widgets 平排 */}
       <Grid container spacing={2} sx={{ mb: 1 }} alignItems="stretch">
         <Grid item xs={12} md={4}>
           <Paper
