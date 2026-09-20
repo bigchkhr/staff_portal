@@ -20,6 +20,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  Pagination,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -55,6 +56,8 @@ const ExternalLinksWidget = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
 
   useEffect(() => {
     fetchLinks();
@@ -206,6 +209,10 @@ const ExternalLinksWidget = () => {
     window.open(formatUrl(url), '_blank', 'noopener,noreferrer');
   };
 
+  const pageCount = Math.ceil(links.length / pageSize);
+  const currentPage = Math.min(page, Math.max(1, pageCount || 1));
+  const visibleLinks = links.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   return (
     <Paper
       variant="outlined"
@@ -214,7 +221,8 @@ const ExternalLinksWidget = () => {
         minHeight: { xs: 280, md: 420 },
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        borderRadius: '15px'
       }}
     >
       <Box
@@ -227,8 +235,8 @@ const ExternalLinksWidget = () => {
           py: 1.5
         }}
       >
-        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-          <LinkIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+        <Typography variant="h6" noWrap sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
+          <LinkIcon sx={{ flexShrink: 0 }} />
           {t('tools.externalLinks')}
         </Typography>
         {isSystemAdmin && (
@@ -237,6 +245,7 @@ const ExternalLinksWidget = () => {
             size="small"
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
+            sx={{ flexShrink: 0 }}
           >
             {t('externalLinks.addLink')}
           </Button>
@@ -256,14 +265,59 @@ const ExternalLinksWidget = () => {
           </Box>
         ) : (
           <List disablePadding>
-            {links.map((link) => (
+            {visibleLinks.map((link) => (
               <ListItem
                 key={link.id}
                 disablePadding
                 divider
-                sx={{ opacity: link.is_active === false ? 0.55 : 1 }}
-                secondaryAction={
-                  <Box onClick={(e) => e.stopPropagation()}>
+                sx={{ opacity: link.is_active === false ? 0.55 : 1, display: 'block' }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', minWidth: 0 }}>
+                  <ListItemButton
+                    onClick={() => openLink(link.url)}
+                    sx={{ flex: 1, minWidth: 0, py: 0.75 }}
+                  >
+                    {link.logo_url ? (
+                      <Box
+                        component="img"
+                        src={link.logo_url}
+                        alt={link.name}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          objectFit: 'contain',
+                          mr: 1.5,
+                          flexShrink: 0
+                        }}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <OpenInNewIcon color="primary" sx={{ mr: 1.5, fontSize: 22, flexShrink: 0 }} />
+                    )}
+                    <ListItemText
+                      sx={{ minWidth: 0, my: 0 }}
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                          <Typography variant="body2" noWrap sx={{ fontWeight: 600, minWidth: 0 }}>
+                            {link.name}
+                          </Typography>
+                          {isSystemAdmin && link.is_active === false && (
+                            <Chip label={t('externalLinks.inactive')} size="small" sx={{ flexShrink: 0 }} />
+                          )}
+                        </Box>
+                      }
+                      secondary={link.narrative || undefined}
+                      secondaryTypographyProps={{
+                        noWrap: true,
+                        title: link.narrative || undefined
+                      }}
+                    />
+                  </ListItemButton>
+                  <Box sx={{ display: 'flex', flexShrink: 0, pr: 0.5 }} onClick={(e) => e.stopPropagation()}>
                     <Tooltip title={t('externalLinks.openLink')}>
                       <IconButton
                         size="small"
@@ -295,56 +349,23 @@ const ExternalLinksWidget = () => {
                       </>
                     )}
                   </Box>
-                }
-              >
-                <ListItemButton
-                  onClick={() => openLink(link.url)}
-                  sx={{ pr: isSystemAdmin ? 14 : 7 }}
-                >
-                  {link.logo_url ? (
-                    <Box
-                      component="img"
-                      src={link.logo_url}
-                      alt={link.name}
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        objectFit: 'contain',
-                        mr: 1.5,
-                        flexShrink: 0
-                      }}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <OpenInNewIcon color="primary" sx={{ mr: 1.5, fontSize: 22, flexShrink: 0 }} />
-                  )}
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {link.name}
-                        </Typography>
-                        {isSystemAdmin && link.is_active === false && (
-                          <Chip label={t('externalLinks.inactive')} size="small" />
-                        )}
-                      </Box>
-                    }
-                    secondary={link.narrative || undefined}
-                    secondaryTypographyProps={{
-                      noWrap: true,
-                      title: link.narrative || undefined
-                    }}
-                  />
-                </ListItemButton>
+                </Box>
               </ListItem>
             ))}
           </List>
         )}
       </Box>
+      {pageCount > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, borderTop: 1, borderColor: 'divider' }}>
+          <Pagination
+            count={pageCount}
+            page={currentPage}
+            onChange={(event, value) => setPage(value)}
+            color="primary"
+            size="small"
+          />
+        </Box>
+      )}
 
       {isSystemAdmin && (
         <Dialog

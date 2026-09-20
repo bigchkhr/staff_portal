@@ -131,9 +131,15 @@ const AdminEntitlementBulk = () => {
     }
   };
 
-  const monthLabel = (month) => {
-    if (!month) return '-';
-    return t(`adminUsers.month${month}`, { defaultValue: String(month) });
+  const birthdayLabel = (row) => {
+    if (row.birthday_md) return row.birthday_md;
+    if (row.birthday_month && row.birthday_day) {
+      return `${String(row.birthday_month).padStart(2, '0')}-${String(row.birthday_day).padStart(2, '0')}`;
+    }
+    if (row.birthday_month) {
+      return `${String(row.birthday_month).padStart(2, '0')}`;
+    }
+    return '-';
   };
 
   const renderWarnings = (warnings = []) =>
@@ -217,7 +223,7 @@ const AdminEntitlementBulk = () => {
                   <TableCell>{t('adminUsers.terminationDate')}</TableCell>
                   {grantKind === 'birthday' ? (
                     <>
-                      <TableCell>{t('adminUsers.birthdayMonth')}</TableCell>
+                      <TableCell>{t('adminUsers.birthdayDate')}</TableCell>
                       <TableCell>{t(`${i18nRoot}.validPeriod`)}</TableCell>
                     </>
                   ) : (
@@ -272,7 +278,7 @@ const AdminEntitlementBulk = () => {
                       <TableCell>{row.termination_date || '-'}</TableCell>
                       {grantKind === 'birthday' ? (
                         <>
-                          <TableCell>{monthLabel(row.birthday_month)}</TableCell>
+                          <TableCell>{birthdayLabel(row)}</TableCell>
                           <TableCell>
                             {row.start_date && row.end_date
                               ? `${row.start_date} ~ ${row.end_date}`

@@ -28,6 +28,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
@@ -111,9 +112,11 @@ const MonthlyAttendanceReportBulk = () => {
   const [searchInput, setSearchInput] = useState('');
   const [error, setError] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
   const [results, setResults] = useState([]);
   const cancelRef = useRef(false);
+  const busy = generating || deleting;
 
   const startStr = selectedStartDate?.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
   const endStr = selectedEndDate?.tz('Asia/Hong_Kong').format('YYYY-MM-DD');
@@ -179,6 +182,7 @@ const MonthlyAttendanceReportBulk = () => {
   }, [rows, searchInput]);
 
   const selectedRows = rows.filter((row) => row.selected);
+  const selectedDeletableRows = selectedRows.filter((row) => row.existing_report_id);
   const allFilteredSelected = filteredRows.length > 0 && filteredRows.every((row) => row.selected);
   const someFilteredSelected = filteredRows.some((row) => row.selected) && !allFilteredSelected;
 
@@ -208,7 +212,7 @@ const MonthlyAttendanceReportBulk = () => {
   };
 
   const handleGenerate = async () => {
-    if (!rangeValid || selectedRows.length === 0 || generating) return;
+    if (!rangeValid || selectedRows.length === 0 || busy) return;
 
     const confirm = await Swal.fire({
       title: t('bulkMonthlyReport.confirmTitle'),
@@ -283,6 +287,74 @@ const MonthlyAttendanceReportBulk = () => {
     await fetchUsers();
   };
 
+  const handleDelete = async () => {
+    if (selectedDeletableRows.length === 0 || busy) return;
+
+    const confirm = await Swal.fire({
+      title: t('bulkMonthlyReport.deleteConfirmTitle'),
+      html: t('bulkMonthlyReport.deleteConfirmHtml', {
+        count: selectedDeletableRows.length,
+        year: reportYear,
+        month: reportMonth
+      }),
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d32f2f',
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!confirm.isConfirmed) return;
+
+    cancelRef.current = false;
+    setDeleting(true);
+    setResults([]);
+
+    const nextResults = [];
+    const targets = [...selectedDeletableRows];
+    for (let i = 0; i < targets.length; i += 1) {
+      if (cancelRef.current) break;
+      const user = targets[i];
+      const name = user.display_name || user.name_zh || user.employee_number;
+      setProgress({ current: i + 1, total: targets.length, name });
+      try {
+        const response = await axios.delete(`/api/monthly-attendance-reports/${user.existing_report_id}`);
+        nextResults.push({
+          user_id: user.user_id,
+          employee_number: user.employee_number,
+          display_name: name,
+          success: true,
+          message: response.data.message || t('attendance.reportDeleted'),
+          attendance_bonus: null,
+          attendance_bonus_eligible: false,
+          report_id: null
+        });
+      } catch (err) {
+        nextResults.push({
+          user_id: user.user_id,
+          employee_number: user.employee_number,
+          display_name: name,
+          success: false,
+          message: err.response?.data?.message || t('attendance.deleteReportFailed'),
+          attendance_bonus: null,
+          attendance_bonus_eligible: false,
+          report_id: user.existing_report_id
+        });
+      }
+      setResults([...nextResults]);
+    }
+
+    setDeleting(false);
+    const successCount = nextResults.filter((r) => r.success).length;
+    const failCount = nextResults.filter((r) => !r.success).length;
+    const cancelled = cancelRef.current;
+    await Swal.fire({
+      icon: failCount === 0 && !cancelled ? 'success' : failCount === nextResults.length ? 'error' : 'warning',
+      title: cancelled ? t('bulkMonthlyReport.cancelled') : t('bulkMonthlyReport.deleteDoneTitle'),
+      text: t('bulkMonthlyReport.deleteDoneText', { success: successCount, fail: failCount })
+    });
+    await fetchUsers();
+  };
+
   const handleCancel = () => {
     cancelRef.current = true;
   };
@@ -296,7 +368,7 @@ const MonthlyAttendanceReportBulk = () => {
               startIcon={<ArrowBackIcon />}
               onClick={() => navigate('/shift-management')}
               sx={{ mb: 2 }}
-              disabled={generating}
+              disabled={busy}
             >
               {t('common.back')}
             </Button>
@@ -316,7 +388,7 @@ const MonthlyAttendanceReportBulk = () => {
                   value={selectedStartDate}
                   onChange={handleStartDateChange}
                   format="YYYY-MM-DD"
-                  disabled={generating}
+                  disabled={busy}
                   maxDate={selectedEndDate || undefined}
                   slotProps={{ textField: { fullWidth: true, size: 'small' } }}
                 />
@@ -327,7 +399,7 @@ const MonthlyAttendanceReportBulk = () => {
                   value={selectedEndDate}
                   onChange={handleEndDateChange}
                   format="YYYY-MM-DD"
-                  disabled={generating}
+                  disabled={busy}
                   minDate={selectedStartDate || undefined}
                   maxDate={selectedStartDate ? selectedStartDate.add(44, 'day') : undefined}
                   slotProps={{ textField: { fullWidth: true, size: 'small' } }}
@@ -340,7 +412,7 @@ const MonthlyAttendanceReportBulk = () => {
                     label={t('attendance.reportYear')}
                     value={reportYear}
                     onChange={(e) => setReportYear(Number(e.target.value))}
-                    disabled={generating}
+                    disabled={busy}
                   >
                     {reportYearOptions.map((y) => (
                       <MenuItem key={y} value={y}>{y}</MenuItem>
@@ -355,7 +427,7 @@ const MonthlyAttendanceReportBulk = () => {
                     label={t('attendance.reportMonth')}
                     value={reportMonth}
                     onChange={(e) => setReportMonth(Number(e.target.value))}
-                    disabled={generating}
+                    disabled={busy}
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                       <MenuItem key={m} value={m}>{m}</MenuItem>
@@ -368,7 +440,7 @@ const MonthlyAttendanceReportBulk = () => {
                   variant="outlined"
                   fullWidth
                   onClick={fetchUsers}
-                  disabled={generating || loading || !rangeValid}
+                  disabled={busy || loading || !rangeValid}
                   sx={{ height: 40 }}
                 >
                   {loading ? t('common.loading') : t('bulkMonthlyReport.reload')}
@@ -390,7 +462,7 @@ const MonthlyAttendanceReportBulk = () => {
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder={t('attendance.searchPlaceholder')}
-                disabled={generating}
+                disabled={busy}
                 sx={{ minWidth: 260, flex: 1 }}
               />
               <Typography variant="body2" color="text.secondary">
@@ -403,27 +475,40 @@ const MonthlyAttendanceReportBulk = () => {
                 variant="contained"
                 startIcon={generating ? <CircularProgress size={18} color="inherit" /> : <PlaylistAddCheckIcon />}
                 onClick={handleGenerate}
-                disabled={generating || loading || selectedRows.length === 0}
+                disabled={busy || loading || selectedRows.length === 0}
               >
                 {generating
                   ? t('bulkMonthlyReport.generatingProgress', { current: progress.current, total: progress.total })
                   : t('bulkMonthlyReport.generateSelected')}
               </Button>
-              {generating && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={deleting ? <CircularProgress size={18} color="inherit" /> : <DeleteOutlineIcon />}
+                onClick={handleDelete}
+                disabled={busy || loading || selectedDeletableRows.length === 0}
+              >
+                {deleting
+                  ? t('bulkMonthlyReport.deletingProgress', { current: progress.current, total: progress.total })
+                  : t('bulkMonthlyReport.deleteSelected', { count: selectedDeletableRows.length })}
+              </Button>
+              {busy && (
                 <Button color="inherit" onClick={handleCancel}>
                   {t('common.cancel')}
                 </Button>
               )}
             </Box>
 
-            {generating && (
+            {busy && (
               <Box sx={{ mb: 2 }}>
                 <LinearProgress
                   variant="determinate"
                   value={progress.total ? (progress.current / progress.total) * 100 : 0}
                 />
                 <Typography variant="caption" color="text.secondary">
-                  {t('bulkMonthlyReport.generatingName', { name: progress.name })}
+                  {deleting
+                    ? t('bulkMonthlyReport.deletingName', { name: progress.name })
+                    : t('bulkMonthlyReport.generatingName', { name: progress.name })}
                 </Typography>
               </Box>
             )}
@@ -437,7 +522,7 @@ const MonthlyAttendanceReportBulk = () => {
                         checked={allFilteredSelected}
                         indeterminate={someFilteredSelected}
                         onChange={(e) => toggleAllFiltered(e.target.checked)}
-                        disabled={generating || filteredRows.length === 0}
+                        disabled={busy || filteredRows.length === 0}
                       />
                     </TableCell>
                     <TableCell>{t('attendance.employeeNumber')}</TableCell>
@@ -468,7 +553,7 @@ const MonthlyAttendanceReportBulk = () => {
                           <Checkbox
                             checked={!!row.selected}
                             onChange={(e) => toggleRow(row.user_id, e.target.checked)}
-                            disabled={generating}
+                            disabled={busy}
                           />
                         </TableCell>
                         <TableCell>{row.employee_number}</TableCell>

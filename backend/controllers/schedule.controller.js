@@ -1095,18 +1095,44 @@ class ScheduleController {
         return res.status(403).json({ message: '您沒有權限刪除此排班記錄，或該日期不在 Checker 可編輯範圍內' });
       }
 
-      return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
+      const actorRole = await Schedule.getActorRole(userId, schedule.department_group_id, req.user.is_system_admin);
+
+      // checker 需批核時走草稿；approver1/2/3 與系統管理員直接刪除
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, schedule.department_group_id, [{
+          user_id: schedule.user_id,
+          schedule_date: schedule.schedule_date,
+          action: 'delete',
+          department_group_id: schedule.department_group_id,
+          start_time: null,
+          end_time: null,
+          leave_type_id: null,
+          leave_session: null,
+          store_id: null,
+          remarks: null
+        }]);
+      }
+
+      await Schedule.delete(id);
+      await this._logDirectScheduleChange(
+        schedule.department_group_id,
+        userId,
+        schedule.user_id,
+        schedule.schedule_date,
+        schedule,
+        { action: 'delete' }
+      );
+      await this._syncOfficialSchedule({
         user_id: schedule.user_id,
         schedule_date: schedule.schedule_date,
-        action: 'delete',
-        department_group_id: schedule.department_group_id,
+        id: null,
+        store_id: null,
         start_time: null,
         end_time: null,
-        leave_type_id: null,
-        leave_session: null,
-        store_id: null,
-        remarks: null
-      }]);
+        leave_type_name_zh: null,
+        leave_session: null
+      });
+      res.json({ message: '排班記錄刪除成功', deleted: true });
     } catch (error) {
       if (this._handleChangeError(error, res)) return;
       console.error('Delete schedule error:', error);
@@ -1139,8 +1165,6 @@ class ScheduleController {
 
       if (rows.length === 0) {
         return res.json({
-          requires_approval: true,
-          submission: null,
           deleted_count: 0,
           message: '沒有可刪除的排班記錄'
         });
@@ -1159,18 +1183,48 @@ class ScheduleController {
         }
       }
 
-      return await this._respondCheckerDraft(req, res, department_group_id, rows.map((s) => ({
-        user_id: s.user_id,
-        schedule_date: s.schedule_date,
-        action: 'delete',
-        department_group_id: s.department_group_id,
-        start_time: null,
-        end_time: null,
-        leave_type_id: null,
-        leave_session: null,
-        store_id: null,
-        remarks: null
-      })));
+      // checker 需批核時走草稿；approver1/2/3 與系統管理員直接刪除
+      if (actorRole.requireApproval) {
+        return await this._respondCheckerDraft(req, res, department_group_id, rows.map((s) => ({
+          user_id: s.user_id,
+          schedule_date: s.schedule_date,
+          action: 'delete',
+          department_group_id: s.department_group_id,
+          start_time: null,
+          end_time: null,
+          leave_type_id: null,
+          leave_session: null,
+          store_id: null,
+          remarks: null
+        })));
+      }
+
+      for (const row of rows) {
+        await Schedule.delete(row.id);
+        await this._logDirectScheduleChange(
+          department_group_id,
+          userId,
+          row.user_id,
+          row.schedule_date,
+          row,
+          { action: 'delete' }
+        );
+        await this._syncOfficialSchedule({
+          user_id: row.user_id,
+          schedule_date: row.schedule_date,
+          id: null,
+          store_id: null,
+          start_time: null,
+          end_time: null,
+          leave_type_name_zh: null,
+          leave_session: null
+        });
+      }
+
+      res.json({
+        deleted_count: rows.length,
+        message: `成功刪除 ${rows.length} 筆排班記錄`
+      });
     } catch (error) {
       if (this._handleChangeError(error, res)) return;
       console.error('Delete batch schedules error:', error);

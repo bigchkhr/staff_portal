@@ -38,7 +38,8 @@ const WARNING_KEYS = {
   zero_after_rounding: 'zeroAfterRounding',
   has_existing_balance: 'hasExistingBalance',
   not_yet_entitled_3m: 'notYetEntitled3m',
-  entitled_after_3m: 'entitledAfter3m'
+  entitled_after_3m: 'entitledAfter3m',
+  split_by_anniversary: 'splitByAnniversary'
 };
 
 const AdminAnnualLeaveBulk = () => {
@@ -141,6 +142,12 @@ const AdminAnnualLeaveBulk = () => {
         sx={{ mr: 0.5, mb: 0.5 }}
       />
     ));
+
+  const formatValueList = (value) => {
+    if (value == null) return '-';
+    if (Array.isArray(value)) return value.join(' → ');
+    return String(value);
+  };
 
   return (
     <Layout>
@@ -261,7 +268,7 @@ const AdminAnnualLeaveBulk = () => {
                       <TableCell>{row.hire_date || '-'}</TableCell>
                       <TableCell>{row.termination_date || '-'}</TableCell>
                       <TableCell align="right">
-                        {row.completed_years != null ? row.completed_years : '-'}
+                        {formatValueList(row.completed_years)}
                       </TableCell>
                       <TableCell align="right">
                         {row.al_base_days != null ? row.al_base_days : '-'}
@@ -270,12 +277,19 @@ const AdminAnnualLeaveBulk = () => {
                         {row.al_cap_days != null ? row.al_cap_days : '-'}
                       </TableCell>
                       <TableCell align="right">
-                        {row.full_entitlement != null ? row.full_entitlement : '-'}
+                        {formatValueList(row.full_entitlement)}
                       </TableCell>
                       <TableCell align="right">
                         {row.days_worked || 0}/{row.days_in_year || '-'}
                       </TableCell>
-                      <TableCell align="right">{row.raw_days ?? '-'}</TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2">{row.raw_days ?? '-'}</Typography>
+                        {row.calculation_formula && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {row.calculation_formula}
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell align="right" sx={{ minWidth: 100 }}>
                         <TextField
                           size="small"

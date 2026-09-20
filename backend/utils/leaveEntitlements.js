@@ -9,6 +9,29 @@ function parseBirthdayMonth(value) {
   return n;
 }
 
+function daysInMonth(month, leapYear = true) {
+  const m = parseBirthdayMonth(month);
+  if (!m) return 0;
+  // Use leap year so 29 Feb is allowed as a birthday date
+  return new Date(Date.UTC(leapYear ? 2000 : 2001, m, 0)).getUTCDate();
+}
+
+function parseBirthdayDay(month, day) {
+  const m = parseBirthdayMonth(month);
+  if (!m) return null;
+  const d = parseInt(day, 10);
+  if (!Number.isFinite(d) || d < 1 || d > daysInMonth(m)) return null;
+  return d;
+}
+
+function formatBirthdayMd(month, day) {
+  const m = parseBirthdayMonth(month);
+  if (!m) return null;
+  const d = parseBirthdayDay(m, day);
+  if (!d) return `${String(m).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 function monthStart(year, month) {
   return `${year}-${String(month).padStart(2, '0')}-01`;
 }
@@ -34,6 +57,8 @@ function baseResult(user) {
     termination_date: toHKCalendarDate(user.termination_date),
     probation_end_date: toHKCalendarDate(user.probation_end_date),
     birthday_month: parseBirthdayMonth(user.birthday_month),
+    birthday_day: parseBirthdayDay(user.birthday_month, user.birthday_day),
+    birthday_md: formatBirthdayMd(user.birthday_month, user.birthday_day),
     calculated_days: 0,
     raw_days: 0,
     full_entitlement: 0,
@@ -170,6 +195,9 @@ function calculatePaidSickLeaveForYear(user, year) {
 module.exports = {
   PAID_SICK_FULL_DAYS,
   parseBirthdayMonth,
+  parseBirthdayDay,
+  formatBirthdayMd,
+  daysInMonth,
   calculateBirthdayLeaveForYear,
   calculatePaidSickLeaveForYear
 };

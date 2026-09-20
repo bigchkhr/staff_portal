@@ -2640,12 +2640,14 @@ const Schedule = ({ noLayout = false }) => {
     if (!result.isConfirmed) return;
 
     try {
+      let anyRequiresApproval = false;
       for (const schedule of targets) {
         if (!schedule.id && schedule._changeItemId) {
           const response = await axios.delete(`/api/schedules/changes/items/${schedule._changeItemId}`);
           applySaveResponse(response.data);
         } else if (schedule.id) {
           const response = await axios.delete(`/api/schedules/${schedule.id}`);
+          if (response.data?.requires_approval) anyRequiresApproval = true;
           applySaveResponse(response.data, {
             user_id: schedule.user_id,
             schedule_date: schedule.schedule_date
@@ -2656,7 +2658,7 @@ const Schedule = ({ noLayout = false }) => {
       Swal.fire({
         icon: 'success',
         title: t('schedule.success'),
-        text: t('schedule.draftSaved')
+        text: anyRequiresApproval ? t('schedule.draftSaved') : t('schedule.deleteSuccess')
       });
     } catch (error) {
       Swal.fire({

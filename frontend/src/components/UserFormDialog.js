@@ -21,6 +21,14 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import { toHKCalendarDate } from '../utils/dateFormat';
 
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function maxDayForMonth(month) {
+  const m = parseInt(month, 10);
+  if (!Number.isFinite(m) || m < 1 || m > 12) return 31;
+  return DAYS_IN_MONTH[m - 1];
+}
+
 const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null, isHRMember = false, onToggleForcePasswordChange = null }) => {
   const { t, i18n } = useTranslation();
   const [formData, setFormData] = useState({
@@ -43,6 +51,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
     al_base_days: '',
     al_cap_days: '',
     birthday_month: '',
+    birthday_day: '',
     probation_end_date: ''
   });
   const [departments, setDepartments] = useState([]);
@@ -76,6 +85,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           al_base_days: initialData.al_base_days ?? '',
           al_cap_days: initialData.al_cap_days ?? '',
           birthday_month: initialData.birthday_month ?? '',
+          birthday_day: initialData.birthday_day ?? '',
           probation_end_date: toHKCalendarDate(initialData.probation_end_date) || ''
         });
       } else {
@@ -99,6 +109,7 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
           al_base_days: '',
           al_cap_days: '',
           birthday_month: '',
+          birthday_day: '',
           probation_end_date: ''
         });
       }
@@ -134,8 +145,14 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
       }
       if (submitData.birthday_month === '' || submitData.birthday_month === null || submitData.birthday_month === undefined) {
         submitData.birthday_month = null;
+        submitData.birthday_day = null;
       } else {
         submitData.birthday_month = parseInt(submitData.birthday_month, 10);
+        if (submitData.birthday_day === '' || submitData.birthday_day === null || submitData.birthday_day === undefined) {
+          submitData.birthday_day = null;
+        } else {
+          submitData.birthday_day = parseInt(submitData.birthday_day, 10);
+        }
       }
 
       if (!editing && !submitData.password) {
@@ -195,6 +212,16 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
       const next = { ...prev, [field]: value };
       if (field === 'token_expires_unit' && (value === 'default' || value === 'never')) {
         next.token_expires_value = '';
+      }
+      if (field === 'birthday_month') {
+        if (value === '' || value === null || value === undefined) {
+          next.birthday_day = '';
+        } else if (next.birthday_day !== '' && next.birthday_day != null) {
+          const maxDay = maxDayForMonth(value);
+          if (parseInt(next.birthday_day, 10) > maxDay) {
+            next.birthday_day = maxDay;
+          }
+        }
       }
       return next;
     });
@@ -381,21 +408,6 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             }}
             helperText={t('adminUsers.terminationDateHint')}
           />
-          <FormControl>
-            <InputLabel>{t('adminUsers.birthdayMonth')}</InputLabel>
-            <Select
-              value={formData.birthday_month}
-              label={t('adminUsers.birthdayMonth')}
-              onChange={handleChange('birthday_month')}
-            >
-              <MenuItem value="">{t('adminUsers.birthdayMonthNone')}</MenuItem>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
-                <MenuItem key={m} value={m}>
-                  {t(`adminUsers.month${m}`)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
           <TextField
             label={t('adminUsers.probationEndDate')}
             type="date"
@@ -406,6 +418,43 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             }}
             helperText={t('adminUsers.probationEndDateHint')}
           />
+          <Box>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <FormControl sx={{ minWidth: 160 }}>
+                <InputLabel>{t('adminUsers.birthdayMonthLabel')}</InputLabel>
+                <Select
+                  value={formData.birthday_month}
+                  label={t('adminUsers.birthdayMonthLabel')}
+                  onChange={handleChange('birthday_month')}
+                >
+                  <MenuItem value="">{t('adminUsers.birthdayDateNone')}</MenuItem>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                    <MenuItem key={m} value={m}>
+                      {t(`adminUsers.month${m}`)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl sx={{ minWidth: 120 }} disabled={!formData.birthday_month}>
+                <InputLabel>{t('adminUsers.birthdayDayLabel')}</InputLabel>
+                <Select
+                  value={formData.birthday_day}
+                  label={t('adminUsers.birthdayDayLabel')}
+                  onChange={handleChange('birthday_day')}
+                >
+                  <MenuItem value="">{t('adminUsers.birthdayDateNone')}</MenuItem>
+                  {Array.from({ length: maxDayForMonth(formData.birthday_month) }, (_, i) => i + 1).map((d) => (
+                    <MenuItem key={d} value={d}>
+                      {d}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ mt: 0.5, mx: 1.75, color: 'text.secondary', typography: 'caption' }}>
+              {t('adminUsers.birthdayDateHint')}
+            </Box>
+          </Box>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <TextField
               label={t('adminUsers.alBaseDays')}
@@ -426,16 +475,6 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
               helperText={t('adminUsers.alCapDaysHint')}
             />
           </Box>
-          <FormControlLabel
-            control={(
-              <Switch
-                checked={formData.deactivated}
-                onChange={handleChange('deactivated')}
-                color="error"
-              />
-            )}
-            label={formData.deactivated ? t('adminUsers.accountDeactivated') : t('adminUsers.accountActive')}
-          />
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <TextField
               label={t('adminUsers.tokenExpiresValue')}
@@ -471,6 +510,16 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
               </Select>
             </FormControl>
           </Box>
+          <FormControlLabel
+            control={(
+              <Switch
+                checked={formData.deactivated}
+                onChange={handleChange('deactivated')}
+                color="error"
+              />
+            )}
+            label={formData.deactivated ? t('adminUsers.accountDeactivated') : t('adminUsers.accountActive')}
+          />
           {isHRMember && (
             <FormControlLabel
               control={(

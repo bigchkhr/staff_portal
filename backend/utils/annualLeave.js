@@ -1,4 +1,4 @@
-const { toHKCalendarDate, eachHKCalendarDate } = require('./hkDate');
+const { toHKCalendarDate, eachHKCalendarDate, addHKCalendarDays } = require('./hkDate');
 
 const ENTITLEMENT_WAITING_MONTHS = 3;
 
@@ -79,11 +79,53 @@ function minDate(a, b) {
   return a <= b ? a : b;
 }
 
+function entitlementForYears(base, cap, completedYears) {
+  return Math.min(base + completedYears, cap);
+}
+
+/**
+ * 按入職周年把在職期間切成段：周年前用較低年資額度，周年當日起用較高年資額度。
+ * 每段：額度 × 該段日數 / 該年日數，再相加。
+ */
+function buildEntitlementSegments({ hireDate, workStart, workEnd, year, base, cap, daysInYear }) {
+  const anniversary = anniversaryOnYear(hireDate, year);
+  const ranges = [];
+
+  if (
+    anniversary &&
+    anniversary > workStart &&
+    anniversary <= workEnd
+  ) {
+    const beforeEnd = addHKCalendarDays(anniversary, -1);
+    if (beforeEnd && beforeEnd >= workStart) {
+      ranges.push({ start: workStart, end: beforeEnd });
+    }
+    ranges.push({ start: anniversary, end: workEnd });
+  } else {
+    ranges.push({ start: workStart, end: workEnd });
+  }
+
+  return ranges.map((range) => {
+    const completedYears = completedYearsAsOf(hireDate, range.start);
+    const entitlement = entitlementForYears(base, cap, completedYears);
+    const days = eachHKCalendarDate(range.start, range.end).length;
+    const raw = daysInYear > 0 ? (entitlement * days) / daysInYear : 0;
+    return {
+      start: range.start,
+      end: range.end,
+      days,
+      completed_years: completedYears,
+      entitlement,
+      raw_days: Math.round(raw * 10000) / 10000
+    };
+  }).filter((seg) => seg.days > 0);
+}
+
 /**
  * 計算指定曆年之年假試算結果。
  * - 入職日起滿 3 個月才 entitle（以該年在職結束日是否已達資格日判斷）
- * - 年資以該年 1 月 1 日為準：entitlement = min(base + completedYears, cap)
- * - 再按該年實際在職日數（入職／離職）比例
+ * - 以入職周年為界分段：周年前／後分別用當段年資額度，再 × 日數／該年日數後相加
+ *   （例：起步 10、封頂 14、入職 2024-07-28 → 2025 年 = 10×208/365 + 11×157/365）
  * - 該年有離職日：保留兩位小數，不 round 至 0.5；否則 roundToHalfDay
  */
 function calculateAnnualLeaveForYear(user, year) {
@@ -114,6 +156,8 @@ function calculateAnnualLeaveForYear(user, year) {
     pro_rata_factor: 0,
     raw_days: 0,
     calculated_days: 0,
+    entitlement_segments: [],
+    calculation_formula: null,
     warnings,
     selectable: false
   };
@@ -163,18 +207,29 @@ function calculateAnnualLeaveForYear(user, year) {
     return result;
   }
 
-  const completedYears = completedYearsAsOf(hireDate, yearStart);
-  const fullEntitlement = Math.min(base + completedYears, cap);
-
-  const daysWorked = eachHKCalendarDate(workStart, workEnd).length;
   const daysInYear = result.days_in_year;
+  const segments = buildEntitlementSegments({
+    hireDate,
+    workStart,
+    workEnd,
+    year: y,
+    base,
+    cap,
+    daysInYear
+  });
+
+  const daysWorked = segments.reduce((sum, seg) => sum + seg.days, 0);
+  const rawDays = segments.reduce((sum, seg) => sum + seg.raw_days, 0);
   const factor = daysInYear > 0 ? daysWorked / daysInYear : 0;
-  const rawDays = fullEntitlement * factor;
   const terminatedInYear =
     !!terminationDate && terminationDate >= yearStart && terminationDate <= yearEnd;
   const calculatedDays = terminatedInYear
     ? roundToTwoDecimals(rawDays)
     : roundToHalfDay(rawDays);
+
+  const yearsList = [...new Set(segments.map((s) => s.completed_years))];
+  const entitlementList = [...new Set(segments.map((s) => s.entitlement))];
+  const splitByAnniversary = segments.length > 1 && entitlementList.length > 1;
 
   if (terminatedInYear) {
     warnings.push('adjusted_for_termination');
@@ -185,15 +240,26 @@ function calculateAnnualLeaveForYear(user, year) {
   if (entitlementDate > yearStart && entitlementDate <= yearEnd) {
     warnings.push('entitled_after_3m');
   }
+  if (splitByAnniversary) {
+    warnings.push('split_by_anniversary');
+  }
 
-  result.completed_years = completedYears;
-  result.full_entitlement = fullEntitlement;
+  result.completed_years = yearsList.length <= 1
+    ? (yearsList[0] ?? completedYearsAsOf(hireDate, yearStart))
+    : yearsList;
+  result.full_entitlement = entitlementList.length <= 1
+    ? (entitlementList[0] ?? null)
+    : entitlementList;
   result.work_start = workStart;
   result.work_end = workEnd;
   result.days_worked = daysWorked;
   result.pro_rata_factor = Math.round(factor * 10000) / 10000;
   result.raw_days = Math.round(rawDays * 10000) / 10000;
   result.calculated_days = calculatedDays;
+  result.entitlement_segments = segments;
+  result.calculation_formula = segments
+    .map((seg) => `${seg.entitlement}×${seg.days}/${daysInYear}`)
+    .join(' + ');
   result.selectable = calculatedDays > 0;
 
   if (calculatedDays <= 0) {
@@ -210,5 +276,6 @@ module.exports = {
   calculateAnnualLeaveForYear,
   anniversaryOnYear,
   addCalendarMonths,
+  buildEntitlementSegments,
   ENTITLEMENT_WAITING_MONTHS
 };

@@ -12,8 +12,21 @@ const { calculateAnnualLeaveForYear } = require('../utils/annualLeave');
 const { syncAnnualLeaveForTermination } = require('../services/annualLeaveBalance.service');
 const {
   calculateBirthdayLeaveForYear,
-  calculatePaidSickLeaveForYear
+  calculatePaidSickLeaveForYear,
+  parseBirthdayMonth,
+  parseBirthdayDay
 } = require('../utils/leaveEntitlements');
+
+function normalizeBirthdayFields(birthday_month, birthday_day) {
+  const month = parseBirthdayMonth(birthday_month);
+  if (!month) {
+    return { birthday_month: null, birthday_day: null };
+  }
+  return {
+    birthday_month: month,
+    birthday_day: parseBirthdayDay(month, birthday_day)
+  };
+}
 
 async function resolveEntitlementLeaveType(kind) {
   if (kind === 'birthday') {
@@ -54,6 +67,7 @@ class AdminController {
         al_base_days,
         al_cap_days,
         birthday_month,
+        birthday_day,
         probation_end_date
       } = req.body;
 
@@ -108,13 +122,7 @@ class AdminController {
           al_cap_days === '' || al_cap_days === null || al_cap_days === undefined
             ? null
             : parseFloat(al_cap_days),
-        birthday_month: (() => {
-          if (birthday_month === '' || birthday_month === null || birthday_month === undefined) {
-            return null;
-          }
-          const n = parseInt(birthday_month, 10);
-          return Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
-        })(),
+        ...normalizeBirthdayFields(birthday_month, birthday_day),
         probation_end_date:
           probation_end_date && String(probation_end_date).trim()
             ? toHKCalendarDate(String(probation_end_date).trim())
@@ -181,14 +189,16 @@ class AdminController {
         updateData.al_cap_days =
           v === '' || v === null || v === undefined ? null : parseFloat(v);
       }
-      if (Object.prototype.hasOwnProperty.call(updateData, 'birthday_month')) {
-        const v = updateData.birthday_month;
-        if (v === '' || v === null || v === undefined) {
-          updateData.birthday_month = null;
-        } else {
-          const n = parseInt(v, 10);
-          updateData.birthday_month = Number.isFinite(n) && n >= 1 && n <= 12 ? n : null;
-        }
+      if (
+        Object.prototype.hasOwnProperty.call(updateData, 'birthday_month') ||
+        Object.prototype.hasOwnProperty.call(updateData, 'birthday_day')
+      ) {
+        const normalized = normalizeBirthdayFields(
+          updateData.birthday_month,
+          updateData.birthday_day
+        );
+        updateData.birthday_month = normalized.birthday_month;
+        updateData.birthday_day = normalized.birthday_day;
       }
       if (Object.prototype.hasOwnProperty.call(updateData, 'probation_end_date')) {
         const pd = updateData.probation_end_date;
@@ -958,6 +968,7 @@ class AdminController {
           'users.termination_date',
           'users.deactivated',
           'users.birthday_month',
+          'users.birthday_day',
           'users.probation_end_date',
           'positions.name as position_name',
           'positions.name_zh as position_name_zh'

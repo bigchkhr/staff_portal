@@ -126,9 +126,9 @@ const ApprovalDetail = () => {
       
       await Swal.fire({
         icon: 'error',
-        title: '載入申請詳情失敗',
+        title: t('approvalDetail.loadFailed'),
         text: errorMessage,
-        confirmButtonText: '確定',
+        confirmButtonText: t('approvalDetail.ok'),
         confirmButtonColor: '#d33'
       });
       
@@ -281,17 +281,17 @@ const ApprovalDetail = () => {
         if (appliedDays > availableBalance) {
           const result = await Swal.fire({
             icon: 'warning',
-            title: '假期餘額不足',
+            title: t('approvalDetail.insufficientBalance'),
             html: `
               <div style="text-align: left;">
-                <p>申請的假期日數：<strong>${appliedDays}</strong> 天</p>
-                <p>可用假期餘額：<strong>${availableBalance.toFixed(2)}</strong> 天</p>
-                <p style="color: #d32f2f; margin-top: 10px;">申請的假期日數多於可用餘額，是否依然批核？</p>
+                <p>${t('approvalDetail.appliedDaysHtml', { days: appliedDays })}</p>
+                <p>${t('approvalDetail.availableBalanceHtml', { balance: availableBalance.toFixed(2) })}</p>
+                <p style="color: #d32f2f; margin-top: 10px;">${t('approvalDetail.insufficientBalanceConfirm')}</p>
               </div>
             `,
             showCancelButton: true,
-            confirmButtonText: '依然批核',
-            cancelButtonText: '取消',
+            confirmButtonText: t('approvalDetail.approveAnyway'),
+            cancelButtonText: t('common.cancel'),
             confirmButtonColor: '#3085d6',
             cancelButtonColor: '#d33',
             reverseButtons: true
@@ -318,7 +318,7 @@ const ApprovalDetail = () => {
       await Swal.fire({
         icon: 'success',
         title: action === 'approve' ? t('approvalDetail.approvalSuccess') : t('approvalDetail.rejectionSuccess'),
-        confirmButtonText: '確定',
+        confirmButtonText: t('approvalDetail.ok'),
         confirmButtonColor: '#3085d6'
       });
       
@@ -334,23 +334,23 @@ const ApprovalDetail = () => {
         
         const overlappingList = overlappingApps.map(app => 
           `<div style="text-align: left; margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
-            <strong>交易編號：</strong>${app.transaction_id}<br/>
-            <strong>假期類型：</strong>${app.leave_type_name}<br/>
-            <strong>日期範圍：</strong>${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}<br/>
-            <strong>狀態：</strong>${app.status}
+            <strong>${t('approvalDetail.transactionIdLabel')}</strong>${app.transaction_id}<br/>
+            <strong>${t('approvalDetail.leaveTypeLabel')}</strong>${app.leave_type_name}<br/>
+            <strong>${t('approvalDetail.dateRangeLabel')}</strong>${formatDate(app.start_date)} ~ ${formatDate(app.end_date)}<br/>
+            <strong>${t('approvalDetail.statusLabel')}</strong>${app.status}
           </div>`
         ).join('');
         
         await Swal.fire({
           icon: 'warning',
-          title: '日期範圍重疊',
+          title: t('approvalDetail.dateOverlap'),
           html: `
             <div style="text-align: left;">
-              <p style="color: #d32f2f; font-weight: bold; margin-bottom: 15px;">該日期範圍內已有已批核或正在申請的假期，無法批准此申請：</p>
+              <p style="color: #d32f2f; font-weight: bold; margin-bottom: 15px;">${t('approvalDetail.dateOverlapMessage')}</p>
               ${overlappingList}
             </div>
           `,
-          confirmButtonText: '確定',
+          confirmButtonText: t('approvalDetail.ok'),
           confirmButtonColor: '#d33',
           width: '600px'
         });
@@ -361,9 +361,9 @@ const ApprovalDetail = () => {
         // 使用 Sweet Alert 顯示錯誤訊息
         await Swal.fire({
           icon: 'error',
-          title: '操作失敗',
+          title: t('approvalDetail.operationFailed'),
           text: error.response?.data?.message || t('approvalDetail.operationFailed'),
-          confirmButtonText: '確定',
+          confirmButtonText: t('approvalDetail.ok'),
           confirmButtonColor: '#d33'
         });
       }
@@ -380,7 +380,7 @@ const ApprovalDetail = () => {
     try {
       await axios.post(`/api/approvals/${id}/approve`, {
         action: 'reject',
-        remarks: hrRejectionReason || 'HR Group 拒絕申請',
+        remarks: hrRejectionReason || t('approvalDetail.hrDefaultRejectionReason'),
         application_type: applicationType
       });
 
@@ -388,7 +388,7 @@ const ApprovalDetail = () => {
       await Swal.fire({
         icon: 'success',
         title: t('approvalDetail.rejectionSuccess'),
-        confirmButtonText: '確定',
+        confirmButtonText: t('approvalDetail.ok'),
         confirmButtonColor: '#3085d6'
       });
       
@@ -397,9 +397,9 @@ const ApprovalDetail = () => {
       // 使用 Sweet Alert 顯示錯誤訊息
       await Swal.fire({
         icon: 'error',
-        title: '操作失敗',
+        title: t('approvalDetail.operationFailed'),
         text: error.response?.data?.message || t('approvalDetail.operationFailed'),
-        confirmButtonText: '確定',
+        confirmButtonText: t('approvalDetail.ok'),
         confirmButtonColor: '#d33'
       });
     } finally {
@@ -444,9 +444,9 @@ const ApprovalDetail = () => {
       
       await Swal.fire({
         icon: 'error',
-        title: '無法開啟檔案',
+        title: t('approvalDetail.cannotOpenFileTitle'),
         text: errorMessage,
-        confirmButtonText: '確定',
+        confirmButtonText: t('approvalDetail.ok'),
         confirmButtonColor: '#d33'
       });
     } finally {
@@ -573,15 +573,15 @@ const ApprovalDetail = () => {
                 <>
                   <ListItem>
                     <ListItemText 
-                      primary="申請類型"
-                      secondary="額外工作時數申報"
+                      primary={t('approvalDetail.applicationType')}
+                      secondary={t('approvalDetail.extraWorkingHoursApplication')}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="申請日期"
+                      primary={t('approvalDetail.applicationDate')}
                       secondary={application.application_date ? formatDate(application.application_date) : '-'}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
@@ -589,7 +589,7 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="開始日期時間"
+                      primary={t('approvalDetail.startDateTime')}
                       secondary={application.start_date && application.start_time 
                         ? `${formatDate(application.start_date)} ${application.start_time}`
                         : formatDate(application.start_date)}
@@ -599,7 +599,7 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="結束日期時間"
+                      primary={t('approvalDetail.endDateTime')}
                       secondary={application.end_date && application.end_time 
                         ? `${formatDate(application.end_date)} ${application.end_time}`
                         : formatDate(application.end_date)}
@@ -609,8 +609,8 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="總時數"
-                      secondary={`${application.total_hours || 0} 小時`}
+                      primary={t('approvalDetail.totalHours')}
+                      secondary={t('approvalDetail.totalHoursValue', { hours: application.total_hours || 0 })}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
@@ -618,7 +618,7 @@ const ApprovalDetail = () => {
                   {application.reason && (
                     <ListItem>
                       <ListItemText 
-                        primary="額外工作原因"
+                        primary={t('approvalDetail.extraWorkReason')}
                         secondary={application.reason}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -628,7 +628,7 @@ const ApprovalDetail = () => {
                   {application.description && (
                     <ListItem>
                       <ListItemText 
-                        primary="內容描述"
+                        primary={t('approvalDetail.contentDescription')}
                         secondary={application.description}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -640,15 +640,15 @@ const ApprovalDetail = () => {
                 <>
                   <ListItem>
                     <ListItemText 
-                      primary="申請類型"
-                      secondary="外勤工作申請"
+                      primary={t('approvalDetail.applicationType')}
+                      secondary={t('approvalDetail.outdoorWorkApplication')}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="申請日期"
+                      primary={t('approvalDetail.applicationDate')}
                       secondary={application.application_date ? formatDate(application.application_date) : '-'}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
@@ -656,7 +656,7 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="開始日期時間"
+                      primary={t('approvalDetail.startDateTime')}
                       secondary={application.start_date && application.start_time 
                         ? `${formatDate(application.start_date)} ${application.start_time}`
                         : formatDate(application.start_date)}
@@ -666,7 +666,7 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="結束日期時間"
+                      primary={t('approvalDetail.endDateTime')}
                       secondary={application.end_date && application.end_time 
                         ? `${formatDate(application.end_date)} ${application.end_time}`
                         : formatDate(application.end_date)}
@@ -676,8 +676,8 @@ const ApprovalDetail = () => {
                   </ListItem>
                   <ListItem>
                     <ListItemText 
-                      primary="總時數"
-                      secondary={`${application.total_hours || 0} 小時`}
+                      primary={t('approvalDetail.totalHours')}
+                      secondary={t('approvalDetail.totalHoursValue', { hours: application.total_hours || 0 })}
                       primaryTypographyProps={{ variant: 'caption' }}
                       secondaryTypographyProps={{ variant: 'body1' }}
                     />
@@ -685,7 +685,7 @@ const ApprovalDetail = () => {
                   {application.start_location && (
                     <ListItem>
                       <ListItemText 
-                        primary="開始地點"
+                        primary={t('approvalDetail.startLocation')}
                         secondary={application.start_location}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -695,7 +695,7 @@ const ApprovalDetail = () => {
                   {application.end_location && (
                     <ListItem>
                       <ListItemText 
-                        primary="結束地點"
+                        primary={t('approvalDetail.endLocation')}
                         secondary={application.end_location}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -705,7 +705,7 @@ const ApprovalDetail = () => {
                   {application.transportation && (
                     <ListItem>
                       <ListItemText 
-                        primary="交通工具"
+                        primary={t('approvalDetail.transportation')}
                         secondary={application.transportation}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -715,7 +715,7 @@ const ApprovalDetail = () => {
                   {application.expense && (
                     <ListItem>
                       <ListItemText 
-                        primary="費用"
+                        primary={t('approvalDetail.expense')}
                         secondary={`$${parseFloat(application.expense).toFixed(2)}`}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}
@@ -725,7 +725,7 @@ const ApprovalDetail = () => {
                   {application.purpose && (
                     <ListItem>
                       <ListItemText 
-                        primary="目的"
+                        primary={t('approvalDetail.purpose')}
                         secondary={application.purpose}
                         primaryTypographyProps={{ variant: 'caption' }}
                         secondaryTypographyProps={{ variant: 'body1' }}

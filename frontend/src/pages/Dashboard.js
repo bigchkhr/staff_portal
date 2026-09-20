@@ -53,6 +53,7 @@ import axios from 'axios';
 import { formatDate } from '../utils/dateFormat';
 import Swal from 'sweetalert2';
 import ExternalLinksWidget from '../components/ExternalLinksWidget';
+import FormLibraryWidget from '../components/FormLibraryWidget';
 
 const Dashboard = () => {
   const { t, i18n } = useTranslation();
@@ -74,6 +75,8 @@ const Dashboard = () => {
     due_date: '',
     priority: 1
   });
+  const [myTodoPage, setMyTodoPage] = useState(1);
+  const myTodoPageSize = 6;
 
   // 最新消息狀態
   const [newsList, setNewsList] = useState([]);
@@ -744,6 +747,10 @@ const Dashboard = () => {
     return t(greetingKey, { name });
   };
 
+  const myTodoPageCount = Math.ceil(myTodos.length / myTodoPageSize);
+  const myTodoCurrentPage = Math.min(myTodoPage, Math.max(1, myTodoPageCount || 1));
+  const visibleMyTodos = myTodos.slice((myTodoCurrentPage - 1) * myTodoPageSize, myTodoCurrentPage * myTodoPageSize);
+
   return (
     <Box>
       <Typography 
@@ -764,9 +771,9 @@ const Dashboard = () => {
         }
       </Typography>
 
-      {/* 待辦事項與外部連結 widgets 平排 */}
+      {/* 待辦事項、表格庫、外部連結 widgets 平排 */}
       <Grid container spacing={2} sx={{ mb: 1 }} alignItems="stretch">
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
           <Paper
             variant="outlined"
             sx={{
@@ -774,7 +781,8 @@ const Dashboard = () => {
               minHeight: { xs: 280, md: 420 },
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              borderRadius: '15px'
             }}
           >
             <Box
@@ -787,8 +795,8 @@ const Dashboard = () => {
                 py: 1.5
               }}
             >
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                <ListIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+              <Typography variant="h6" noWrap sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: 1 }}>
+                <ListIcon sx={{ flexShrink: 0 }} />
                 {t('dashboard.myTodo.title')}
               </Typography>
               <Button
@@ -796,6 +804,7 @@ const Dashboard = () => {
                 size="small"
                 startIcon={<AddIcon />}
                 onClick={() => handleOpenMyTodoDialog()}
+                sx={{ flexShrink: 0 }}
               >
                 {t('dashboard.myTodo.add')}
               </Button>
@@ -814,14 +823,59 @@ const Dashboard = () => {
                 </Box>
               ) : (
                 <List disablePadding>
-                  {myTodos.map((todo) => (
+                  {visibleMyTodos.map((todo) => (
                     <ListItem
                       key={todo.id}
                       divider
-                      alignItems="flex-start"
-                      sx={{ opacity: todo.status === 'completed' ? 0.65 : 1 }}
-                      secondaryAction={
-                        <Box>
+                      disablePadding
+                      sx={{ opacity: todo.status === 'completed' ? 0.65 : 1, display: 'block' }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%', minWidth: 0 }}>
+                        <ListItemText
+                          sx={{ minWidth: 0, px: 2, py: 1, my: 0 }}
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flexWrap: 'wrap' }}>
+                              <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0 }}>
+                                {todo.title}
+                              </Typography>
+                              <Chip
+                                label={t(`dashboard.myTodo.status.${todo.status}`)}
+                                color={todo.status === 'completed' ? 'success' : todo.status === 'in_progress' ? 'primary' : 'default'}
+                                size="small"
+                              />
+                              <Chip
+                                label={t(`dashboard.myTodo.priority.${todo.priority}`)}
+                                color={todo.priority === 3 ? 'error' : todo.priority === 2 ? 'warning' : 'default'}
+                                size="small"
+                              />
+                            </Box>
+                          }
+                          secondaryTypographyProps={{ component: 'div' }}
+                          secondary={
+                            <>
+                              {todo.description && (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  sx={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden'
+                                  }}
+                                >
+                                  {todo.description}
+                                </Typography>
+                              )}
+                              {todo.due_date && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {t('dashboard.myTodo.dueDate')}: {formatDate(todo.due_date)}
+                                </Typography>
+                              )}
+                            </>
+                          }
+                        />
+                        <Box sx={{ display: 'flex', flexShrink: 0, pt: 0.5, pr: 0.5 }}>
                           <IconButton
                             size="small"
                             onClick={() => handleOpenMyTodoDialog(todo)}
@@ -837,59 +891,29 @@ const Dashboard = () => {
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Box>
-                      }
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 6, flexWrap: 'wrap' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {todo.title}
-                            </Typography>
-                            <Chip
-                              label={t(`dashboard.myTodo.status.${todo.status}`)}
-                              color={todo.status === 'completed' ? 'success' : todo.status === 'in_progress' ? 'primary' : 'default'}
-                              size="small"
-                            />
-                            <Chip
-                              label={t(`dashboard.myTodo.priority.${todo.priority}`)}
-                              color={todo.priority === 3 ? 'error' : todo.priority === 2 ? 'warning' : 'default'}
-                              size="small"
-                            />
-                          </Box>
-                        }
-                        secondaryTypographyProps={{ component: 'div' }}
-                        secondary={
-                          <>
-                            {todo.description && (
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                sx={{
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical',
-                                  overflow: 'hidden'
-                                }}
-                              >
-                                {todo.description}
-                              </Typography>
-                            )}
-                            {todo.due_date && (
-                              <Typography variant="caption" color="text.secondary">
-                                {t('dashboard.myTodo.dueDate')}: {formatDate(todo.due_date)}
-                              </Typography>
-                            )}
-                          </>
-                        }
-                      />
+                      </Box>
                     </ListItem>
                   ))}
                 </List>
               )}
             </Box>
+            {myTodoPageCount > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1, borderTop: 1, borderColor: 'divider' }}>
+                <Pagination
+                  count={myTodoPageCount}
+                  page={myTodoCurrentPage}
+                  onChange={(event, value) => setMyTodoPage(value)}
+                  color="primary"
+                  size="small"
+                />
+              </Box>
+            )}
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
+          <FormLibraryWidget />
+        </Grid>
+        <Grid item xs={12} md={4}>
           <ExternalLinksWidget />
         </Grid>
       </Grid>
