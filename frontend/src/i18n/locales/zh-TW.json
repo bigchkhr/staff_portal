@@ -953,7 +953,7 @@
   },
   "storeHoursReport": {
     "title": "群組工時報表",
-    "subtitle": "根據打卡記錄計算該群組每日全職超時工作及兼職員工工作時數",
+    "subtitle": "統計：當日有打卡用打卡應計實數；無打卡先按已編更計預算兼職時數及全職超時",
     "selectGroup": "選擇群組",
     "selectGroupFirst": "請先選擇群組",
     "startDate": "開始日期",
@@ -968,7 +968,11 @@
     "fetchFailed": "取得報表失敗",
     "exportCsv": "匯出 CSV",
     "legendOt": "FT：應計超時工作時數",
-    "legendPt": "PT：應計工作時數"
+    "legendPt": "PT：應計工作時數",
+    "legendBudgetOt": "預算 FT OT：當日無打卡時按已編更（逾 9 小時、30 分取整）",
+    "legendBudgetPt": "預算 PT：當日無打卡時按已編更時長（15 分取整）",
+    "budgetOtShort": "預算OT",
+    "budgetPtShort": "預算PT"
   },
   "storeWageCostReport": {
     "title": "店舖工資成本",
@@ -990,6 +994,10 @@
     "exportPdfFailed": "匯出 PDF 失敗",
     "legendOt": "FT：應計超時工作時數",
     "legendPt": "PT：應計工作時數",
+    "legendBudgetOt": "預算 FT OT：當日無打卡時按已編更（逾 9 小時、30 分取整）",
+    "legendBudgetPt": "預算 PT：當日無打卡時按已編更時長（15 分取整）",
+    "budgetOtShort": "預算OT",
+    "budgetPtShort": "預算PT",
     "legendIn1": "包括幫舖：非本群組但 IN1 喺本群組店舖",
     "legendLeave": "假期：歸屬駐守店舖（無打卡）",
     "legendSchedule": "未打卡：顯示編更時間",

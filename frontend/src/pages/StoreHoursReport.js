@@ -33,10 +33,25 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getRosterDurationMinutes } from '../utils/rosterDuration';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault('Asia/Hong_Kong');
+
+const floorMinutesToInterval = (minutes, interval) => Math.floor(minutes / interval) * interval;
+
+/** 根據已編更計算預算時數：PT = 編更時長（15 分取整）；FT OT = 逾 9 小時部分（30 分取整） */
+const getBudgetMinutesFromSchedule = (employmentMode, scheduleStart, scheduleEnd) => {
+  const duration = getRosterDurationMinutes(scheduleStart, scheduleEnd);
+  if (duration == null || duration <= 0) return null;
+  if (employmentMode === 'PT') {
+    return floorMinutesToInterval(duration, 15);
+  }
+  const ot = duration - 9 * 60;
+  if (ot <= 0) return 0;
+  return floorMinutesToInterval(ot, 30);
+};
 
 const StoreHoursReport = () => {
   const { t, i18n } = useTranslation();
@@ -202,19 +217,51 @@ const StoreHoursReport = () => {
   const dailyTotals = useMemo(() => {
     const totals = {};
     dates.forEach((date) => {
-      totals[date.format('YYYY-MM-DD')] = { overtime: 0, work: 0 };
+      totals[date.format('YYYY-MM-DD')] = {
+        overtime: 0,
+        work: 0,
+        budgetOvertime: 0,
+        budgetWork: 0
+      };
     });
     employees.forEach((emp) => {
       dates.forEach((date) => {
         const dateStr = date.format('YYYY-MM-DD');
         const cell = emp.days?.[dateStr];
-        if (!cell || cell.minutes == null) return;
-        if (cell.hours_type === 'work') totals[dateStr].work += cell.minutes;
-        else totals[dateStr].overtime += cell.minutes;
+        if (!cell) return;
+        // 有打卡：用打卡應計實數；無打卡：先用編更做預算
+        const hasClock = !!(cell.clock_start_time || cell.clock_end_time);
+        if (hasClock) {
+          if (cell.minutes != null) {
+            if (cell.hours_type === 'work') totals[dateStr].work += cell.minutes;
+            else totals[dateStr].overtime += cell.minutes;
+          }
+          return;
+        }
+        const budget = getBudgetMinutesFromSchedule(
+          emp.employment_mode,
+          cell.schedule_start_time,
+          cell.schedule_end_time
+        );
+        if (budget != null && budget > 0) {
+          if (emp.employment_mode === 'PT') totals[dateStr].budgetWork += budget;
+          else totals[dateStr].budgetOvertime += budget;
+        }
       });
     });
     return totals;
   }, [dates, employees]);
+
+  const periodTotals = useMemo(() => {
+    const sum = { overtime: 0, work: 0, budgetOvertime: 0, budgetWork: 0 };
+    Object.values(dailyTotals).forEach((tot) => {
+      sum.overtime += tot.overtime || 0;
+      sum.work += tot.work || 0;
+      sum.budgetOvertime += tot.budgetOvertime || 0;
+      sum.budgetWork += tot.budgetWork || 0;
+    });
+    return sum;
+  }, [dailyTotals]);
 
   const employeeTotals = useMemo(() => {
     const map = {};
@@ -386,6 +433,8 @@ const StoreHoursReport = () => {
             <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
               <Chip size="small" label={t('storeHoursReport.legendOt')} sx={{ bgcolor: '#fff3e0', color: '#e65100', fontWeight: 600 }} />
               <Chip size="small" label={t('storeHoursReport.legendPt')} color="secondary" variant="outlined" />
+              <Chip size="small" label={t('storeHoursReport.legendBudgetOt')} sx={{ bgcolor: '#efebe9', color: '#5d4037', fontWeight: 600 }} />
+              <Chip size="small" label={t('storeHoursReport.legendBudgetPt')} sx={{ bgcolor: '#f3e5f5', color: '#6a1b9a', fontWeight: 600 }} />
             </Box>
           </Card>
 
@@ -521,21 +570,47 @@ const StoreHoursReport = () => {
                       </TableCell>
                       {dates.map((date) => {
                         const dateStr = date.format('YYYY-MM-DD');
-                        const tot = dailyTotals[dateStr] || { overtime: 0, work: 0 };
+                        const tot = dailyTotals[dateStr] || {
+                          overtime: 0,
+                          work: 0,
+                          budgetOvertime: 0,
+                          budgetWork: 0
+                        };
                         return (
                           <TableCell key={dateStr} align="center" sx={{ bgcolor: 'grey.100', fontWeight: 600 }}>
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3, alignItems: 'center' }}>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, alignItems: 'center' }}>
                               <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', fontSize: '0.7rem' }}>
                                 OT: {formatMinutes(tot.overtime)}
                               </Typography>
                               <Typography variant="caption" sx={{ fontWeight: 600, color: 'secondary.main', fontSize: '0.7rem' }}>
                                 PT: {formatMinutes(tot.work)}
                               </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#5d4037', fontSize: '0.65rem' }}>
+                                {t('storeHoursReport.budgetOtShort')}: {formatMinutes(tot.budgetOvertime)}
+                              </Typography>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#6a1b9a', fontSize: '0.65rem' }}>
+                                {t('storeHoursReport.budgetPtShort')}: {formatMinutes(tot.budgetWork)}
+                              </Typography>
                             </Box>
                           </TableCell>
                         );
                       })}
-                      <TableCell sx={{ bgcolor: 'grey.100' }} />
+                      <TableCell align="center" sx={{ bgcolor: 'grey.100', fontWeight: 600 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, alignItems: 'center' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#e65100', fontSize: '0.7rem' }}>
+                            OT: {formatMinutes(periodTotals.overtime)}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: 'secondary.main', fontSize: '0.7rem' }}>
+                            PT: {formatMinutes(periodTotals.work)}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#5d4037', fontSize: '0.65rem' }}>
+                            {t('storeHoursReport.budgetOtShort')}: {formatMinutes(periodTotals.budgetOvertime)}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#6a1b9a', fontSize: '0.65rem' }}>
+                            {t('storeHoursReport.budgetPtShort')}: {formatMinutes(periodTotals.budgetWork)}
+                          </Typography>
+                        </Box>
+                      </TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>

@@ -953,7 +953,7 @@
   },
   "storeHoursReport": {
     "title": "Group Hours Report",
-    "subtitle": "Hours are calculated from clock records: overtime for full-time staff and working hours for part-time staff",
+    "subtitle": "Summary uses clock accrual when clocked in; otherwise budgets part-time hours and full-time OT from the roster",
     "selectGroup": "Select Group",
     "selectGroupFirst": "Please select a group first",
     "startDate": "Start Date",
@@ -968,7 +968,11 @@
     "fetchFailed": "Failed to load report",
     "exportCsv": "Export CSV",
     "legendOt": "FT: Accrued overtime hours",
-    "legendPt": "PT: Accrued working hours"
+    "legendPt": "PT: Accrued working hours",
+    "legendBudgetOt": "Budget FT OT: roster only when no clock-in (over 9h, floored to 30 min)",
+    "legendBudgetPt": "Budget PT: roster only when no clock-in (floored to 15 min)",
+    "budgetOtShort": "Bud.OT",
+    "budgetPtShort": "Bud.PT"
   },
   "storeWageCostReport": {
     "title": "Store Wage Cost",
@@ -990,6 +994,10 @@
     "exportPdfFailed": "Failed to export PDF",
     "legendOt": "FT: Accrued overtime hours",
     "legendPt": "PT: Accrued working hours",
+    "legendBudgetOt": "Budget FT OT: roster only when no clock-in (over 9h, floored to 30 min)",
+    "legendBudgetPt": "Budget PT: roster only when no clock-in (floored to 15 min)",
+    "budgetOtShort": "Bud.OT",
+    "budgetPtShort": "Bud.PT",
     "legendIn1": "Attributed by valid IN1 store",
     "legendLeave": "Leave: attributed to home store (no clock-in)",
     "legendSchedule": "No clock-in: show scheduled hours",

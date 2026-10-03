@@ -900,7 +900,7 @@
   },
   "storeHoursReport": {
     "title": "群组工时报表",
-    "subtitle": "根据打卡记录计算该群组每日全职超时工作及兼职员工工作时数",
+    "subtitle": "统计：当日有打卡用打卡应计实数；无打卡先按已排班计预算兼职时数及全职超时",
     "selectGroup": "选择群组",
     "selectGroupFirst": "请先选择群组",
     "startDate": "开始日期",
@@ -915,7 +915,11 @@
     "fetchFailed": "取得报表失败",
     "exportCsv": "导出 CSV",
     "legendOt": "FT：应计超时工作时数",
-    "legendPt": "PT：应计工作时数"
+    "legendPt": "PT：应计工作时数",
+    "legendBudgetOt": "预算 FT OT：当日无打卡时按已排班（逾 9 小时、30 分取整）",
+    "legendBudgetPt": "预算 PT：当日无打卡时按已排班时长（15 分取整）",
+    "budgetOtShort": "预算OT",
+    "budgetPtShort": "预算PT"
   },
   "storeWageCostReport": {
     "title": "店铺工资成本",
@@ -937,6 +941,10 @@
     "exportPdfFailed": "导出 PDF 失败",
     "legendOt": "FT：应计超时工作时数",
     "legendPt": "PT：应计工作时数",
+    "legendBudgetOt": "预算 FT OT：当日无打卡时按已排班（逾 9 小时、30 分取整）",
+    "legendBudgetPt": "预算 PT：当日无打卡时按已排班时长（15 分取整）",
+    "budgetOtShort": "预算OT",
+    "budgetPtShort": "预算PT",
     "legendIn1": "归属：当日有效 IN1 店铺",
     "legendLeave": "假期：归属驻守店铺（无打卡）",
     "legendSchedule": "未打卡：显示排班时间",
