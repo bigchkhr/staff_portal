@@ -55,6 +55,8 @@ app.use(express.urlencoded(requestSizeLimit.urlencoded));
 
 const payrollHoursRoutes = require('./routes/payrollHours.routes');
 app.use('/api/internal/payroll-hours', payrollHoursRoutes);
+const leaveDaysRoutes = require('./routes/leaveDays.routes');
+app.use('/api/internal/leave-days', leaveDaysRoutes);
 
 // API Rate Limiting
 app.use('/api', apiLimiter);
