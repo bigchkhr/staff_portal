@@ -10,15 +10,29 @@ const MAX_RANGE_DAYS = 400;
 const BLANK_MONTH = {
   calendar_days: 0,
   working_days: 0,
-  annual_leave: 0,
-  labour_holiday: 0,
-  sick_leave_full_pay: 0,
-  sick_leave_deduction: 0,
-  no_pay_leave: 0,
-  maternity_leave: 0,
-  paternity_leave: 0,
-  other_leave_full_pay: 0,
-  other_leave_deduction: 0
+  AL: 0,
+  BL: 0,
+  CL: 0,
+  FPSL: 0,
+  SAL: 0,
+  MGL: 0,
+  MTL: 0,
+  PTL: 0,
+  JSL: 0,
+  CPL: 0,
+  NPSL: 0,
+  NPL: 0,
+  IL: 0,
+  SPL: 0,
+  AR: 0,
+  R1: 0,
+  R2: 0,
+  R3: 0,
+  R4: 0,
+  R5: 0,
+  R6: 0,
+  SH: 0,
+  ABS: 0
 };
 
 function normalizeEmployeeNumber(value) {
@@ -99,18 +113,28 @@ function leaveNameZh(source) {
 function classifyLeaveField(source) {
   if (!source) return null;
   const code = leaveCode(source);
+  if (code) return code;
   const zh = leaveNameZh(source);
-
-  if (code === 'AL' || zh.includes('年假')) return 'annual_leave';
-  if (code === 'SH' || zh.includes('法定假期')) return 'labour_holiday';
-  if (code === 'FPSL' || zh === '全薪病假') return 'sick_leave_full_pay';
-  if (code === 'SAL' || (zh.includes('病假') && zh.includes('疾病津貼'))) return 'sick_leave_deduction';
-  if (code === 'NPL' || code === 'NPSL' || zh === '無薪事假' || zh === '無薪病假') return 'no_pay_leave';
-  if (code === 'MTL' || zh.includes('產假')) return 'maternity_leave';
-  if (code === 'PTL' || zh.includes('侍產假')) return 'paternity_leave';
-  if (code === 'AR' || /^R\d+$/.test(code) || zh.includes('例假')) return null;
-  if (code === 'ABS' || zh.includes('缺勤') || code === 'IL' || zh.includes('工傷')) return 'other_leave_deduction';
-  return 'other_leave_full_pay';
+  if (zh.includes('年假')) return 'AL';
+  if (zh.includes('生日假')) return 'BL';
+  if (zh.includes('補假')) return 'CL';
+  if (zh === '全薪病假') return 'FPSL';
+  if (zh.includes('病假') && zh.includes('疾病津貼')) return 'SAL';
+  if (zh.includes('婚假')) return 'MGL';
+  if (zh.includes('產假')) return 'MTL';
+  if (zh.includes('侍產假')) return 'PTL';
+  if (zh.includes('陪審團假')) return 'JSL';
+  if (zh.includes('恩恤假')) return 'CPL';
+  if (zh === '無薪病假') return 'NPSL';
+  if (zh === '無薪事假') return 'NPL';
+  if (zh.includes('工傷')) return 'IL';
+  if (zh.includes('特別假期') || zh.includes('特別假')) return 'SPL';
+  if (zh.includes('累積例假')) return 'AR';
+  if (zh.includes('法定假期')) return 'SH';
+  if (zh.includes('缺勤')) return 'ABS';
+  const restMatch = zh.match(/例假\s*([1-6])/);
+  if (restMatch) return `R${restMatch[1]}`;
+  return null;
 }
 
 function dayLeaveUnits(dateStr, schedule, leave) {
@@ -294,7 +318,7 @@ async function getLeaveDays({ employee_number, start_date, end_date }) {
     month.working_days = roundDays(month.working_days + workingDayUnits(dateStr, schedule, leave, clocks));
 
     if (holiday) {
-      month.labour_holiday = roundDays(month.labour_holiday + 1);
+      month.SH = roundDays((month.SH || 0) + 1);
       continue;
     }
 
