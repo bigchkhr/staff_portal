@@ -2,6 +2,7 @@ const knex = require('../config/database');
 const monthlyAttendanceSummaryController = require('../controllers/monthlyAttendanceSummary.controller');
 const LeaveApplication = require('../database/models/LeaveApplication');
 const PublicHoliday = require('../database/models/PublicHoliday');
+const { sumWorkingDays } = require('../utils/workingDaysCount');
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_PERIOD_DAYS = 45;
@@ -141,6 +142,7 @@ function schedulePayload(row) {
     leave_type_name: row.leave_type_name || null,
     leave_type_code: row.leave_type_code || null,
     leave_session: row.leave_session || null,
+    counts_as_working_days: !!row.counts_as_working_days,
     is_approved_leave: false
   };
 }
@@ -368,7 +370,8 @@ async function getPayrollHours({ employee_numbers, periods: rawPeriods }) {
         'schedules.leave_session',
         'leave_types.name as leave_type_name',
         'leave_types.name_zh as leave_type_name_zh',
-        'leave_types.code as leave_type_code'
+        'leave_types.code as leave_type_code',
+        'leave_types.counts_as_working_days as counts_as_working_days'
       );
 
     for (const row of scheduleRows) {
@@ -400,7 +403,8 @@ async function getPayrollHours({ employee_numbers, periods: rawPeriods }) {
         'leave_applications.end_session',
         'leave_types.name as leave_type_name',
         'leave_types.name_zh as leave_type_name_zh',
-        'leave_types.code as leave_type_code'
+        'leave_types.code as leave_type_code',
+        'leave_types.counts_as_working_days as counts_as_working_days'
       );
 
     for (const leave of leaveRows) {
@@ -417,6 +421,9 @@ async function getPayrollHours({ employee_numbers, periods: rawPeriods }) {
           leave_type_name_zh: leave.leave_type_name_zh || existing.leave_type_name_zh || null,
           leave_type_name: leave.leave_type_name || existing.leave_type_name || null,
           leave_type_code: leave.leave_type_code || existing.leave_type_code || null,
+          counts_as_working_days: leave.counts_as_working_days != null
+            ? !!leave.counts_as_working_days
+            : !!existing.counts_as_working_days,
           is_approved_leave: true
         });
       }
@@ -475,7 +482,16 @@ async function getPayrollHours({ employee_numbers, periods: rawPeriods }) {
           schedulesByDate,
           user.id,
           leaveByUserDate
-        )
+        ),
+        working_days: sumWorkingDays({
+          dates,
+          schedulesByDate,
+          leaveByDate: {
+            get: (dateStr) => leaveByUserDate.get(`${user.id}_${dateStr}`)
+          },
+          clocksByDate,
+          getSessionForDate: LeaveApplication.getSessionForDate
+        })
       });
     }
 

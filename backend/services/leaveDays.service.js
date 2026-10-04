@@ -2,6 +2,7 @@ const knex = require('../config/database');
 const monthlyAttendanceSummaryController = require('../controllers/monthlyAttendanceSummary.controller');
 const LeaveApplication = require('../database/models/LeaveApplication');
 const PublicHoliday = require('../database/models/PublicHoliday');
+const { countsAsWorkingDay } = require('../utils/workingDaysCount');
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 400;
@@ -95,19 +96,6 @@ function leaveNameZh(source) {
   return String(source?.leave_type_name_zh || '').trim();
 }
 
-function isRestDay(source) {
-  const code = leaveCode(source);
-  if (code === 'AR' || /^R\d+$/.test(code)) return true;
-  const zh = leaveNameZh(source);
-  return zh.includes('例假');
-}
-
-function isStatutoryLeave(source) {
-  const code = leaveCode(source);
-  if (code === 'SH') return true;
-  return leaveNameZh(source).includes('法定假期');
-}
-
 function classifyLeaveField(source) {
   if (!source) return null;
   const code = leaveCode(source);
@@ -131,29 +119,14 @@ function dayLeaveUnits(dateStr, schedule, leave) {
   return 1;
 }
 
-function hasWorkOnDay(schedule, clocks) {
-  if (clocks && clocks.length > 0) return true;
-  if (schedule && schedule.start_time && schedule.end_time) return true;
-  return false;
-}
-
-function workingDayUnits(dateStr, holiday, schedule, leave, clocks) {
-  if (holiday) return 0;
-  const source = leave || schedule;
-  if (isRestDay(source) || isStatutoryLeave(source)) return 0;
-
-  const leaveUnits = source && (leave || schedule?.leave_type_code)
-    ? dayLeaveUnits(dateStr, schedule, leave)
-    : 0;
-
-  if (leaveUnits >= 1) {
-    return schedule?.counts_as_working_days ? 1 : 0;
-  }
-  if (leaveUnits > 0) {
-    if (schedule?.counts_as_working_days) return 1;
-    return hasWorkOnDay(schedule, clocks) ? roundDays(1 - leaveUnits) : 0;
-  }
-  return hasWorkOnDay(schedule, clocks) ? 1 : 0;
+function workingDayUnits(dateStr, schedule, leave, clocks) {
+  return countsAsWorkingDay({
+    dateStr,
+    schedule,
+    leave,
+    clocks,
+    getSessionForDate: LeaveApplication.getSessionForDate
+  });
 }
 
 function schedulePayload(row) {
@@ -318,7 +291,7 @@ async function getLeaveDays({ employee_number, start_date, end_date }) {
     const clocks = clocksByDate.get(dateStr) || [];
     const source = leave || schedule;
 
-    month.working_days = roundDays(month.working_days + workingDayUnits(dateStr, holiday, schedule, leave, clocks));
+    month.working_days = roundDays(month.working_days + workingDayUnits(dateStr, schedule, leave, clocks));
 
     if (holiday) {
       month.labour_holiday = roundDays(month.labour_holiday + 1);
