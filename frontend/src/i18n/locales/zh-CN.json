@@ -1285,6 +1285,8 @@
     "requiresBalance": "需余额限制",
     "allowScheduleInput": "允许排班表输入",
     "availableInFlow": "在申请流程中可用",
+    "countsAsWorkingDays": "计入 working days",
+    "countsAsWorkingDaysHint": "开启后，此假期仍会计入店铺工资成本报表的「不包括假期」日数。",
     "status": "状态",
     "actions": "操作",
     "yes": "是",

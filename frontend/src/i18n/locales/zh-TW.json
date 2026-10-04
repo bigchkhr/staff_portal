@@ -1393,6 +1393,8 @@
     "requiresBalance": "需餘額限制",
     "allowScheduleInput": "允許排班表輸入",
     "availableInFlow": "在申請流程中可用",
+    "countsAsWorkingDays": "計入 working days",
+    "countsAsWorkingDaysHint": "開啟後，此假期仍會計入店舖工資成本報表的「不包括假期」日數。",
     "status": "狀態",
     "actions": "操作",
     "yes": "是",

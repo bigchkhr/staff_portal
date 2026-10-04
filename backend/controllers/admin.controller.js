@@ -272,7 +272,7 @@ class AdminController {
 
   async createLeaveType(req, res) {
     try {
-      const { code, name, name_zh, requires_balance, allow_schedule_input, is_active } = req.body;
+      const { code, name, name_zh, requires_balance, allow_schedule_input, is_available_in_flow, counts_as_working_days, is_active } = req.body;
 
       if (!code || !name || !name_zh) {
         return res.status(400).json({ message: '請填寫所有必填欄位' });
@@ -289,6 +289,8 @@ class AdminController {
         name_zh,
         requires_balance: requires_balance !== undefined ? requires_balance : true,
         allow_schedule_input: allow_schedule_input !== undefined ? allow_schedule_input : false,
+        is_available_in_flow: is_available_in_flow !== undefined ? is_available_in_flow : true,
+        counts_as_working_days: counts_as_working_days !== undefined ? !!counts_as_working_days : false,
         is_active: is_active !== undefined ? is_active : true
       });
 
@@ -305,7 +307,24 @@ class AdminController {
   async updateLeaveType(req, res) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const {
+        name,
+        name_zh,
+        requires_balance,
+        allow_schedule_input,
+        is_available_in_flow,
+        counts_as_working_days,
+        is_active
+      } = req.body;
+
+      const updateData = {};
+      if (name !== undefined) updateData.name = name;
+      if (name_zh !== undefined) updateData.name_zh = name_zh;
+      if (requires_balance !== undefined) updateData.requires_balance = !!requires_balance;
+      if (allow_schedule_input !== undefined) updateData.allow_schedule_input = !!allow_schedule_input;
+      if (is_available_in_flow !== undefined) updateData.is_available_in_flow = !!is_available_in_flow;
+      if (counts_as_working_days !== undefined) updateData.counts_as_working_days = !!counts_as_working_days;
+      if (is_active !== undefined) updateData.is_active = !!is_active;
 
       const leaveType = await LeaveType.update(id, updateData);
 

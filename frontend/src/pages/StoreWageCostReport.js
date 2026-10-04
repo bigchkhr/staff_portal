@@ -294,7 +294,11 @@ const StoreWageCostReport = () => {
         if (!cell) return;
         withLeave += 1;
         const hasWork = (cell.minutes != null && cell.minutes > 0) || !!(cell.clock_start_time || cell.clock_end_time);
-        if (hasWork) withoutLeave += 1;
+        const isFullDayLeave = !!cell.is_leave && !cell.leave_session;
+        const countsAsWorkingDay = cell.is_leave
+          ? (!!cell.counts_as_working_days || (!isFullDayLeave && hasWork))
+          : hasWork;
+        if (countsAsWorkingDay) withoutLeave += 1;
       });
       map[emp.user_id] = { withLeave, withoutLeave };
     });

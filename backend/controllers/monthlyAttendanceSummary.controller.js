@@ -2020,7 +2020,8 @@ class MonthlyAttendanceSummaryController {
             'schedules.leave_session',
             'leave_types.code as leave_type_code',
             'leave_types.name as leave_type_name',
-            'leave_types.name_zh as leave_type_name_zh'
+            'leave_types.name_zh as leave_type_name_zh',
+            'leave_types.counts_as_working_days as counts_as_working_days'
           );
 
         leaveScheduleRows.forEach((row) => {
@@ -2029,6 +2030,7 @@ class MonthlyAttendanceSummaryController {
             leave_type_code: row.leave_type_code || null,
             leave_type_name: row.leave_type_name || null,
             leave_type_name_zh: row.leave_type_name_zh || null,
+            counts_as_working_days: !!row.counts_as_working_days,
             leave_session: this.normalizeLeaveSession(row.leave_session),
             from_schedule: true
           });
@@ -2057,7 +2059,8 @@ class MonthlyAttendanceSummaryController {
             'leave_applications.end_session',
             'leave_types.code as leave_type_code',
             'leave_types.name as leave_type_name',
-            'leave_types.name_zh as leave_type_name_zh'
+            'leave_types.name_zh as leave_type_name_zh',
+            'leave_types.counts_as_working_days as counts_as_working_days'
           );
 
         leaveApps.forEach((app) => {
@@ -2079,6 +2082,7 @@ class MonthlyAttendanceSummaryController {
               leave_type_code: app.leave_type_code || null,
               leave_type_name: app.leave_type_name || null,
               leave_type_name_zh: app.leave_type_name_zh || null,
+              counts_as_working_days: !!app.counts_as_working_days,
               leave_session: session,
               from_schedule: false
             });
@@ -2298,6 +2302,7 @@ class MonthlyAttendanceSummaryController {
             leave_type_code: leaveInfo?.leave_type_code || null,
             leave_type_name: leaveInfo?.leave_type_name || null,
             leave_type_name_zh: leaveInfo?.leave_type_name_zh || null,
+            counts_as_working_days: !!leaveInfo?.counts_as_working_days,
             leave_session: leaveInfo?.leave_session || null
           };
         }

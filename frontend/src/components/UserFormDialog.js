@@ -399,16 +399,6 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
             }}
           />
           <TextField
-            label={t('adminUsers.terminationDate')}
-            type="date"
-            value={formData.termination_date}
-            onChange={handleChange('termination_date')}
-            InputLabelProps={{
-              shrink: true
-            }}
-            helperText={t('adminUsers.terminationDateHint')}
-          />
-          <TextField
             label={t('adminUsers.probationEndDate')}
             type="date"
             value={formData.probation_end_date}
@@ -417,6 +407,16 @@ const UserFormDialog = ({ open, editing, onClose, onSuccess, initialData = null,
               shrink: true
             }}
             helperText={t('adminUsers.probationEndDateHint')}
+          />
+          <TextField
+            label={t('adminUsers.terminationDate')}
+            type="date"
+            value={formData.termination_date}
+            onChange={handleChange('termination_date')}
+            InputLabelProps={{
+              shrink: true
+            }}
+            helperText={t('adminUsers.terminationDateHint')}
           />
           <Box>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>

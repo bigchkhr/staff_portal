@@ -1393,6 +1393,8 @@
     "requiresBalance": "Requires Balance",
     "allowScheduleInput": "Allow Schedule Input",
     "availableInFlow": "Available in Application Flow",
+    "countsAsWorkingDays": "Count as working days",
+    "countsAsWorkingDaysHint": "When on, this leave still counts toward the store wage cost report’s “excl. leave” days.",
     "status": "Status",
     "actions": "Actions",
     "yes": "Yes",
