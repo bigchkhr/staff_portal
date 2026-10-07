@@ -522,7 +522,17 @@
     "dateOverlapMessage": "There are already approved or pending leave applications in this date range; this application cannot be approved:",
     "dateRangeLabel": "Date range:",
     "cannotOpenFileTitle": "Cannot open file",
-    "hrDefaultRejectionReason": "Rejected by HR Group"
+    "hrDefaultRejectionReason": "Rejected by HR Group",
+    "uploadFile": "Upload attachment",
+    "uploading": "Uploading...",
+    "uploadSuccess": "Successfully uploaded {{count}} attachment(s)",
+    "uploadError": "Error uploading attachment",
+    "noFiles": "No attachments",
+    "deleteFile": "Delete attachment",
+    "confirmDeleteFile": "Are you sure you want to delete this attachment?",
+    "fileDeleted": "Attachment deleted",
+    "deleteError": "Error deleting attachment",
+    "supportedFormats": "Supported formats: PDF, JPG, JPEG, PNG, GIF, BMP, WEBP, TIFF (max 5MB each)"
   },
   "employeeDocuments": {
     "title": "My Documents",

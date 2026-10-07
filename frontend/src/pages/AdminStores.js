@@ -26,6 +26,7 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { formatDate } from '../utils/dateFormat';
 
 const emptyForm = {
   store_code: '',
@@ -253,6 +254,8 @@ const AdminStores = () => {
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.district')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.tel')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.email')}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.openDate')}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.closeDate')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.isClosed')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.actions')}</TableCell>
               </TableRow>
@@ -260,7 +263,7 @@ const AdminStores = () => {
             <TableBody>
               {filteredStores.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
                       {t('adminStores.noStores')}
                     </Typography>
@@ -281,6 +284,8 @@ const AdminStores = () => {
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.district || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.tel || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.email || '-'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.open_date ? formatDate(store.open_date) : '-'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.close_date ? formatDate(store.close_date) : '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.is_closed ? t('common.yes') : t('common.no')}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <IconButton

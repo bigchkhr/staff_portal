@@ -30,7 +30,7 @@ import {
   TableHead,
   TableRow
 } from '@mui/material';
-import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon, Upload as UploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -64,6 +64,8 @@ const ApprovalDetail = () => {
   const [loadingFile, setLoadingFile] = useState(false);
   const [hrRejectionReason, setHrRejectionReason] = useState('');
   const [hrRejecting, setHrRejecting] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [imageZoom, setImageZoom] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const [isImagePanning, setIsImagePanning] = useState(false);
@@ -369,6 +371,80 @@ const ApprovalDetail = () => {
       }
     } finally {
       setApproving(false);
+    }
+  };
+
+  const canManageLeaveAttachments = applicationType === 'leave' && !!user?.is_hr_member;
+
+  const handleUploadDocuments = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingDocument(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+      }
+
+      await axios.post(`/api/leaves/${id}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      await fetchDocuments();
+      await Swal.fire({
+        icon: 'success',
+        title: t('approvalDetail.uploadSuccess', { count: files.length }),
+        confirmButtonText: t('approvalDetail.ok'),
+        confirmButtonColor: '#3085d6'
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: t('approvalDetail.uploadError'),
+        text: error.response?.data?.message || t('approvalDetail.uploadError'),
+        confirmButtonText: t('approvalDetail.ok'),
+        confirmButtonColor: '#d33'
+      });
+    } finally {
+      setUploadingDocument(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteDocument = async (documentId) => {
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('approvalDetail.confirmDeleteFile'),
+      showCancelButton: true,
+      confirmButtonText: t('approvalDetail.deleteFile'),
+      cancelButtonText: t('common.cancel'),
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      reverseButtons: true
+    });
+    if (!result.isConfirmed) return;
+
+    setDeletingDocumentId(documentId);
+    try {
+      await axios.delete(`/api/leaves/documents/${documentId}`);
+      await fetchDocuments();
+      await Swal.fire({
+        icon: 'success',
+        title: t('approvalDetail.fileDeleted'),
+        confirmButtonText: t('approvalDetail.ok'),
+        confirmButtonColor: '#3085d6'
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: t('approvalDetail.deleteError'),
+        text: error.response?.data?.message || t('approvalDetail.deleteError'),
+        confirmButtonText: t('approvalDetail.ok'),
+        confirmButtonColor: '#d33'
+      });
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -984,49 +1060,99 @@ const ApprovalDetail = () => {
               </ListItem>
             </List>
 
-            {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && documents.length > 0 && (
+            {(applicationType !== 'extra_working_hours' && applicationType !== 'outdoor_work') && (documents.length > 0 || canManageLeaveAttachments) && (
               <>
                 <Divider sx={{ my: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  {t('approvalDetail.attachments')}
-                </Typography>
-                <List dense>
-                  {documents.map((doc) => (
-                    <ListItem
-                      key={doc.id}
-                      secondaryAction={
-                        <IconButton
-                          edge="end"
-                          aria-label={t('approvalDetail.view')}
-                          onClick={async () => {
-                            await handleOpenFile(doc);
-                          }}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <Typography variant="h6">
+                    {t('approvalDetail.attachments')}
+                  </Typography>
+                  {canManageLeaveAttachments && (
+                    <Box>
+                      <input
+                        accept=".pdf,.jpg,.jpeg,.png,.gif,.bmp,.webp,.tiff,.tif"
+                        style={{ display: 'none' }}
+                        id="leave-attachment-upload"
+                        multiple
+                        type="file"
+                        onChange={handleUploadDocuments}
+                        disabled={uploadingDocument}
+                      />
+                      <label htmlFor="leave-attachment-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          size="small"
+                          startIcon={uploadingDocument ? <CircularProgress size={16} /> : <UploadIcon />}
+                          disabled={uploadingDocument}
                         >
-                          <VisibilityIcon />
-                        </IconButton>
-                      }
-                    >
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {getFileIcon(doc.file_type, doc.file_name)}
-                            <Link
-                              component="button"
-                              variant="body2"
+                          {uploadingDocument ? t('approvalDetail.uploading') : t('approvalDetail.uploadFile')}
+                        </Button>
+                      </label>
+                    </Box>
+                  )}
+                </Box>
+                {canManageLeaveAttachments && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {t('approvalDetail.supportedFormats')}
+                  </Typography>
+                )}
+                {documents.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {t('approvalDetail.noFiles')}
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {documents.map((doc) => (
+                      <ListItem
+                        key={doc.id}
+                        secondaryAction={
+                          <Box sx={{ display: 'flex' }}>
+                            <IconButton
+                              edge="end"
+                              aria-label={t('approvalDetail.view')}
                               onClick={async () => {
                                 await handleOpenFile(doc);
                               }}
-                              sx={{ textDecoration: 'none', cursor: 'pointer' }}
                             >
-                              {doc.file_name}
-                            </Link>
+                              <VisibilityIcon />
+                            </IconButton>
+                            {canManageLeaveAttachments && (
+                              <IconButton
+                                edge="end"
+                                aria-label={t('approvalDetail.deleteFile')}
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                disabled={deletingDocumentId === doc.id}
+                                color="error"
+                              >
+                                {deletingDocumentId === doc.id ? <CircularProgress size={18} /> : <DeleteIcon />}
+                              </IconButton>
+                            )}
                           </Box>
                         }
-                        secondary={doc.file_size ? formatFileSize(doc.file_size) : ''}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
+                      >
+                        <ListItemText
+                          primary={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: canManageLeaveAttachments ? 8 : 4 }}>
+                              {getFileIcon(doc.file_type, doc.file_name)}
+                              <Link
+                                component="button"
+                                variant="body2"
+                                onClick={async () => {
+                                  await handleOpenFile(doc);
+                                }}
+                                sx={{ textDecoration: 'none', cursor: 'pointer', textAlign: 'left' }}
+                              >
+                                {doc.file_name}
+                              </Link>
+                            </Box>
+                          }
+                          secondary={doc.file_size ? formatFileSize(doc.file_size) : ''}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
               </>
             )}
 

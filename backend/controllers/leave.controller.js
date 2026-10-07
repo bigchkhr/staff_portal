@@ -717,21 +717,14 @@ class LeaveController {
         return res.status(404).json({ message: '申請不存在' });
       }
 
-      // 檢查權限：只有 HR Group 獲授權人可以刪除已批核申請的檔案
+      // HR Group 成員或系統管理員可刪除任何狀態假期申請的附件
       const isHRMember = await User.isHRMember(req.user.id);
       const isSystemAdmin = req.user.is_system_admin;
-      console.log(`[deleteDocument] 權限檢查: isHRMember=${isHRMember}, isSystemAdmin=${isSystemAdmin}`);
+      console.log(`[deleteDocument] 權限檢查: isHRMember=${isHRMember}, isSystemAdmin=${isSystemAdmin}, status=${application.status}`);
 
-      // 只有 HR Group 獲授權人或系統管理員可以刪除已批核申請的檔案
       if (!isHRMember && !isSystemAdmin) {
         console.log(`[deleteDocument] 權限不足，拒絕刪除`);
-        return res.status(403).json({ message: '只有 HR Group 獲授權人可以刪除已批核申請的檔案' });
-      }
-
-      // 只有已批核的申請才能被 HR Group 獲授權人刪除檔案
-      if (application.status !== 'approved') {
-        console.log(`[deleteDocument] 申請狀態不是已批核，當前狀態: ${application.status}`);
-        return res.status(403).json({ message: '只能刪除已批核申請的檔案' });
+        return res.status(403).json({ message: '只有 HR Group 成員可以刪除附件' });
       }
 
       // 只刪除資料庫記錄，不刪除實體檔案

@@ -522,7 +522,17 @@
     "dateOverlapMessage": "該日期範圍內已有已批核或正在申請的假期，無法批准此申請：",
     "dateRangeLabel": "日期範圍：",
     "cannotOpenFileTitle": "無法開啟檔案",
-    "hrDefaultRejectionReason": "HR Group 拒絕申請"
+    "hrDefaultRejectionReason": "HR Group 拒絕申請",
+    "uploadFile": "上載附件",
+    "uploading": "上載中...",
+    "uploadSuccess": "成功上載 {{count}} 個附件",
+    "uploadError": "上載附件時發生錯誤",
+    "noFiles": "目前沒有附件",
+    "deleteFile": "刪除附件",
+    "confirmDeleteFile": "確定要刪除此附件嗎？",
+    "fileDeleted": "附件已刪除",
+    "deleteError": "刪除附件時發生錯誤",
+    "supportedFormats": "支援格式：PDF、JPG、JPEG、PNG、GIF、BMP、WEBP、TIFF（每個檔案最大 5MB）"
   },
   "employeeDocuments": {
     "title": "我的文件",
