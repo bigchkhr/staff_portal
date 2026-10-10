@@ -66,13 +66,13 @@ class GroupController {
       }
       
       // 過濾和處理資料，將空字串轉換為 null（對於 ID 欄位）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids', 'closed'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
         if (key in groupData) {
           // 對於 ID 欄位，將空字串轉換為 null
-          if (key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id') {
+          if (key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id' || key === 'supervisor_id') {
             filteredData[key] = groupData[key] === '' || groupData[key] === null || groupData[key] === undefined 
               ? null 
               : Number(groupData[key]);
@@ -112,13 +112,13 @@ class GroupController {
       console.log('[updateDepartmentGroup] 更新數據:', JSON.stringify(groupData, null, 2));
       
       // 過濾掉不需要更新的字段（如果有的話）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'user_ids', 'closed'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
         if (key in groupData) {
           // 對於 ID 字段，將空字符串轉換為 null
-          if ((key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id')) {
+          if (key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id' || key === 'supervisor_id') {
             filteredData[key] = groupData[key] === '' || groupData[key] === null || groupData[key] === undefined 
               ? null 
               : Number(groupData[key]);
@@ -238,9 +238,17 @@ class GroupController {
         return res.json({ members });
       }
 
-      // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）
+      // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）或 supervisor
       const isApprover = await DepartmentGroup.isApproverMember(userId, id);
-      if (isApprover) {
+      const userDelegationGroups = req.user.delegation_groups || [];
+      const userDelegationGroupIds = userDelegationGroups.map((group) => Number(group.id));
+      const departmentGroup = await DepartmentGroup.findById(id);
+      const isSupervisor = !!(
+        departmentGroup
+        && departmentGroup.supervisor_id
+        && userDelegationGroupIds.includes(Number(departmentGroup.supervisor_id))
+      );
+      if (isApprover || isSupervisor) {
         const members = await DepartmentGroup.getMembers(id);
         console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員（批核成員權限）`);
         return res.json({ members });

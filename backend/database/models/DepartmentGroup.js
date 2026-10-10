@@ -34,13 +34,80 @@ const formatGroupRecord = (record) => {
   };
 };
 
+const SCHEDULE_MANAGER_FIELDS = ['approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id'];
+
 class DepartmentGroup {
+  static matchesRole(group, delegationGroupIds, fields) {
+    const ids = (delegationGroupIds || []).map((id) => Number(id));
+    return fields.some((field) => {
+      const value = group?.[field];
+      return value !== null && value !== undefined && value !== '' && ids.includes(Number(value));
+    });
+  }
+
+  static async getSupervisedApplicantIds(userId) {
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+    const delegationGroupIds = delegationGroups.map((group) => Number(group.id));
+    if (delegationGroupIds.length === 0) {
+      return [];
+    }
+
+    const groups = await knex('department_groups')
+      .whereIn('supervisor_id', delegationGroupIds)
+      .select('user_ids');
+
+    const userIds = new Set();
+    groups.forEach((group) => {
+      parseIntegerArray(group.user_ids).forEach((id) => userIds.add(id));
+    });
+    return Array.from(userIds);
+  }
+
+  static async isSupervisorOfApplicant(userId, applicantUserId) {
+    const applicantIds = await this.getSupervisedApplicantIds(userId);
+    return applicantIds.map(Number).includes(Number(applicantUserId));
+  }
+
+  static userCompletedApprovalStage(application, userId, delegationGroupIds, approvalFlow) {
+    if (!application) return false;
+    const uid = Number(userId);
+    const directStages = [
+      ['checker_id', 'checker_at'],
+      ['approver_1_id', 'approver_1_at'],
+      ['approver_2_id', 'approver_2_at'],
+      ['approver_3_id', 'approver_3_at']
+    ];
+    if (directStages.some(([idField, atField]) => (
+      application[idField] != null && Number(application[idField]) === uid && application[atField]
+    ))) {
+      return true;
+    }
+
+    const groupIds = (delegationGroupIds || []).map((id) => Number(id));
+    if (!approvalFlow || groupIds.length === 0) return false;
+    return approvalFlow.some((step) => {
+      if (!step.delegation_group_id || !groupIds.includes(Number(step.delegation_group_id))) return false;
+      if (step.level === 'checker') return !!application.checker_at;
+      if (step.level === 'approver_1') return !!application.approver_1_at;
+      if (step.level === 'approver_2') return !!application.approver_2_at;
+      if (step.level === 'approver_3') return !!application.approver_3_at;
+      return false;
+    });
+  }
+
+  static isScheduleManager(group, delegationGroupIds) {
+    return this.matchesRole(group, delegationGroupIds, SCHEDULE_MANAGER_FIELDS);
+  }
+
   static async findAll(closedFilter) {
     let query = knex('department_groups')
       .leftJoin('delegation_groups as checker', 'department_groups.checker_id', 'checker.id')
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
       .leftJoin('delegation_groups as approver_3', 'department_groups.approver_3_id', 'approver_3.id')
+      .leftJoin('delegation_groups as supervisor', 'department_groups.supervisor_id', 'supervisor.id')
       .select(
         'department_groups.*',
         'checker.name as checker_name',
@@ -50,7 +117,9 @@ class DepartmentGroup {
         'approver_2.name as approver_2_name',
         'approver_2.name_zh as approver_2_name_zh',
         'approver_3.name as approver_3_name',
-        'approver_3.name_zh as approver_3_name_zh'
+        'approver_3.name_zh as approver_3_name_zh',
+        'supervisor.name as supervisor_name',
+        'supervisor.name_zh as supervisor_name_zh'
       );
 
     // 根據 closed 參數篩選
@@ -69,6 +138,7 @@ class DepartmentGroup {
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
       .leftJoin('delegation_groups as approver_3', 'department_groups.approver_3_id', 'approver_3.id')
+      .leftJoin('delegation_groups as supervisor', 'department_groups.supervisor_id', 'supervisor.id')
       .select(
         'department_groups.*',
         'checker.name as checker_name',
@@ -78,7 +148,9 @@ class DepartmentGroup {
         'approver_2.name as approver_2_name',
         'approver_2.name_zh as approver_2_name_zh',
         'approver_3.name as approver_3_name',
-        'approver_3.name_zh as approver_3_name_zh'
+        'approver_3.name_zh as approver_3_name_zh',
+        'supervisor.name as supervisor_name',
+        'supervisor.name_zh as supervisor_name_zh'
       )
       .where('department_groups.id', id)
       .first();
@@ -198,6 +270,7 @@ class DepartmentGroup {
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
       .leftJoin('delegation_groups as approver_3', 'department_groups.approver_3_id', 'approver_3.id')
+      .leftJoin('delegation_groups as supervisor', 'department_groups.supervisor_id', 'supervisor.id')
       .select(
         'department_groups.*',
         'checker.name as checker_name',
@@ -207,7 +280,9 @@ class DepartmentGroup {
         'approver_2.name as approver_2_name',
         'approver_2.name_zh as approver_2_name_zh',
         'approver_3.name as approver_3_name',
-        'approver_3.name_zh as approver_3_name_zh'
+        'approver_3.name_zh as approver_3_name_zh',
+        'supervisor.name as supervisor_name',
+        'supervisor.name_zh as supervisor_name_zh'
       );
     
     return groups;
@@ -342,6 +417,7 @@ class DepartmentGroup {
       .leftJoin('delegation_groups as approver_1', 'department_groups.approver_1_id', 'approver_1.id')
       .leftJoin('delegation_groups as approver_2', 'department_groups.approver_2_id', 'approver_2.id')
       .leftJoin('delegation_groups as approver_3', 'department_groups.approver_3_id', 'approver_3.id')
+      .leftJoin('delegation_groups as supervisor', 'department_groups.supervisor_id', 'supervisor.id')
       .select(
         'department_groups.*',
         'checker.name as checker_name',
@@ -351,7 +427,9 @@ class DepartmentGroup {
         'approver_2.name as approver_2_name',
         'approver_2.name_zh as approver_2_name_zh',
         'approver_3.name as approver_3_name',
-        'approver_3.name_zh as approver_3_name_zh'
+        'approver_3.name_zh as approver_3_name_zh',
+        'supervisor.name as supervisor_name',
+        'supervisor.name_zh as supervisor_name_zh'
       );
 
     // 根據 closed 參數篩選

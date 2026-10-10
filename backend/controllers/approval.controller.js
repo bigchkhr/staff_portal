@@ -6,6 +6,8 @@ const User = require('../database/models/User');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
+const ApplicationAction = require('../database/models/ApplicationAction');
+const applicationWorkflow = require('../services/applicationWorkflow.service');
 const knex = require('../config/database');
 
 class ApprovalController {
@@ -574,23 +576,47 @@ class ApprovalController {
       const outdoorWorkApps = outdoorWorkApplications.map(app => ({ ...app, application_type: 'outdoor_work' }));
       
       // 合併並按創建時間排序
-      const allApplications = [...leaveApps, ...extraWorkingHoursApps, ...outdoorWorkApps].sort((a, b) => {
-        const dateA = new Date(a.created_at || 0);
-        const dateB = new Date(b.created_at || 0);
-        return dateA - dateB;
+      const allApplications = await ApplicationAction.attachLatestReturns(
+        [...leaveApps, ...extraWorkingHoursApps, ...outdoorWorkApps].sort((a, b) => {
+          const dateA = new Date(a.created_at || 0);
+          const dateB = new Date(b.created_at || 0);
+          return dateA - dateB;
+        })
+      );
+
+      const keyword = typeof req.query.keyword === 'string' ? req.query.keyword.trim().toLowerCase() : '';
+      const stage = typeof req.query.stage === 'string' ? req.query.stage : 'all';
+      const filteredApplications = allApplications.filter((app) => {
+        if (stage && stage !== 'all' && app.current_approval_stage !== stage) {
+          return false;
+        }
+        if (!keyword) return true;
+        const haystack = [
+          app.transaction_id,
+          app.applicant_display_name,
+          app.user_display_name,
+          app.applicant_employee_number,
+          app.user_employee_number,
+          app.leave_type_name_zh,
+          app.leave_type_name
+        ].filter((value) => value !== null && value !== undefined).join(' ').toLowerCase();
+        return haystack.includes(keyword);
       });
       
-      // 分頁處理
-      const total = allApplications.length;
-      const totalPages = Math.ceil(total / limitNum);
-      const offset = (pageNum - 1) * limitNum;
-      const paginatedApplications = allApplications.slice(offset, offset + limitNum);
+      // 先篩選全量，再分頁，搜尋結果唔會留喺原本每一頁
+      const actionableTotal = allApplications.filter((app) => !app.view_only).length;
+      const total = filteredApplications.length;
+      const totalPages = Math.max(1, Math.ceil(total / limitNum));
+      const safePage = Math.min(Math.max(pageNum, 1), totalPages);
+      const offset = (safePage - 1) * limitNum;
+      const paginatedApplications = filteredApplications.slice(offset, offset + limitNum);
       
       res.json({ 
         applications: paginatedApplications,
         pagination: {
           total,
-          page: pageNum,
+          actionable_total: actionableTotal,
+          page: safePage,
           limit: limitNum,
           totalPages
         }
@@ -642,6 +668,8 @@ class ApprovalController {
       const pageNum = page ? parseInt(page) : 1;
       const limitNum = limit ? parseInt(limit) : 15;
       const userId = req.user.id;
+      const supervisedApplicantIds = await DepartmentGroup.getSupervisedApplicantIds(userId);
+      const supervisedApplicantIdSet = new Set(supervisedApplicantIds.map((id) => Number(id)));
 
       const leaveTypeIdSet = new Set();
       if (leave_type_id) {
@@ -700,21 +728,42 @@ class ApprovalController {
           'leave_types.name_zh as leave_type_name_zh',
           'leave_types.requires_balance as leave_type_requires_balance'
         )
-        .where('leave_applications.status', '!=', 'pending');
-
-      // 狀態篩選
-      if (status && status !== 'all') {
-        // 如果狀態是 "reversed"，查詢已銷假的記錄
-        if (status === 'reversed') {
-          query = query.where('leave_applications.is_reversed', true)
-                       .where(function() {
-                         this.where('leave_applications.is_reversal_transaction', false)
-                             .orWhereNull('leave_applications.is_reversal_transaction');
-                       });
-        } else {
-          query = query.where('leave_applications.status', status);
-        }
-      }
+        .where(function () {
+          if (status === 'reversed') {
+            this.where('leave_applications.is_reversed', true)
+              .where(function () {
+                this.where('leave_applications.is_reversal_transaction', false)
+                  .orWhereNull('leave_applications.is_reversal_transaction');
+              });
+          } else if (status === 'pending') {
+            this.where('leave_applications.status', 'pending')
+              .where(function () {
+                this.whereNotNull('leave_applications.checker_at')
+                  .orWhereNotNull('leave_applications.approver_1_at')
+                  .orWhereNotNull('leave_applications.approver_2_at');
+                if (supervisedApplicantIds.length > 0) {
+                  this.orWhereIn('leave_applications.user_id', supervisedApplicantIds);
+                }
+              });
+          } else if (status && status !== 'all') {
+            this.where('leave_applications.status', status);
+          } else {
+            this.where(function () {
+              this.where('leave_applications.status', '!=', 'pending')
+                .orWhere(function () {
+                  this.where('leave_applications.status', 'pending')
+                    .where(function () {
+                      this.whereNotNull('leave_applications.checker_at')
+                        .orWhereNotNull('leave_applications.approver_1_at')
+                        .orWhereNotNull('leave_applications.approver_2_at');
+                    });
+                });
+              if (supervisedApplicantIds.length > 0) {
+                this.orWhereIn('leave_applications.user_id', supervisedApplicantIds);
+              }
+            });
+          }
+        });
 
       // 假期類型篩選（可多選）
       if (leaveTypeIdsList.length > 0) {
@@ -811,7 +860,20 @@ class ApprovalController {
             'users.display_name as user_display_name',
             'users.display_name as applicant_display_name'
           )
-          .where('extra_working_hours_applications.status', '!=', 'pending');
+          .where(function () {
+            this.where('extra_working_hours_applications.status', '!=', 'pending')
+              .orWhere(function () {
+                this.where('extra_working_hours_applications.status', 'pending')
+                  .where(function () {
+                    this.whereNotNull('extra_working_hours_applications.checker_at')
+                      .orWhereNotNull('extra_working_hours_applications.approver_1_at')
+                      .orWhereNotNull('extra_working_hours_applications.approver_2_at');
+                  });
+              });
+            if (supervisedApplicantIds.length > 0) {
+              this.orWhereIn('extra_working_hours_applications.user_id', supervisedApplicantIds);
+            }
+          });
 
         // 狀態篩選
         if (status && status !== 'all' && status !== 'reversed') {
@@ -873,7 +935,20 @@ class ApprovalController {
             'users.display_name as user_display_name',
             'users.display_name as applicant_display_name'
           )
-          .where('outdoor_work_applications.status', '!=', 'pending');
+          .where(function () {
+            this.where('outdoor_work_applications.status', '!=', 'pending')
+              .orWhere(function () {
+                this.where('outdoor_work_applications.status', 'pending')
+                  .where(function () {
+                    this.whereNotNull('outdoor_work_applications.checker_at')
+                      .orWhereNotNull('outdoor_work_applications.approver_1_at')
+                      .orWhereNotNull('outdoor_work_applications.approver_2_at');
+                  });
+              });
+            if (supervisedApplicantIds.length > 0) {
+              this.orWhereIn('outdoor_work_applications.user_id', supervisedApplicantIds);
+            }
+          });
 
         // 狀態篩選
         if (status && status !== 'all' && status !== 'reversed') {
@@ -1062,22 +1137,30 @@ class ApprovalController {
           }
         }
         
-        // 方法4：若申請已被拒絕，且當前用戶屬於該申請批核流程中的任一階段（授權群組），則也顯示在批核記錄中，讓後續階段批核者（如 approver_3）能看到「被較早階段（如 approver_1）拒絕」的申請
-        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
+        // 方法4：若申請已被拒絕或撤回，且當前用戶屬於該申請較早階段，也顯示在批核記錄。
+        // approver3 / HR Group 的拒絕只算實際執行拒絕的人，不算成個群組。
+        if (!isApprover && (app.status === 'rejected' || app.status === 'withdrawn') && userDelegationGroupIds.length > 0) {
           const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
           if (departmentGroups && departmentGroups.length > 0) {
             const deptGroup = departmentGroups[0];
             const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
             for (const step of approvalFlow) {
+              if (step.level === 'approver_3') continue;
               if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
                 isApprover = true;
-                userApprovalStage = 'rejected';
+                userApprovalStage = app.status === 'withdrawn' ? 'withdrawn' : 'rejected';
                 break;
               }
             }
           }
         }
         
+        if (!isApprover && supervisedApplicantIdSet.has(Number(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'supervisor';
+          app.view_only = true;
+        }
+
         if (isApprover) {
           // 添加用戶批核階段信息到申請對象
           app.user_approval_stage = userApprovalStage;
@@ -1148,13 +1231,14 @@ class ApprovalController {
           }
         }
         
-        // 方法4：被拒絕的申請，若當前用戶屬於該申請批核流程任一階段，也顯示在批核記錄中
+        // 方法4：被拒絕的申請，較早階段的群組成員仍可見。approver3 / HR Group 拒絕只算執行者本人。
         if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
           const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
           if (departmentGroups && departmentGroups.length > 0) {
             const deptGroup = departmentGroups[0];
             const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
             for (const step of approvalFlow) {
+              if (step.level === 'approver_3') continue;
               if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
                 isApprover = true;
                 userApprovalStage = 'rejected';
@@ -1234,13 +1318,14 @@ class ApprovalController {
           }
         }
         
-        // 方法4：被拒絕的申請，若當前用戶屬於該申請批核流程任一階段，也顯示在批核記錄中
+        // 方法4：被拒絕的申請，較早階段的群組成員仍可見。approver3 / HR Group 拒絕只算執行者本人。
         if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
           const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
           if (departmentGroups && departmentGroups.length > 0) {
             const deptGroup = departmentGroups[0];
             const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
             for (const step of approvalFlow) {
+              if (step.level === 'approver_3') continue;
               if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
                 isApprover = true;
                 userApprovalStage = 'rejected';
@@ -1357,6 +1442,69 @@ class ApprovalController {
     } catch (error) {
       console.error('Get approval history error:', error);
       res.status(500).json({ message: '獲取批核記錄時發生錯誤' });
+    }
+  }
+
+  async getWorkflow(req, res) {
+    try {
+      const workflow = await applicationWorkflow.getWorkflow(
+        req.query.application_type || 'leave',
+        req.params.id,
+        req.user.id
+      );
+      res.json(workflow);
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error('Get workflow error:', error);
+      res.status(status).json({ message: error.message || '獲取申請流程時發生錯誤' });
+    }
+  }
+
+  async withdraw(req, res) {
+    try {
+      const application = await applicationWorkflow.withdraw(
+        req.body.application_type || 'leave',
+        req.params.id,
+        req.user.id,
+        req.body.reason
+      );
+      res.json({ message: '申請已撤銷', application });
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error('Withdraw application error:', error);
+      res.status(status).json({ message: error.message || '撤銷申請時發生錯誤' });
+    }
+  }
+
+  async returnApplication(req, res) {
+    try {
+      const application = await applicationWorkflow.returnApplication(
+        req.body.application_type || 'leave',
+        req.params.id,
+        req.user.id,
+        req.body.to_stage,
+        req.body.reason
+      );
+      res.json({ message: '申請已發還', application });
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error('Return application error:', error);
+      res.status(status).json({ message: error.message || '發還申請時發生錯誤' });
+    }
+  }
+
+  async resubmit(req, res) {
+    try {
+      const application = await applicationWorkflow.resubmit(
+        req.body.application_type || 'leave',
+        req.params.id,
+        req.user.id
+      );
+      res.json({ message: '申請已再呈交', application });
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error('Resubmit application error:', error);
+      res.status(status).json({ message: error.message || '再呈交申請時發生錯誤' });
     }
   }
 }

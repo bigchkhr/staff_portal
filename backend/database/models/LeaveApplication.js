@@ -486,14 +486,17 @@ class LeaveApplication {
       .where('leave_applications.status', 'pending')
       .orderBy('leave_applications.created_at', 'asc');
 
-    // 如果是 HR Group 成員，使用 canViewApplication 來檢查權限（可以看到所有有權限的申請）
+    // HR Group 可查看有權限的待批核申請；只有當前階段輪到自己才可批，其餘只供查看
     if (isHRMember) {
       const filteredApplications = [];
       for (const app of allApplications) {
         const canView = await User.canViewApplication(userId, app.id);
-        if (canView) {
-          filteredApplications.push(app);
+        if (!canView) continue;
+        const canApproveNow = await User.canApprove(userId, app.id);
+        if (!canApproveNow) {
+          app.view_only = true;
         }
+        filteredApplications.push(app);
       }
       return filteredApplications.map(formatApplication);
     }
@@ -505,8 +508,11 @@ class LeaveApplication {
       .select('id');
 
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+    const supervisedApplicantIds = new Set(
+      (await DepartmentGroup.getSupervisedApplicantIds(userId)).map((id) => Number(id))
+    );
 
-    // 過濾出當前階段輪到該用戶批核的申請
+    // 過濾出當前階段輪到該用戶批核的申請；supervisor 可查看群組成員所有未完成階段
     const filteredApplications = [];
 
     for (const app of allApplications) {
@@ -567,10 +573,21 @@ class LeaveApplication {
               canApprove = true;
             }
           }
+          if (!canApprove && DepartmentGroup.userCompletedApprovalStage(app, userId, userDelegationGroupIds, approvalFlow)) {
+            app.view_only = true;
+          }
         }
       }
 
-      if (canApprove) {
+      if (!canApprove && !app.view_only && DepartmentGroup.userCompletedApprovalStage(app, userId, userDelegationGroupIds, null)) {
+        app.view_only = true;
+      }
+
+      const isSupervisorView = supervisedApplicantIds.has(Number(app.user_id));
+      if (canApprove || isSupervisorView || app.view_only) {
+        if (!canApprove) {
+          app.view_only = true;
+        }
         filteredApplications.push(app);
       }
     }

@@ -326,10 +326,8 @@ class Schedule {
 
     const isCheckerFromDelegation = !!(group.checker_id && delegationGroupIds.includes(Number(group.checker_id)));
     const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
-    const isApprover1 = !!(group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id)));
-    const isApprover2 = !!(group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id)));
-    const isApprover3 = !!(group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id)));
-    const isApprover = isApprover1 || isApprover2 || isApprover3;
+    const DepartmentGroup = require('./DepartmentGroup');
+    const isApprover = DepartmentGroup.isScheduleManager(group, delegationGroupIds);
     const requireApproval = !isApprover && isChecker && group.require_checker_schedule_approval === true;
 
     return {
@@ -378,12 +376,11 @@ class Schedule {
     // 檢查是否為 checker, approver_1, approver_2, 或 approver_3
     const isCheckerFromDelegation = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
     const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
-    const isApprover1 = group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id));
-    const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
-    const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
+    const DepartmentGroup = require('./DepartmentGroup');
+    const isScheduleManager = DepartmentGroup.isScheduleManager(group, delegationGroupIds);
 
-    // approver1, approver2, approver3 可以直接編輯（即使同時係 checker）
-    if (isApprover1 || isApprover2 || isApprover3) {
+    // approver1, approver2, approver3 及 supervisor 可以直接編輯（即使同時係 checker）
+    if (isScheduleManager) {
       return true;
     }
 
@@ -427,15 +424,18 @@ class Schedule {
 
     const isCheckerFromDelegation = group.checker_id && delegationGroupIds.includes(Number(group.checker_id));
     const isChecker = isCheckerFromDelegation || await this.isMemberStoreSupervisor(userId, group);
-    const isApprover1 = group.approver_1_id && delegationGroupIds.includes(Number(group.approver_1_id));
-    const isApprover2 = group.approver_2_id && delegationGroupIds.includes(Number(group.approver_2_id));
-    const isApprover3 = group.approver_3_id && delegationGroupIds.includes(Number(group.approver_3_id));
+    const DepartmentGroup = require('./DepartmentGroup');
+    const isScheduleManager = DepartmentGroup.isScheduleManager(group, delegationGroupIds);
+
+    if (isScheduleManager) {
+      return true;
+    }
 
     if (isChecker) {
       return group.allow_checker_edit !== false;
     }
 
-    return isApprover1 || isApprover2 || isApprover3;
+    return false;
   }
 }
 

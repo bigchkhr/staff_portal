@@ -1004,7 +1004,7 @@ exports.seed = async function (knex) {
     { code: 'BL', name: 'Birthday Leave', name_zh: '生日假', requires_balance: true, allow_schedule_input: false, is_available_in_flow: true },
     { code: 'CL', name: 'Compensatory Leave', name_zh: '補假', requires_balance: true, allow_schedule_input: false, is_available_in_flow: true },
     { code: 'FPSL', name: 'Full Paid Sick Leave', name_zh: '全薪病假', requires_balance: true, allow_schedule_input: false, is_available_in_flow: true },
-    { code: 'SAL', name: 'Sick Leave (Sickness Allowance)', name_zh: '病假 (疾病津貼)', requires_balance: false, allow_schedule_input: false, is_available_in_flow: true },
+    { code: 'SAL', name: 'Sick Leave (Sickness Allowance)', name_zh: '病假 (疾病津貼)', requires_balance: true, allow_schedule_input: false, is_available_in_flow: true },
     { code: 'MGL', name: 'Marriage Leave', name_zh: '婚假', requires_balance: false, allow_schedule_input: false, is_available_in_flow: true },
     { code: 'MTL', name: 'Maternity Leave', name_zh: '產假', requires_balance: false, allow_schedule_input: false, is_available_in_flow: true },
     { code: 'PTL', name: 'Paternity Leave', name_zh: '侍產假', requires_balance: false, allow_schedule_input: false, is_available_in_flow: true },

@@ -211,6 +211,33 @@ class User {
     }
   }
 
+  // API rate limit 豁免：與 approver 1/2/3 相同，supervisor 亦不受一般次數限制
+  static async isRateLimitExemptMember(userId) {
+    try {
+      const delegationGroups = await this.getDelegationGroups(userId);
+      const delegationGroupIds = (delegationGroups || [])
+        .map((g) => Number(g.id))
+        .filter((id) => !Number.isNaN(id));
+
+      if (delegationGroupIds.length === 0) {
+        return false;
+      }
+
+      const match = await knex('department_groups')
+        .whereIn('approver_1_id', delegationGroupIds)
+        .orWhereIn('approver_2_id', delegationGroupIds)
+        .orWhereIn('approver_3_id', delegationGroupIds)
+        .orWhereIn('supervisor_id', delegationGroupIds)
+        .orWhereIn('checker_id', delegationGroupIds)
+        .first('id');
+
+      return !!match;
+    } catch (error) {
+      console.error('[isRateLimitExemptMember] Error:', error);
+      return false;
+    }
+  }
+
   // 檢查使用者是否可以批核某個假期申請
   // 檢查用戶是否可以查看申請（包括批核歷史）
   static async canViewApplication(userId, leaveApplicationId) {
@@ -238,6 +265,11 @@ class User {
     // 檢查是否為申請人
     if (Number(application.user_id) === userIdNum) {
       // console.log(`[canViewApplication] 用戶是申請人，允許查看`);
+      return true;
+    }
+
+    const DepartmentGroupForSupervisor = require('./DepartmentGroup');
+    if (await DepartmentGroupForSupervisor.isSupervisorOfApplicant(userIdNum, application.user_id)) {
       return true;
     }
 
@@ -612,8 +644,11 @@ class User {
       return true;
     }
 
-    // 檢查是否屬於批核流程中任何階段的授權群組
+    // 檢查是否屬於批核流程中任何階段的授權群組，或為申請人的 supervisor
     const DepartmentGroup = require('./DepartmentGroup');
+    if (await DepartmentGroup.isSupervisorOfApplicant(userIdNum, application.user_id)) {
+      return true;
+    }
     const userDelegationGroups = await this.getDelegationGroups(userId);
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 
@@ -694,8 +729,11 @@ class User {
       return true;
     }
 
-    // 檢查是否屬於批核流程中任何階段的授權群組
+    // 檢查是否屬於批核流程中任何階段的授權群組，或為申請人的 supervisor
     const DepartmentGroup = require('./DepartmentGroup');
+    if (await DepartmentGroup.isSupervisorOfApplicant(userIdNum, application.user_id)) {
+      return true;
+    }
     const userDelegationGroups = await this.getDelegationGroups(userId);
     const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 

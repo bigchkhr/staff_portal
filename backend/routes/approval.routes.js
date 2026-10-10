@@ -12,6 +12,11 @@ router.get('/pending/outdoor-work/applicant/:applicantId', authenticate, approva
 // 取得批核記錄
 router.get('/history', authenticate, approvalController.getApprovalHistory);
 
+router.get('/:id/workflow', authenticate, approvalController.getWorkflow);
+router.post('/:id/withdraw', authenticate, approvalController.withdraw);
+router.post('/:id/return', authenticate, approvalController.returnApplication);
+router.post('/:id/resubmit', authenticate, approvalController.resubmit);
+
 // 批核申請
 router.post('/:id/approve', authenticate, approvalController.approve);
 

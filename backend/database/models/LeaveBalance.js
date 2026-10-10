@@ -1,72 +1,72 @@
 const knex = require('../../config/database');
 const LeaveBalanceTransaction = require('./LeaveBalanceTransaction');
+const { isSicknessAllowance } = require('../../utils/sicknessAllowance');
 
 class LeaveBalance {
-  static async findByUserAndType(userId, leaveTypeId, year) {
-    // 從交易記錄計算總餘額（只有 HR Group 成員輸入的額度）
-    const totalBalance = await LeaveBalanceTransaction.getTotalBalance(userId, leaveTypeId, year);
-    
-    // 計算已使用的天數
-    // 已使用 = 從 leave_applications 表計算已批准的申請天數 - 銷假的天數
-    let taken = 0;
+  static async sumTakenDays(userId, leaveTypeId, year) {
     try {
-      // 計算所有已批准的申請（不包括銷假交易）
-      // 使用 whereNull 或 where 來確保正確匹配 false 和 null 值
-      const approvedResult = await knex('leave_applications')
+      const approvedQuery = knex('leave_applications')
         .where({
           user_id: userId,
-          leave_type_id: leaveTypeId,
-          year
+          leave_type_id: leaveTypeId
         })
         .where('status', 'approved')
         .where(function() {
-          // 匹配 is_reversal_transaction 為 false 或 null（正常申請）
           this.where('is_reversal_transaction', false)
               .orWhereNull('is_reversal_transaction');
-        })
-        .sum('total_days as total')
-        .first();
-      
+        });
+      if (year != null) approvedQuery.where({ year });
+
+      const approvedResult = await approvedQuery.sum('total_days as total').first();
       let approved = 0;
       if (approvedResult?.total !== null && approvedResult?.total !== undefined) {
         approved = parseFloat(approvedResult.total);
       }
 
-      // 計算所有銷假的天數（退回餘額）
-      // 銷假申請的 is_reversal_transaction 為 true
-      const reversalResult = await knex('leave_applications')
+      const reversalQuery = knex('leave_applications')
         .where({
           user_id: userId,
-          leave_type_id: leaveTypeId,
-          year
+          leave_type_id: leaveTypeId
         })
         .where('status', 'approved')
-        .where('is_reversal_transaction', true)
+        .where('is_reversal_transaction', true);
+      if (year != null) reversalQuery.where({ year });
+
+      const reversalResult = await reversalQuery
         .select(knex.raw('SUM(ABS(total_days)) as total'))
         .first();
-      
       let reversed = 0;
       if (reversalResult?.total !== null && reversalResult?.total !== undefined) {
         reversed = parseFloat(reversalResult.total);
       }
 
-      // 已使用 = 已批准的總額 - 銷假的總額
-      taken = Math.max(0, approved - reversed);
+      return Math.max(0, approved - reversed);
     } catch (error) {
       console.error('Error calculating taken days:', error);
-      // 如果出錯，taken 保持為 0
+      return 0;
     }
-    
-    // 可用餘額 = 總餘額（HR 輸入的額度）- 已使用的天數（允許負數）
+  }
+
+  static async findByUserAndType(userId, leaveTypeId, year) {
+    const leaveType = await knex('leave_types').where('id', leaveTypeId).first();
+    const lifetime = isSicknessAllowance(leaveType);
+    const totalBalance = await LeaveBalanceTransaction.getTotalBalance(
+      userId,
+      leaveTypeId,
+      year,
+      { allYears: lifetime }
+    );
+    const taken = await this.sumTakenDays(userId, leaveTypeId, lifetime ? null : year);
     const balance = totalBalance - taken;
-    
+
     return {
       user_id: userId,
       leave_type_id: leaveTypeId,
       year,
       balance,
       taken,
-      total: totalBalance
+      total: totalBalance,
+      lifetime
     };
   }
 
@@ -79,79 +79,30 @@ class LeaveBalance {
     // 為每個假期類型計算總餘額
     const balances = await Promise.all(
       leaveTypes.map(async (leaveType) => {
+        const lifetime = isSicknessAllowance(leaveType);
         const totalBalance = await LeaveBalanceTransaction.getTotalBalance(
           userId,
           leaveType.id,
-          year
+          year,
+          { allYears: lifetime }
         );
-        
-        // 計算已使用的天數
-        // 已使用 = 從 leave_applications 表計算已批准的申請天數 - 銷假的天數
-        let taken = 0;
-        try {
-          // 計算所有已批准的申請（不包括銷假交易）
-          // 使用 whereNull 或 where 來確保正確匹配 false 和 null 值
-          const approvedResult = await knex('leave_applications')
-            .where({
-              user_id: userId,
-              leave_type_id: leaveType.id,
-              year
-            })
-            .where('status', 'approved')
-            .where(function() {
-              // 匹配 is_reversal_transaction 為 false 或 null（正常申請）
-              this.where('is_reversal_transaction', false)
-                  .orWhereNull('is_reversal_transaction');
-            })
-            .sum('total_days as total')
-            .first();
-          
-          let approved = 0;
-          if (approvedResult?.total !== null && approvedResult?.total !== undefined) {
-            approved = parseFloat(approvedResult.total);
-          }
-
-          // 計算所有銷假的天數（退回餘額）
-          // 銷假申請的 is_reversal_transaction 為 true
-          const reversalResult = await knex('leave_applications')
-            .where({
-              user_id: userId,
-              leave_type_id: leaveType.id,
-              year
-            })
-            .where('status', 'approved')
-            .where('is_reversal_transaction', true)
-            .select(knex.raw('SUM(ABS(total_days)) as total'))
-            .first();
-          
-          let reversed = 0;
-          if (reversalResult?.total !== null && reversalResult?.total !== undefined) {
-            reversed = parseFloat(reversalResult.total);
-          }
-
-          // 已使用 = 已批准的總額 - 銷假的總額
-          taken = Math.max(0, approved - reversed);
-        } catch (error) {
-          console.error('Error calculating taken days:', error);
-          // 如果出錯，taken 保持為 0
-        }
-        
-        // 可用餘額 = 總餘額（HR 輸入的額度）- 已使用的天數（允許負數）
+        const taken = await this.sumTakenDays(userId, leaveType.id, lifetime ? null : year);
         const balance = totalBalance - taken;
         
         // 獲取有效期信息（從所有正數交易中獲取最早開始日期和最晚結束日期，只考慮 HR 成員創建的記錄）
         let start_date = null;
         let end_date = null;
         try {
-          const positiveTransactions = await knex('leave_balance_transactions')
+          const positiveQuery = knex('leave_balance_transactions')
             .where({
               user_id: userId,
-              leave_type_id: leaveType.id,
-              year
+              leave_type_id: leaveType.id
             })
             .where('amount', '>', 0)
-            .whereNotNull('created_by_id') // 只考慮 HR 成員創建的記錄
+            .whereNotNull('created_by_id')
             .select('start_date', 'end_date');
+          if (!lifetime) positiveQuery.where({ year });
+          const positiveTransactions = await positiveQuery;
           
           if (positiveTransactions && positiveTransactions.length > 0) {
             // 找出最早的開始日期和最晚的結束日期
@@ -187,6 +138,7 @@ class LeaveBalance {
           leave_type_name: leaveType.name,
           leave_type_name_zh: leaveType.name_zh,
           requires_balance: leaveType.requires_balance,
+          lifetime,
           start_date,
           end_date
         };
@@ -215,6 +167,16 @@ class LeaveBalance {
 
   // 扣除餘額：檢查餘額是否足夠（不創建交易記錄，因為申請獲批不應錄入 leave_balance_transactions）
   static async decrementBalance(userId, leaveTypeId, year, days, remarks = '假期申請已批准，扣除餘額', applicationStartDate = null, applicationEndDate = null) {
+    const leaveType = await knex('leave_types').where('id', leaveTypeId).first();
+    if (isSicknessAllowance(leaveType)) {
+      const balanceInfo = await this.findByUserAndType(userId, leaveTypeId, year);
+      const daysToDeduct = parseFloat(days);
+      if (balanceInfo.balance < daysToDeduct) {
+        throw new Error('假期餘額不足');
+      }
+      return balanceInfo;
+    }
+
     // 檢查當前餘額是否足夠
     const balanceInfo = await this.findByUserAndType(userId, leaveTypeId, year);
     const daysToDeduct = parseFloat(days);

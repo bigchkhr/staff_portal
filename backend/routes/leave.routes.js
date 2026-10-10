@@ -10,6 +10,8 @@ router.get('/', authenticate, leaveController.getApplications);
 router.get('/balances', authenticate, leaveController.getBalances);
 router.get('/department-group-balances', authenticate, leaveController.getDepartmentGroupBalances);
 router.get('/pending-approvals', authenticate, leaveController.getPendingApprovals);
+router.get('/returned-count', authenticate, leaveController.getReturnedCount);
+router.put('/:id/revise', authenticate, leaveController.reviseReturnedApplication);
 
 // 文件相關路由（必須在 /:id 之前，按順序匹配）
 router.get('/documents/:id/download', authenticate, leaveController.downloadDocument);

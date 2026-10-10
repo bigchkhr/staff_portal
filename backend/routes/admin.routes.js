@@ -24,6 +24,9 @@ router.post('/annual-leave/sync-termination', adminController.syncAnnualLeaveTer
 router.post('/annual-leave/bulk', adminController.confirmAnnualLeaveBulk);
 router.get('/entitlements/preview', adminController.previewEntitlementBulk);
 router.post('/entitlements/bulk', adminController.confirmEntitlementBulk);
+router.get('/sickness-allowance/preview', adminController.previewSicknessAllowance);
+router.post('/sickness-allowance/bulk', adminController.confirmSicknessAllowance);
+router.post('/sickness-allowance/manual', adminController.manualSicknessAllowance);
 
 router.post('/departments', adminController.createDepartment);
 router.put('/departments/:id', adminController.updateDepartment);

@@ -390,6 +390,122 @@ class LeaveController {
     }
   }
 
+  async getReturnedCount(req, res) {
+    try {
+      const knex = require('../config/database');
+      const [row] = await knex('leave_applications')
+        .where('user_id', req.user.id)
+        .where('status', 'pending')
+        .where('current_approval_stage', 'applicant')
+        .count('* as count');
+      res.json({ count: parseInt(row?.count ?? 0, 10) });
+    } catch (error) {
+      console.error('Get returned leave count error:', error);
+      res.status(500).json({ message: '獲取發還申請數量時發生錯誤' });
+    }
+  }
+
+  async reviseReturnedApplication(req, res) {
+    try {
+      const { id } = req.params;
+      const {
+        start_date,
+        start_session,
+        end_date,
+        end_session,
+        total_days,
+        leave_type_id,
+        reason,
+        year
+      } = req.body;
+
+      if (!start_date || !start_session || !end_date || !end_session || !total_days || !leave_type_id) {
+        return res.status(400).json({ message: '請填寫所有必填欄位' });
+      }
+      if (!['AM', 'PM'].includes(start_session) || !['AM', 'PM'].includes(end_session)) {
+        return res.status(400).json({ message: '時段必須是上午(AM)或下午(PM)' });
+      }
+      if (start_date > end_date) {
+        return res.status(400).json({ message: '結束日期不可早於開始日期' });
+      }
+
+      const application = await LeaveApplication.findById(id);
+      if (!application) {
+        return res.status(404).json({ message: '申請不存在' });
+      }
+      if (Number(application.user_id) !== Number(req.user.id)) {
+        return res.status(403).json({ message: '只有申請人可以更改此申請' });
+      }
+      if (application.status !== 'pending' || application.current_approval_stage !== 'applicant') {
+        return res.status(400).json({ message: '只有發還給申請人的申請可以更改' });
+      }
+
+      const leaveType = await LeaveType.findById(leave_type_id);
+      if (!leaveType) {
+        return res.status(404).json({ message: '假期類型不存在' });
+      }
+
+      const applicationYear = year ? parseInt(year, 10) : new Date(start_date).getFullYear();
+      if (leaveType.requires_balance) {
+        const LeaveBalanceTransaction = require('../database/models/LeaveBalanceTransaction');
+        const balanceRecord = await LeaveBalance.findByUserAndType(req.user.id, leave_type_id, applicationYear);
+        if (!balanceRecord || parseFloat(balanceRecord.balance) < parseFloat(total_days)) {
+          return res.status(400).json({ message: '假期餘額不足' });
+        }
+        const validBalance = await LeaveBalanceTransaction.getValidBalanceForPeriod(
+          req.user.id,
+          leave_type_id,
+          start_date,
+          end_date,
+          applicationYear
+        );
+        if (validBalance < parseFloat(total_days)) {
+          return res.status(400).json({
+            message: `申請日期不在${applicationYear}年假期餘額有效期範圍內，或該期間可用餘額不足。`
+          });
+        }
+      }
+
+      const knex = require('../config/database');
+      const overlap = await knex('leave_applications')
+        .where('user_id', req.user.id)
+        .where('id', '!=', id)
+        .where('start_date', '<=', end_date)
+        .where('end_date', '>=', start_date)
+        .where(function () {
+          this.where('status', 'approved').orWhere('status', 'pending');
+        })
+        .where(function () {
+          this.where('is_reversed', false).orWhereNull('is_reversed');
+        })
+        .where(function () {
+          this.where('is_reversal_transaction', false).orWhereNull('is_reversal_transaction');
+        })
+        .first('id');
+
+      if (overlap) {
+        return res.status(400).json({ message: '該日期範圍內已有已批核或正在申請的假期，無法重複申請' });
+      }
+
+      await knex('leave_applications').where('id', id).update({
+        leave_type_id,
+        start_date,
+        start_session,
+        end_date,
+        end_session,
+        year: applicationYear,
+        total_days: parseFloat(total_days),
+        reason: reason || null
+      });
+
+      const updated = await LeaveApplication.findById(id);
+      res.json({ message: '申請已更新', application: updated });
+    } catch (error) {
+      console.error('Revise returned application error:', error);
+      res.status(500).json({ message: '更改申請時發生錯誤', error: error.message });
+    }
+  }
+
   async getApplications(req, res) {
     try {
       const {
@@ -923,18 +1039,19 @@ class LeaveController {
       // 獲取所有部門群組
       const allDepartmentGroups = await DepartmentGroup.findAll();
 
-      // 過濾出用戶有權限查看的部門群組
-      // 用戶有權限如果該部門群組的任一授權群組（checker_id, approver_1_id, approver_2_id, approver_3_id）包含用戶
+      // supervisor 與 approver 1/2/3 可查看所屬部門群組餘額；checker 維持原有權限
       const accessibleGroups = allDepartmentGroups.filter(deptGroup => {
         const checkerId = deptGroup.checker_id ? Number(deptGroup.checker_id) : null;
         const approver1Id = deptGroup.approver_1_id ? Number(deptGroup.approver_1_id) : null;
         const approver2Id = deptGroup.approver_2_id ? Number(deptGroup.approver_2_id) : null;
         const approver3Id = deptGroup.approver_3_id ? Number(deptGroup.approver_3_id) : null;
+        const supervisorId = deptGroup.supervisor_id ? Number(deptGroup.supervisor_id) : null;
 
         return userDelegationGroupIds.includes(checkerId) ||
                userDelegationGroupIds.includes(approver1Id) ||
                userDelegationGroupIds.includes(approver2Id) ||
-               userDelegationGroupIds.includes(approver3Id);
+               userDelegationGroupIds.includes(approver3Id) ||
+               userDelegationGroupIds.includes(supervisorId);
       });
 
       // 為每個部門群組獲取成員及其假期餘額

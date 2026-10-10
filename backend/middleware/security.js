@@ -6,7 +6,7 @@ const User = require('../database/models/User');
 
 // HR 成員檢查緩存（避免每次請求都查詢數據庫）
 const hrMemberCache = new Map();
-// 批核成員（checker/approver1/2/3）檢查緩存（避免每次請求都查詢數據庫）
+// 批核成員（supervisor / approver1/2/3 / checker）檢查緩存（避免每次請求都查詢數據庫）
 const approvalMemberCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 緩存 5 分鐘
 
@@ -50,7 +50,7 @@ const checkHRMembership = async (userId) => {
   }
 };
 
-// 檢查用戶是否為批核成員（checker/approver1/2/3）（帶緩存）
+// 檢查用戶是否豁免一般 API rate limit（supervisor / approver1/2/3 / checker，帶緩存）
 const checkApprovalMembership = async (userId) => {
   const cacheKey = `approval_member_${userId}`;
   const cached = approvalMemberCache.get(cacheKey);
@@ -62,7 +62,7 @@ const checkApprovalMembership = async (userId) => {
 
   // 查詢數據庫
   try {
-    const isApprovalMember = await User.isApprovalMember(userId);
+    const isApprovalMember = await User.isRateLimitExemptMember(userId);
     // 更新緩存
     approvalMemberCache.set(cacheKey, {
       isApprovalMember,
@@ -75,7 +75,7 @@ const checkApprovalMembership = async (userId) => {
   }
 };
 
-// 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 與批核角色（checker/approver1/2/3）不受限制）
+// 一般 API 的 Rate Limiting（基於用戶 ID，HR Group 與 supervisor / approver1/2/3 / checker 不受限制）
 const apiLimiter = rateLimit({
   windowMs: 10* 60 * 1000, // 10 分鐘
   max: 200, // 限制 200 個請求
@@ -121,7 +121,7 @@ const apiLimiter = rateLimit({
       error: 'TOO_MANY_REQUESTS'
     });
   },
-  // 跳過 HR Group 與批核角色（checker/approver1/2/3）的請求
+  // 跳過 HR Group 與 supervisor / approver1/2/3 / checker 的請求
   skip: async (req) => {
     try {
       // 嘗試從 Authorization header 獲取 token

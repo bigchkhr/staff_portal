@@ -105,6 +105,9 @@ class ScheduleChange {
           })
           .orWhereIn('approver_3_id', function () {
             this.select('id').from('delegation_groups').whereRaw('? = ANY(delegation_groups.user_ids)', [uid]);
+          })
+          .orWhereIn('supervisor_id', function () {
+            this.select('id').from('delegation_groups').whereRaw('? = ANY(delegation_groups.user_ids)', [uid]);
           });
       })
       .pluck('id');

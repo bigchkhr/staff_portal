@@ -16,6 +16,12 @@ const {
   parseBirthdayMonth,
   parseBirthdayDay
 } = require('../utils/leaveEntitlements');
+const {
+  previewSicknessAllowance,
+  confirmSicknessAllowance,
+  grantSicknessAllowanceManual,
+  isSicknessAllowance
+} = require('../services/sicknessAllowance.service');
 
 function normalizeBirthdayFields(birthday_month, birthday_day) {
   const month = parseBirthdayMonth(birthday_month);
@@ -361,10 +367,12 @@ class AdminController {
       }
 
       // 獲取當前總餘額
+      const balanceLeaveType = await LeaveType.findById(leave_type_id);
       const currentTotal = await LeaveBalanceTransaction.getTotalBalance(
         user_id,
         leave_type_id,
-        currentYear
+        currentYear,
+        { allYears: isSicknessAllowance(balanceLeaveType) }
       );
       
       // 計算需要添加的數量
@@ -413,6 +421,26 @@ class AdminController {
       // 驗證日期範圍
       if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
         return res.status(400).json({ message: '有效開始日期不能晚於結束日期' });
+      }
+
+      const grantLeaveType = await LeaveType.findById(leave_type_id);
+      if (isSicknessAllowance(grantLeaveType)) {
+        const outcome = await grantSicknessAllowanceManual({
+          userId: user_id,
+          amount,
+          remarks,
+          createdById: req.user.id,
+          startDate: start_date,
+          endDate: end_date
+        });
+        if (!outcome.ok) {
+          return res.status(400).json({ message: outcome.message, balance: outcome.balance });
+        }
+        return res.json({
+          message: outcome.message,
+          transaction: outcome.transaction,
+          balance: outcome.balance
+        });
       }
 
       // 創建交易記錄
@@ -466,11 +494,13 @@ class AdminController {
       }
 
       let transactions;
+      const historyLeaveType = leave_type_id ? await LeaveType.findById(leave_type_id) : null;
+      const historyYear = isSicknessAllowance(historyLeaveType) ? null : currentYear;
       if (leave_type_id) {
         transactions = await LeaveBalanceTransaction.findByUserAndType(
           user_id,
           leave_type_id,
-          currentYear
+          historyYear
         );
       } else {
         transactions = await LeaveBalanceTransaction.findByUser(user_id, currentYear);
@@ -1104,6 +1134,68 @@ class AdminController {
     } catch (error) {
       console.error('Confirm entitlement bulk error:', error);
       res.status(500).json({ message: '批量發放時發生錯誤', error: error.message });
+    }
+  }
+
+  /**
+   * 疾病津貼假試算（每月只發下一個完整月；補發則一次過發放所有未發月份）
+   * GET /api/admin/sickness-allowance/preview?mode=monthly|backfill&as_of=
+   */
+  async previewSicknessAllowance(req, res) {
+    try {
+      const result = await previewSicknessAllowance({
+        mode: req.query.mode,
+        asOf: req.query.as_of
+      });
+      res.json(result);
+    } catch (error) {
+      console.error('Preview sickness allowance error:', error);
+      res.status(error.status || 500).json({
+        message: error.message || '試算疾病津貼假時發生錯誤'
+      });
+    }
+  }
+
+  /**
+   * POST /api/admin/sickness-allowance/bulk
+   * body: { mode, as_of, user_ids }
+   */
+  async confirmSicknessAllowance(req, res) {
+    try {
+      const result = await confirmSicknessAllowance({
+        mode: req.body.mode,
+        asOf: req.body.as_of,
+        userIds: req.body.user_ids,
+        createdById: req.user.id
+      });
+      res.json(result);
+    } catch (error) {
+      console.error('Confirm sickness allowance error:', error);
+      res.status(error.status || 500).json({
+        message: error.message || '發放疾病津貼假時發生錯誤'
+      });
+    }
+  }
+
+  /**
+   * POST /api/admin/sickness-allowance/manual
+   * body: { user_id, amount, remarks }
+   */
+  async manualSicknessAllowance(req, res) {
+    try {
+      const outcome = await grantSicknessAllowanceManual({
+        userId: req.body.user_id,
+        amount: req.body.amount,
+        remarks: req.body.remarks,
+        createdById: req.user.id
+      });
+      if (!outcome.ok) {
+        return res.status(400).json({ message: outcome.message, balance: outcome.balance });
+      }
+      res.json(outcome);
+    } catch (error) {
+      console.error('Manual sickness allowance error:', error);
+      res.status(500).json({ message: '人手發放疾病津貼假時發生錯誤', error: error.message });
     }
   }
 }

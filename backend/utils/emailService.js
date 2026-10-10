@@ -263,6 +263,7 @@ class EmailService {
 
   _getStageNames(stage) {
     const stageNames = {
+      applicant: { en: 'Applicant', zh: '申請人' },
       checker: { en: 'Checker', zh: '檢查' },
       approver_1: { en: 'First Approval', zh: '第一批核' },
       approver_2: { en: 'Second Approval', zh: '第二批核' },
@@ -1091,6 +1092,60 @@ class EmailService {
 
     if (hrMemberEmails.length > 0) {
       await this.sendBulkEmails(hrMemberEmails, { subject, html });
+    }
+  }
+
+  async sendApplicationReturnNotification(application, applicationType, recipients, details = {}) {
+    if (!application || !recipients || recipients.length === 0) {
+      return;
+    }
+
+    const typeLabels = {
+      leave: { en: 'Leave Application', zh: '假期申請' },
+      extra_working_hours: { en: 'Extra Working Hours', zh: '額外工作時數申報' },
+      outdoor_work: { en: 'Outdoor Work', zh: '外勤工作申請' }
+    };
+    const label = typeLabels[applicationType] || typeLabels.leave;
+    const fromStage = this._getStageNames(details.fromStage);
+    const toStage = this._getStageNames(details.toStage);
+    const transactionId = application.transaction_id
+      || `${applicationType === 'leave' ? 'LA' : applicationType === 'outdoor_work' ? 'OW' : 'EW'}-${String(application.id).padStart(6, '0')}`;
+    const reason = details.reason || '';
+    const actorName = details.actorName || '';
+    const detailUrl = this._getFrontendApprovalUrl(application.id, applicationType);
+    const subject = `[Staff Portal] Application Returned / [員工系統] 申請已發還 - ${transactionId}`;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #ed6c02; color: white; padding: 20px; text-align: center;">
+            <h2>Application Returned / 申請已發還</h2>
+          </div>
+          <div style="background-color: #f9f9f9; padding: 20px; margin-top: 20px;">
+            <p>Hello 您好，</p>
+            <p>A <strong>${label.en}</strong> has been returned to you.<br>
+            有一項<strong>${label.zh}</strong>已發還給你。</p>
+            <p><strong>Application ID / 申請編號:</strong> ${this._escapeHtml(transactionId)}</p>
+            <p><strong>Returned by / 發還人:</strong> ${this._escapeHtml(actorName)}</p>
+            <p><strong>From / 由:</strong> ${this._escapeHtml(fromStage.en)} / ${this._escapeHtml(fromStage.zh)}</p>
+            <p><strong>To / 發還至:</strong> ${this._escapeHtml(toStage.en)} / ${this._escapeHtml(toStage.zh)}</p>
+            <p><strong>Reason / 發還原因:</strong><br>${this._escapeHtml(reason)}</p>
+            <p style="margin-top: 20px;">
+              <a href="${detailUrl}" style="background-color: #ed6c02; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Application / 查看申請
+              </a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emails = recipients.map((person) => person.email).filter((email) => email && email.trim());
+    if (emails.length > 0) {
+      await this.sendBulkEmails(emails, { subject, html });
     }
   }
 }

@@ -247,20 +247,12 @@ class ScheduleController {
           const targetGroups = await DepartmentGroup.findByUserId(targetUser.id);
 
           // 只要在任何一個目標員工群組入面充當 approver1/2/3 即可（不包括 checker）
-          isAllowed = targetGroups.some(group => {
-            const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
-            const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
-            const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
-
-            return (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
-                   (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
-                   (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
-          });
+          isAllowed = targetGroups.some(group => DepartmentGroup.isScheduleManager(group, userDelegationGroupIds));
         }
       }
 
       if (!isAllowed) {
-        return res.status(403).json({ message: '只有 approver1、approver2、approver3 或系統管理員可以查看此員工的更表' });
+        return res.status(403).json({ message: '只有 approver、supervisor 或系統管理員可以查看此員工的更表' });
       }
 
       // 查詢此員工在日期範圍內的所有排班
@@ -1348,7 +1340,14 @@ class ScheduleController {
 
     // 批核成員（checker / approver）即使暫時不可編輯，仍可查看更表
     const isApproverMember = await DepartmentGroup.isApproverMember(userId, departmentGroupId);
-    return !!isApproverMember;
+    if (isApproverMember) return true;
+
+    const group = await knex('department_groups').where('id', departmentGroupId).first();
+    if (!group || !group.supervisor_id) return false;
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+    return delegationGroups.some((item) => Number(item.id) === Number(group.supervisor_id));
   }
 
   _sanitizeScheduleRemarks(schedule, canViewRemarks) {
@@ -1405,10 +1404,7 @@ class ScheduleController {
 
       const isMember = userId != null && Schedule.parseGroupUserIds(group).includes(userId);
       const isChecker = !!(group.checker_id && ids.includes(Number(group.checker_id))) || (isStoreSupervisor && isMember);
-      const isApprover =
-        !!(group.approver_1_id && ids.includes(Number(group.approver_1_id))) ||
-        !!(group.approver_2_id && ids.includes(Number(group.approver_2_id))) ||
-        !!(group.approver_3_id && ids.includes(Number(group.approver_3_id)));
+      const isApprover = DepartmentGroup.isScheduleManager(group, ids);
 
       return {
         ...group,
@@ -1465,11 +1461,13 @@ class ScheduleController {
         const approver1Id = deptGroup.approver_1_id ? Number(deptGroup.approver_1_id) : null;
         const approver2Id = deptGroup.approver_2_id ? Number(deptGroup.approver_2_id) : null;
         const approver3Id = deptGroup.approver_3_id ? Number(deptGroup.approver_3_id) : null;
+        const supervisorId = deptGroup.supervisor_id ? Number(deptGroup.supervisor_id) : null;
 
         return userDelegationGroupIds.includes(checkerId) ||
                userDelegationGroupIds.includes(approver1Id) ||
                userDelegationGroupIds.includes(approver2Id) ||
-               userDelegationGroupIds.includes(approver3Id);
+               userDelegationGroupIds.includes(approver3Id) ||
+               userDelegationGroupIds.includes(supervisorId);
       });
       
       // 合併並去重（使用 id 作為唯一標識），並將 DATE 欄位格式為 YYYY-MM-DD 再回傳
@@ -1537,12 +1535,10 @@ class ScheduleController {
       const userDelegationGroups = await User.getDelegationGroups(userId);
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 
-      const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
-      const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
-      const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+      const isScheduleManager = DepartmentGroup.isScheduleManager(group, userDelegationGroupIds);
 
       // 系統管理員也可以操作
-      if (!req.user.is_system_admin && !isApprover1 && !isApprover2 && !isApprover3) {
+      if (!req.user.is_system_admin && !isScheduleManager) {
         return res.status(403).json({ message: '您沒有權限修改此設置' });
       }
 
@@ -1612,11 +1608,7 @@ class ScheduleController {
           return true; // 系統管理員可以操作所有群組
         }
 
-        const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
-        const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
-        const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-
-        return isApprover1 || isApprover2 || isApprover3;
+        return DepartmentGroup.isScheduleManager(group, userDelegationGroupIds);
       });
 
       if (groupsToUpdate.length === 0) {

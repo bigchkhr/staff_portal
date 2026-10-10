@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { isSicknessAllowance } = require('../../utils/sicknessAllowance');
 
 class LeaveBalanceTransaction {
   static async create(transactionData) {
@@ -41,8 +42,10 @@ class LeaveBalanceTransaction {
         )
         .where({
           user_id: userId,
-          leave_type_id: leaveTypeId,
-          year
+          leave_type_id: leaveTypeId
+        })
+        .modify((query) => {
+          if (year != null) query.where({ year });
         })
         .whereNotNull('leave_balance_transactions.created_by_id') // 只返回 HR 成員創建的記錄
         .orderBy('leave_balance_transactions.created_at', 'desc');
@@ -68,9 +71,9 @@ class LeaveBalanceTransaction {
           'creator.name_zh as created_by_name',
           'creator.employee_number as created_by_employee_number'
         )
-        .where({
-          user_id: userId,
-          year
+        .where('leave_balance_transactions.user_id', userId)
+        .where(function () {
+          this.where('leave_balance_transactions.year', year).orWhere('leave_types.code', 'SAL');
         })
         .whereNotNull('leave_balance_transactions.created_by_id') // 只返回 HR 成員創建的記錄
         .orderBy('leave_balance_transactions.created_at', 'desc');
@@ -84,17 +87,18 @@ class LeaveBalanceTransaction {
     }
   }
 
-  static async getTotalBalance(userId, leaveTypeId, year) {
+  static async getTotalBalance(userId, leaveTypeId, year, options = {}) {
     try {
-      const result = await knex('leave_balance_transactions')
+      const query = knex('leave_balance_transactions')
         .where({
           user_id: userId,
-          leave_type_id: leaveTypeId,
-          year
+          leave_type_id: leaveTypeId
         })
-        .whereNotNull('created_by_id') // 只計算 HR 成員創建的記錄
-        .sum('amount as total')
-        .first();
+        .whereNotNull('created_by_id');
+      if (!options.allYears) {
+        query.where({ year });
+      }
+      const result = await query.sum('amount as total').first();
       
       // PostgreSQL 的 sum 在沒有記錄時返回 null
       const total = result?.total;
@@ -140,6 +144,17 @@ class LeaveBalanceTransaction {
   // year 參數：如果提供，則使用該年份的餘額；否則使用申請日期的年份
   static async getValidBalanceForPeriod(userId, leaveTypeId, startDate, endDate, year = null) {
     try {
+      const leaveType = await knex('leave_types').where('id', leaveTypeId).first();
+      if (isSicknessAllowance(leaveType)) {
+        const result = await knex('leave_balance_transactions')
+          .where({ user_id: userId, leave_type_id: leaveTypeId })
+          .where('amount', '>', 0)
+          .whereNotNull('created_by_id')
+          .sum('amount as total')
+          .first();
+        return parseFloat(result?.total) || 0;
+      }
+
       // 如果提供了年份參數，使用該年份；否則從開始日期取得年份
       const targetYear = year !== null ? year : new Date(startDate).getFullYear();
       const start = new Date(startDate);
