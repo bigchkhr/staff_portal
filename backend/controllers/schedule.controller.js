@@ -411,6 +411,53 @@ class ScheduleController {
     }
   }
 
+  async _groupStoreIds(groupId, startDate, endDate) {
+    const rows = await knex('schedules')
+      .where('department_group_id', groupId)
+      .whereBetween('schedule_date', [startDate, endDate])
+      .whereNotNull('store_id')
+      .distinct('store_id');
+    return rows.map((row) => Number(row.store_id)).filter((id) => !Number.isNaN(id));
+  }
+
+  _whereHelpingGroup(builder, groupId, startDate, endDate, storeId) {
+    if (storeId) {
+      builder.where(function () {
+        this.where('schedules.store_id', storeId)
+          .orWhereExists(function () {
+            this.select(knex.raw('1'))
+              .from('schedule_duty_assignments')
+              .whereRaw('schedule_duty_assignments.schedule_id = schedules.id')
+              .where('schedule_duty_assignments.loan_store_id', storeId);
+          });
+      });
+      return;
+    }
+
+    builder.where(function () {
+      this.whereExists(function () {
+        this.select(knex.raw('1'))
+          .from('schedules as own_shift')
+          .where('own_shift.department_group_id', groupId)
+          .whereRaw('own_shift.schedule_date = schedules.schedule_date')
+          .whereNotNull('own_shift.store_id')
+          .whereRaw('own_shift.store_id = schedules.store_id');
+      }).orWhereExists(function () {
+        this.select(knex.raw('1'))
+          .from('schedule_duty_assignments')
+          .whereRaw('schedule_duty_assignments.schedule_id = schedules.id')
+          .whereNotNull('schedule_duty_assignments.loan_store_id')
+          .whereExists(function () {
+            this.select(knex.raw('1'))
+              .from('schedules as own_shift')
+              .where('own_shift.department_group_id', groupId)
+              .whereRaw('own_shift.schedule_date = schedules.schedule_date')
+              .whereRaw('own_shift.store_id = schedule_duty_assignments.loan_store_id');
+          });
+      });
+    });
+  }
+
   // 取得幫舖排班列表（helper schedules）
   async getHelperSchedules(req, res) {
     try {
@@ -429,24 +476,35 @@ class ScheduleController {
       if (!department_group_id) {
         return res.status(400).json({ message: '必須指定群組ID' });
       }
-      if (!store_id) {
-        return res.status(400).json({ message: '必須指定店舖ID' });
-      }
       if (!start_date || !end_date) {
         return res.status(400).json({ message: '必須指定日期範圍' });
       }
 
       const groupId = parseInt(department_group_id, 10);
-      const storeId = parseInt(store_id, 10);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ message: '群組不正確' });
+      }
 
-      // 檢查用戶是否有權限查看該群組
+      let targetStoreIds = [];
+      if (store_id !== undefined && store_id !== null && store_id !== '') {
+        const storeId = parseInt(store_id, 10);
+        if (Number.isNaN(storeId)) {
+          return res.status(400).json({ message: '店舖不正確' });
+        }
+        targetStoreIds = [storeId];
+      } else {
+        targetStoreIds = await this._groupStoreIds(groupId, start_date, end_date);
+      }
+
       const canView = await this.canViewGroupSchedule(userId, groupId, req.user.is_system_admin);
       if (!canView) {
         return res.status(403).json({ message: '您沒有權限查看此群組的排班表' });
       }
 
-      // 查詢其他群組中選擇了指定店舖的排班記錄
-      // PostgreSQL DATE 類型不包含時區信息，直接用字符串比較即可
+      const explicitStoreId = targetStoreIds.length === 1 && store_id !== undefined && store_id !== null && store_id !== ''
+        ? targetStoreIds[0]
+        : null;
+
       const helperSchedulesQuery = await knex('schedules')
         .leftJoin('users', 'schedules.user_id', 'users.id')
         .leftJoin('positions', 'users.position_id', 'positions.id')
@@ -454,9 +512,8 @@ class ScheduleController {
         .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
         .leftJoin('stores', 'schedules.store_id', 'stores.id')
         .whereNot('schedules.department_group_id', groupId)
-        .where('schedules.store_id', storeId)
-        // 使用 whereBetween 確保日期範圍查詢正確
         .whereBetween('schedules.schedule_date', [start_date, end_date])
+        .modify((builder) => this._whereHelpingGroup(builder, groupId, start_date, end_date, explicitStoreId))
         .select(
           'schedules.*',
           'users.display_name as user_name',
@@ -493,8 +550,35 @@ class ScheduleController {
         }
         return schedule;
       });
-      
-      console.log(`Found ${helperSchedules.length} helper schedules for store ${storeId} and group ${groupId}`);
+
+      const scheduleIds = helperSchedules.map((row) => row.id).filter((id) => id != null);
+      const loanNames = {};
+      if (scheduleIds.length && targetStoreIds.length) {
+        const loanRows = await knex('schedule_duty_assignments')
+          .leftJoin('stores', 'schedule_duty_assignments.loan_store_id', 'stores.id')
+          .whereIn('schedule_duty_assignments.schedule_id', scheduleIds)
+          .whereIn('schedule_duty_assignments.loan_store_id', targetStoreIds)
+          .distinct(
+            'schedule_duty_assignments.schedule_id',
+            'schedule_duty_assignments.loan_store_id',
+            'stores.store_short_name_ as loan_store_short_name',
+            'stores.store_code as loan_store_code'
+          );
+        loanRows.forEach((row) => {
+          const label = row.loan_store_short_name || row.loan_store_code;
+          if (!loanNames[row.schedule_id]) loanNames[row.schedule_id] = { labels: [], ids: [] };
+          if (label && !loanNames[row.schedule_id].labels.includes(label)) loanNames[row.schedule_id].labels.push(label);
+          const storeId = Number(row.loan_store_id);
+          if (storeId && !loanNames[row.schedule_id].ids.includes(storeId)) loanNames[row.schedule_id].ids.push(storeId);
+        });
+      }
+      helperSchedules.forEach((row) => {
+        const loan = loanNames[row.id] || { labels: [], ids: [] };
+        row.loan_store_short_name = loan.labels.join(' / ');
+        row.loan_store_ids = loan.ids;
+      });
+
+      console.log(`Found ${helperSchedules.length} helper schedules for group ${groupId}`);
 
       const canViewRemarks = await Schedule.canViewScheduleRemarks(userId, groupId, req.user.is_system_admin);
       const sanitizedHelperSchedules = helperSchedules.map(s =>
@@ -1880,6 +1964,435 @@ class ScheduleController {
     } catch (error) {
       console.error('Get schedule change logs error:', error);
       res.status(500).json({ message: '取得編更紀錄失敗', error: error.message });
+    }
+  }
+
+  _formatDutyTime(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) {
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+    const str = String(value);
+    return str.length >= 5 ? str.substring(0, 5) : str;
+  }
+
+  _dailyDutyBaseQuery() {
+    return knex('schedules')
+      .leftJoin('users', 'schedules.user_id', 'users.id')
+      .leftJoin('positions', 'users.position_id', 'positions.id')
+      .leftJoin('department_groups', 'schedules.department_group_id', 'department_groups.id')
+      .leftJoin('leave_types', 'schedules.leave_type_id', 'leave_types.id')
+      .leftJoin('stores', 'schedules.store_id', 'stores.id')
+      .select(
+        'schedules.id',
+        'schedules.user_id',
+        'schedules.department_group_id',
+        'schedules.schedule_date',
+        'schedules.start_time',
+        'schedules.end_time',
+        'schedules.leave_session',
+        'schedules.store_id',
+        'users.display_name as user_name',
+        'users.name_zh as user_name_zh',
+        'users.employee_number',
+        'users.termination_date as user_termination_date',
+        'positions.name as position_name',
+        'positions.name_zh as position_name_zh',
+        'positions.employment_mode as position_employment_mode',
+        'department_groups.name as group_name',
+        'department_groups.name_zh as group_name_zh',
+        'leave_types.code as leave_type_code',
+        'leave_types.name as leave_type_name',
+        'leave_types.name_zh as leave_type_name_zh',
+        'stores.store_code',
+        'stores.store_short_name_ as store_short_name'
+      )
+      .where(function () {
+        this.whereNotNull('schedules.start_time').orWhere(function () {
+          this.whereNotNull('schedules.end_time').where('schedules.end_time', '!=', '');
+        });
+      });
+  }
+
+  _mapDailyDutyRow(row, isBorrowed) {
+    return {
+      schedule_id: row.id,
+      user_id: row.user_id,
+      employee_number: row.employee_number,
+      user_name: row.user_name,
+      user_name_zh: row.user_name_zh,
+      termination_date: row.user_termination_date || null,
+      position_name: row.position_name,
+      position_name_zh: row.position_name_zh,
+      employment_mode: row.position_employment_mode || null,
+      department_group_id: row.department_group_id,
+      group_name: row.group_name,
+      group_name_zh: row.group_name_zh,
+      schedule_date: this.formatDateToUTC8(row.schedule_date) || row.schedule_date,
+      start_time: this._formatDutyTime(row.start_time),
+      end_time: this._formatDutyTime(row.end_time),
+      leave_type_code: row.leave_type_code,
+      leave_type_name: row.leave_type_name,
+      leave_type_name_zh: row.leave_type_name_zh,
+      leave_session: row.leave_session,
+      store_id: row.store_id,
+      store_code: row.store_code,
+      store_short_name: row.store_short_name,
+      is_borrowed: isBorrowed,
+      shift_slots: this._shiftSlots(row.start_time, row.end_time),
+      slots: {}
+    };
+  }
+
+  _clockMinutes(value) {
+    const text = this._formatDutyTime(value);
+    if (!text || !String(text).includes(':')) return null;
+    const [hourText, minuteText] = String(text).split(':');
+    const hour = parseInt(hourText, 10);
+    const minute = parseInt(minuteText, 10);
+    if (Number.isNaN(hour)) return null;
+    return hour * 60 + (Number.isNaN(minute) ? 0 : minute);
+  }
+
+  _shiftSlots(startTime, endTime) {
+    const startMin = this._clockMinutes(startTime);
+    const endMin = this._clockMinutes(endTime);
+    if (startMin == null || endMin == null || endMin <= startMin) return [];
+    const slots = [];
+    const first = Math.floor(startMin / 15) * 15;
+    const last = Math.ceil(endMin / 15) * 15;
+    for (let minute = first; minute < last; minute += 15) {
+      if (minute >= 0 && minute <= 36 * 60) slots.push(minute);
+    }
+    return slots;
+  }
+
+  async _attachDutySlots(staff) {
+    if (!staff.length) return staff;
+    const ids = staff.map((row) => row.schedule_id);
+    const slotRows = await knex('schedule_duty_assignments')
+      .leftJoin('shift_duty_roles', 'schedule_duty_assignments.duty_role_id', 'shift_duty_roles.id')
+      .leftJoin('stores as loan_stores', 'schedule_duty_assignments.loan_store_id', 'loan_stores.id')
+      .whereIn('schedule_duty_assignments.schedule_id', ids)
+      .select(
+        'schedule_duty_assignments.schedule_id',
+        'schedule_duty_assignments.slot_start_minute',
+        'schedule_duty_assignments.loan_store_id',
+        'shift_duty_roles.id as duty_role_id',
+        'shift_duty_roles.code',
+        'shift_duty_roles.name',
+        'shift_duty_roles.name_zh',
+        'shift_duty_roles.description',
+        'shift_duty_roles.is_active',
+        'loan_stores.store_code as loan_store_code',
+        'loan_stores.store_short_name_ as loan_store_short_name'
+      );
+    const bySchedule = {};
+    slotRows.forEach((slot) => {
+      if (!bySchedule[slot.schedule_id]) bySchedule[slot.schedule_id] = {};
+      bySchedule[slot.schedule_id][slot.slot_start_minute] = {
+        id: slot.duty_role_id,
+        code: slot.code,
+        name: slot.name,
+        name_zh: slot.name_zh,
+        description: slot.description || null,
+        is_active: slot.duty_role_id ? slot.is_active !== false : true,
+        loan_store_id: slot.loan_store_id || null,
+        loan_store_code: slot.loan_store_code || null,
+        loan_store_short_name: slot.loan_store_short_name || null
+      };
+    });
+    staff.forEach((row) => {
+      const assigned = bySchedule[row.schedule_id] || {};
+      const slots = {};
+      row.shift_slots.forEach((minute) => {
+        if (assigned[minute]) slots[minute] = assigned[minute];
+      });
+      row.slots = slots;
+    });
+    return staff;
+  }
+
+  _parseDutyRange(source) {
+    const single = source.schedule_date;
+    const start = source.start_date || single;
+    const end = source.end_date || single;
+    if (!start || !end) return { error: '必須指定群組及日期' };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(start)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(end))) {
+      return { error: '日期格式不正確' };
+    }
+    if (start > end) return { error: '日期範圍不正確' };
+    const days = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000);
+    if (days > 41) return { error: '日期範圍不可超過 42 日' };
+    return { start, end };
+  }
+
+  async _dutyEditMap(userId, groupId, dates, isSystemAdmin) {
+    const unique = [...new Set(dates)];
+    const all = (allowed) => Object.fromEntries(unique.map((date) => [date, allowed]));
+    if (isSystemAdmin) return all(true);
+
+    const group = await knex('department_groups').where('id', groupId).first();
+    if (!group) return all(false);
+
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+    const ids = delegationGroups.map((item) => Number(item.id));
+    if (DepartmentGroup.isScheduleManager(group, ids)) return all(true);
+
+    const isChecker = (group.checker_id && ids.includes(Number(group.checker_id)))
+      || await Schedule.isMemberStoreSupervisor(userId, group);
+    if (!isChecker || group.allow_checker_edit === false) return all(false);
+
+    const rangeStart = Schedule._normalizeDateStr(group.checker_editable_start_date);
+    const rangeEnd = Schedule._normalizeDateStr(group.checker_editable_end_date);
+    return Object.fromEntries(unique.map((date) => {
+      if (rangeStart && date < rangeStart) return [date, false];
+      if (rangeEnd && date > rangeEnd) return [date, false];
+      return [date, true];
+    }));
+  }
+
+  async _loadDailyDutyBoard(groupId, storeId, startDate, endDate) {
+    const ownRows = await this._dailyDutyBaseQuery()
+      .where('schedules.department_group_id', groupId)
+      .whereBetween('schedules.schedule_date', [startDate, endDate]);
+
+    const borrowedRows = await this._dailyDutyBaseQuery()
+      .whereNot('schedules.department_group_id', groupId)
+      .whereBetween('schedules.schedule_date', [startDate, endDate])
+      .modify((builder) => this._whereHelpingGroup(builder, groupId, startDate, endDate, storeId || null));
+
+    const staff = [
+      ...ownRows.map((row) => this._mapDailyDutyRow(row, false)),
+      ...borrowedRows.map((row) => this._mapDailyDutyRow(row, true))
+    ].sort((a, b) => {
+      if (a.schedule_date !== b.schedule_date) return a.schedule_date < b.schedule_date ? -1 : 1;
+      if (a.is_borrowed !== b.is_borrowed) return a.is_borrowed ? 1 : -1;
+      return String(a.employee_number || '').localeCompare(String(b.employee_number || ''), undefined, { numeric: true });
+    });
+
+    await this._attachDutySlots(staff);
+
+    const roles = await knex('shift_duty_roles')
+      .where('is_active', true)
+      .orderBy('display_order', 'asc')
+      .orderBy('name_zh', 'asc');
+
+    return { staff, roles };
+  }
+
+  async _canEditDailyDuties(userId, groupId, scheduleDate, isSystemAdmin) {
+    if (isSystemAdmin) return true;
+    return Schedule.canEditSchedule(userId, groupId, scheduleDate);
+  }
+
+  async getDailyDuties(req, res) {
+    try {
+      const { department_group_id, store_id } = req.query;
+      const range = this._parseDutyRange(req.query);
+      if (!department_group_id) {
+        return res.status(400).json({ message: '必須指定群組及日期' });
+      }
+      if (range.error) return res.status(400).json({ message: range.error });
+
+      const groupId = parseInt(department_group_id, 10);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ message: '群組不正確' });
+      }
+      let storeId = null;
+      if (store_id !== undefined && store_id !== null && store_id !== '') {
+        storeId = parseInt(store_id, 10);
+        if (Number.isNaN(storeId)) {
+          return res.status(400).json({ message: '店舖不正確' });
+        }
+      }
+
+      const canView = await this.canViewGroupSchedule(req.user.id, groupId, req.user.is_system_admin);
+      if (!canView) {
+        return res.status(403).json({ message: '您沒有權限查看此群組的排班' });
+      }
+
+      let store = null;
+      if (storeId) {
+        store = await knex('stores').where('id', storeId).first();
+        if (!store) {
+          return res.status(400).json({ message: '店舖不存在' });
+        }
+      }
+
+      const { staff, roles } = await this._loadDailyDutyBoard(groupId, storeId, range.start, range.end);
+      const editByDate = await this._dutyEditMap(
+        req.user.id,
+        groupId,
+        staff.map((row) => row.schedule_date),
+        req.user.is_system_admin
+      );
+      staff.forEach((row) => {
+        row.can_edit = !!editByDate[row.schedule_date];
+      });
+
+      res.json({
+        staff,
+        roles,
+        can_edit: staff.some((row) => row.can_edit) || await this._canEditDailyDuties(req.user.id, groupId, range.start, req.user.is_system_admin),
+        start_date: range.start,
+        end_date: range.end,
+        store: store ? {
+          id: store.id,
+          store_code: store.store_code,
+          store_short_name: store.store_short_name_
+        } : null
+      });
+    } catch (error) {
+      console.error('Get daily duties error:', error);
+      res.status(500).json({ message: '取得當日崗位失敗', error: error.message });
+    }
+  }
+
+  async saveDailyDuties(req, res) {
+    try {
+      const { department_group_id, store_id, assignments } = req.body || {};
+      const range = this._parseDutyRange(req.body || {});
+      if (!department_group_id) {
+        return res.status(400).json({ message: '必須指定群組及日期' });
+      }
+      if (range.error) return res.status(400).json({ message: range.error });
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ message: '指派資料不正確' });
+      }
+
+      const groupId = parseInt(department_group_id, 10);
+      if (Number.isNaN(groupId)) {
+        return res.status(400).json({ message: '群組不正確' });
+      }
+      let storeId = null;
+      if (store_id !== undefined && store_id !== null && store_id !== '') {
+        storeId = parseInt(store_id, 10);
+        if (Number.isNaN(storeId)) {
+          return res.status(400).json({ message: '店舖不正確' });
+        }
+      }
+
+      const { staff, roles } = await this._loadDailyDutyBoard(groupId, storeId, range.start, range.end);
+      const editByDate = await this._dutyEditMap(
+        req.user.id,
+        groupId,
+        staff.map((row) => row.schedule_date).concat([range.start]),
+        req.user.is_system_admin
+      );
+      if (!Object.values(editByDate).some(Boolean)) {
+        return res.status(403).json({ message: '您沒有權限編輯此群組的崗位' });
+      }
+      const staffById = new Map(staff.map((row) => [Number(row.schedule_id), row]));
+      const activeRoleIds = new Set(roles.map((role) => Number(role.id)));
+
+      const normalized = [];
+      for (const item of assignments) {
+        const scheduleId = Number(item?.schedule_id);
+        const row = staffById.get(scheduleId);
+        if (!row) {
+          return res.status(400).json({ message: '包含不屬於所選日期編更的同事' });
+        }
+        if (!item.slots || typeof item.slots !== 'object' || Array.isArray(item.slots)) {
+          return res.status(400).json({ message: '時段資料不正確' });
+        }
+        const allowedSlots = new Set(row.shift_slots || []);
+        const currentBySlot = {};
+        (row.shift_slots || []).forEach((minute) => {
+          const saved = row.slots?.[minute] || {};
+          currentBySlot[minute] = {
+            role: saved.id ? Number(saved.id) : null,
+            loan: saved.loan_store_id ? Number(saved.loan_store_id) : null
+          };
+        });
+        const nextSlots = [];
+        for (const minute of row.shift_slots || []) {
+          const rawSlot = item.slots[minute] ?? item.slots[String(minute)];
+          const rawRole = rawSlot && typeof rawSlot === 'object' ? rawSlot.duty_role_id : rawSlot;
+          const rawLoan = rawSlot && typeof rawSlot === 'object' ? rawSlot.loan_store_id : undefined;
+          let dutyRoleId = rawRole === null || rawRole === undefined || rawRole === '' ? null : Number(rawRole);
+          let loanStoreId = rawLoan === null || rawLoan === undefined || rawLoan === '' ? null : Number(rawLoan);
+          if (!allowedSlots.has(minute)) {
+            return res.status(400).json({ message: '時段不在更份之內' });
+          }
+          const current = currentBySlot[minute] || { role: null, loan: null };
+          if (row.is_borrowed) {
+            loanStoreId = current.loan;
+            if (!current.loan && dutyRoleId !== current.role) {
+              return res.status(400).json({ message: '借入舖只可設定已借出的時段' });
+            }
+          } else if (loanStoreId) {
+            if (Number.isNaN(loanStoreId)) {
+              return res.status(400).json({ message: '借出店舖不正確' });
+            }
+            if (loanStoreId !== current.loan) dutyRoleId = null;
+            else dutyRoleId = current.role;
+          } else if (current.loan) {
+            dutyRoleId = null;
+          }
+          if (!editByDate[row.schedule_date] && (dutyRoleId !== current.role || loanStoreId !== current.loan)) {
+            return res.status(403).json({ message: '您沒有權限編輯此日期的崗位' });
+          }
+          const keepsCurrentInactive = dutyRoleId != null && dutyRoleId === current.role;
+          if (dutyRoleId != null && (Number.isNaN(dutyRoleId) || (!activeRoleIds.has(dutyRoleId) && !keepsCurrentInactive))) {
+            return res.status(400).json({ message: '崗位不存在或已停用' });
+          }
+          nextSlots.push({ slot_start_minute: minute, duty_role_id: dutyRoleId, loan_store_id: loanStoreId });
+        }
+        normalized.push({ schedule_id: scheduleId, slots: nextSlots });
+      }
+
+      const loanStoreIds = [...new Set(normalized.flatMap((item) => item.slots.map((slot) => slot.loan_store_id).filter((id) => id != null)))];
+      if (loanStoreIds.length) {
+        const stores = await knex('stores').whereIn('id', loanStoreIds).select('id');
+        if (stores.length !== loanStoreIds.length) {
+          return res.status(400).json({ message: '借出店舖不存在' });
+        }
+      }
+
+      await knex.transaction(async (trx) => {
+        for (const item of normalized) {
+          await trx('schedule_duty_assignments').where('schedule_id', item.schedule_id).del();
+          const rows = item.slots
+            .filter((slot) => slot.duty_role_id != null || slot.loan_store_id != null)
+            .map((slot) => ({
+              schedule_id: item.schedule_id,
+              slot_start_minute: slot.slot_start_minute,
+              duty_role_id: slot.duty_role_id,
+              loan_store_id: slot.loan_store_id,
+              assigned_by_id: req.user.id
+            }));
+          if (rows.length > 0) {
+            await trx('schedule_duty_assignments').insert(rows);
+          }
+        }
+      });
+
+      const refreshed = await this._loadDailyDutyBoard(groupId, storeId, range.start, range.end);
+      const refreshedEdit = await this._dutyEditMap(
+        req.user.id,
+        groupId,
+        refreshed.staff.map((row) => row.schedule_date),
+        req.user.is_system_admin
+      );
+      refreshed.staff.forEach((row) => {
+        row.can_edit = !!refreshedEdit[row.schedule_date];
+      });
+      res.json({
+        message: '當日崗位已儲存',
+        staff: refreshed.staff,
+        roles: refreshed.roles,
+        can_edit: refreshed.staff.some((row) => row.can_edit),
+        start_date: range.start,
+        end_date: range.end
+      });
+    } catch (error) {
+      console.error('Save daily duties error:', error);
+      res.status(500).json({ message: '儲存當日崗位失敗', error: error.message });
     }
   }
 }

@@ -481,6 +481,7 @@ const AdminBalances = () => {
                           }}
                         >
                           {balance.leave_type_name_zh} ({balance.leave_type_code})
+                          {balance.lifetime ? ` · ${t('leaveBalance.lifetime')}` : ''}
                         </Typography>
                         <Grid container spacing={2.5}>
                           <Grid item xs={4}>
@@ -601,6 +602,7 @@ const AdminBalances = () => {
                           >
                             <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>
                               {balance.leave_type_name_zh} ({balance.leave_type_code})
+                          {balance.lifetime ? ` · ${t('leaveBalance.lifetime')}` : ''}
                             </TableCell>
                             <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'primary.dark' }}>
                               {formatDays(balance.total || 0)}

@@ -32,6 +32,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Search as SearchIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,6 +40,7 @@ import { formatDate } from '../utils/dateFormat';
 
 const OutdoorWorkHistory = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -104,17 +106,22 @@ const OutdoorWorkHistory = () => {
       pending: 'warning',
       approved: 'success',
       rejected: 'error',
-      cancelled: 'default'
+      cancelled: 'default',
+      withdrawn: 'default'
     };
     return statusMap[status] || 'default';
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status, app) => {
+    if (app?.status === 'pending' && app?.current_approval_stage === 'applicant') {
+      return t('approvalHistory.returned');
+    }
     const statusMap = {
       pending: t('outdoorWorkHistory.pending'),
       approved: t('outdoorWorkHistory.approved'),
       rejected: t('outdoorWorkHistory.rejected'),
-      cancelled: t('outdoorWorkHistory.cancelled')
+      cancelled: t('outdoorWorkHistory.cancelled'),
+      withdrawn: t('outdoorWorkHistory.withdrawn')
     };
     return statusMap[status] || status;
   };
@@ -166,7 +173,7 @@ const OutdoorWorkHistory = () => {
   }, [search, allApplications]);
 
   const renderMobileCard = (app) => (
-    <Card key={app.id} sx={{ mb: 2 }}>
+    <Card key={app.id} sx={{ mb: 2, cursor: 'pointer' }} onClick={() => navigate(`/approval/${app.id}?type=outdoor_work`)}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
@@ -178,7 +185,7 @@ const OutdoorWorkHistory = () => {
             </Typography>
           </Box>
           <Chip
-            label={getStatusText(app.status)}
+            label={getStatusText(app.status, app)}
             color={getStatusColor(app.status)}
             size="small"
           />
@@ -307,6 +314,7 @@ const OutdoorWorkHistory = () => {
                       <MenuItem value="pending">{t('outdoorWorkHistory.pending')}</MenuItem>
                       <MenuItem value="approved">{t('outdoorWorkHistory.approved')}</MenuItem>
                       <MenuItem value="rejected">{t('outdoorWorkHistory.rejected')}</MenuItem>
+                      <MenuItem value="withdrawn">{t('outdoorWorkHistory.withdrawn')}</MenuItem>
                       <MenuItem value="cancelled">{t('outdoorWorkHistory.cancelled')}</MenuItem>
                     </Select>
                   </FormControl>
@@ -392,7 +400,7 @@ const OutdoorWorkHistory = () => {
                 </TableRow>
               ) : (
                 applications.map((app) => (
-                  <TableRow key={app.id} hover>
+                  <TableRow key={app.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/approval/${app.id}?type=outdoor_work`)}>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
                     <TableCell>{renderStackedDateTime(app.start_date, app.start_time)}</TableCell>
                     <TableCell>{renderStackedDateTime(app.end_date, app.end_time)}</TableCell>
@@ -403,7 +411,7 @@ const OutdoorWorkHistory = () => {
                     <TableCell>{app.purpose || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
-                        label={getStatusText(app.status)}
+                        label={getStatusText(app.status, app)}
                         color={getStatusColor(app.status)}
                         size="small"
                       />

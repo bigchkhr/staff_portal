@@ -144,6 +144,7 @@ const LeaveBalance = () => {
                     >
                       <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>
                         {balance.leave_type_name_zh} ({balance.leave_type_code})
+                        {balance.lifetime ? ` · ${t('leaveBalance.lifetime')}` : ''}
                       </TableCell>
                       <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'primary.dark' }}>
                         {parseFloat(balance.total).toFixed(1)}

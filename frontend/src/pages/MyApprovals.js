@@ -38,6 +38,7 @@ const MyApprovals = () => {
         params: { page: 1, limit: 1 }
       });
       const count =
+        response.data.pagination?.actionable_total ??
         response.data.pagination?.total ??
         response.data.applications?.length ??
         0;

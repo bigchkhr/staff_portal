@@ -27,8 +27,10 @@ import AdminLeaveTypes from './pages/AdminLeaveTypes';
 import AdminBalances from './pages/AdminBalances';
 import AdminAnnualLeaveBulk from './pages/AdminAnnualLeaveBulk';
 import AdminEntitlementBulk from './pages/AdminEntitlementBulk';
+import AdminSicknessAllowance from './pages/AdminSicknessAllowance';
 import AdminDepartments from './pages/AdminDepartments';
 import AdminPositions from './pages/AdminPositions';
+import AdminShiftDutyRoles from './pages/AdminShiftDutyRoles';
 import AdminGroups from './pages/AdminGroups';
 import AdminPaperFlow from './pages/AdminPaperFlow';
 import AdminExtraWorkingHoursPaperFlow from './pages/AdminExtraWorkingHoursPaperFlow';
@@ -62,7 +64,6 @@ import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
 import StoreHoursReport from './pages/StoreHoursReport';
 import StoreWageCostReport from './pages/StoreWageCostReport';
-
 // 設定後端 API 地址
 // axios.defaults.baseURL = 'http://3.1.139.29:1689';
 // axios.defaults.baseURL = 'http://ec2-3-1-139-29.ap-southeast-1.compute.amazonaws.com:1689';
@@ -116,8 +117,10 @@ function App() {
             <Route path="/admin/annual-leave-bulk" element={<PrivateRoute><AdminAnnualLeaveBulk /></PrivateRoute>} />
             <Route path="/admin/birthday-leave-bulk" element={<PrivateRoute><AdminEntitlementBulk /></PrivateRoute>} />
             <Route path="/admin/paid-sick-leave-bulk" element={<PrivateRoute><AdminEntitlementBulk /></PrivateRoute>} />
+            <Route path="/admin/sickness-allowance" element={<PrivateRoute><AdminSicknessAllowance /></PrivateRoute>} />
             <Route path="/admin/departments" element={<PrivateRoute><AdminDepartments /></PrivateRoute>} />
             <Route path="/admin/positions" element={<PrivateRoute><AdminPositions /></PrivateRoute>} />
+            <Route path="/admin/shift-duty-roles" element={<PrivateRoute><AdminShiftDutyRoles /></PrivateRoute>} />
             <Route path="/admin/stores" element={<PrivateRoute><AdminStores /></PrivateRoute>} />
             <Route path="/admin/groups" element={<PrivateRoute><AdminGroups /></PrivateRoute>} />
             <Route path="/documents/upload" element={<PrivateRoute><HRDocumentUpload /></PrivateRoute>} />
@@ -134,6 +137,7 @@ function App() {
             <Route path="/attendance" element={<PrivateRoute><Attendance /></PrivateRoute>} />
             <Route path="/shift-management" element={<PrivateRoute><ShiftManagement /></PrivateRoute>} />
             <Route path="/shift-management/user-schedules" element={<PrivateRoute><ShiftUserSchedules /></PrivateRoute>} />
+            <Route path="/shift-management/daily-duties" element={<Navigate to="/schedule" replace />} />
             <Route path="/shift-management/store-hours-report" element={<PrivateRoute><StoreHoursReport /></PrivateRoute>} />
             <Route path="/shift-management/store-wage-cost" element={<PrivateRoute><StoreWageCostReport /></PrivateRoute>} />
             <Route path="/my-roster" element={<PrivateRoute><MyRoster /></PrivateRoute>} />

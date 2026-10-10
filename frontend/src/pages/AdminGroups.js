@@ -139,6 +139,7 @@ const AdminGroups = () => {
     approver_1_id: '',
     approver_2_id: '',
     approver_3_id: '',
+    supervisor_id: '',
     closed: false
   });
 
@@ -193,6 +194,7 @@ const AdminGroups = () => {
         approver_1_id: '',
         approver_2_id: '',
         approver_3_id: '',
+        supervisor_id: '',
         closed: false
       });
     } else {
@@ -218,6 +220,7 @@ const AdminGroups = () => {
         approver_1_id: group.approver_1_id || '',
         approver_2_id: group.approver_2_id || '',
         approver_3_id: group.approver_3_id || '',
+        supervisor_id: group.supervisor_id || '',
         closed: group.closed || false
       });
     } else {
@@ -427,6 +430,7 @@ const AdminGroups = () => {
                     <TableCell>{t('adminGroups.approver1Group')}</TableCell>
                     <TableCell>{t('adminGroups.approver2Group')}</TableCell>
                     <TableCell>{t('adminGroups.approver3Group')}</TableCell>
+                    <TableCell>{t('adminGroups.supervisorGroup')}</TableCell>
                     <TableCell>{t('adminGroups.memberCount')}</TableCell>
                     <TableCell>{t('adminGroups.actions')}</TableCell>
                   </TableRow>
@@ -459,6 +463,11 @@ const AdminGroups = () => {
                         {i18n.language === 'en' 
                           ? (group.approver_3_name || group.approver_3_name_zh || '-')
                           : (group.approver_3_name_zh || group.approver_3_name || '-')}
+                      </TableCell>
+                      <TableCell>
+                        {i18n.language === 'en' 
+                          ? (group.supervisor_name || group.supervisor_name_zh || '-')
+                          : (group.supervisor_name_zh || group.supervisor_name || '-')}
                       </TableCell>
                       <TableCell>{group.user_ids?.length || 0}</TableCell>
                       <TableCell>
@@ -652,6 +661,23 @@ const AdminGroups = () => {
                     value={formData.approver_3_id}
                     label={t('adminGroups.approver3Group')}
                     onChange={(e) => setFormData(prev => ({ ...prev, approver_3_id: e.target.value }))}
+                  >
+                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
+                    {delegationGroups.filter(g => !g.closed).map((group) => (
+                      <MenuItem key={group.id} value={group.id}>
+                        {i18n.language === 'en' 
+                          ? (group.name || group.name_zh || '-')
+                          : (group.name_zh || group.name || '-')}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl>
+                  <InputLabel>{t('adminGroups.supervisorGroup')}</InputLabel>
+                  <Select
+                    value={formData.supervisor_id}
+                    label={t('adminGroups.supervisorGroup')}
+                    onChange={(e) => setFormData(prev => ({ ...prev, supervisor_id: e.target.value }))}
                   >
                     <MenuItem value="">{t('adminGroups.none')}</MenuItem>
                     {delegationGroups.filter(g => !g.closed).map((group) => (

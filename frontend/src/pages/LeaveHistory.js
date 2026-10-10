@@ -30,6 +30,7 @@ import {
   useMediaQuery,
   CircularProgress,
   Pagination,
+  Badge,
   Checkbox,
   ListItemText
 } from '@mui/material';
@@ -180,7 +181,8 @@ const LeaveHistory = () => {
     const statusMap = {
       pending: 'warning',
       approved: 'success',
-      rejected: 'error'
+      rejected: 'error',
+      withdrawn: 'default'
     };
     return statusMap[application.status] || 'default';
   };
@@ -191,10 +193,15 @@ const LeaveHistory = () => {
       return t('leaveHistory.reversed');
     }
     
+    if (application.status === 'pending' && application.current_approval_stage === 'applicant') {
+      return t('leaveHistory.returned');
+    }
+
     const statusMap = {
       pending: t('leaveHistory.pending'),
       approved: t('leaveHistory.approved'),
-      rejected: t('leaveHistory.rejected')
+      rejected: t('leaveHistory.rejected'),
+      withdrawn: t('leaveHistory.withdrawn')
     };
     return statusMap[application.status] || application.status;
   };
@@ -480,7 +487,13 @@ const LeaveHistory = () => {
         gutterBottom
         sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
       >
-        {t('leaveHistory.title')}
+        <Badge
+          badgeContent={allApplications.filter((app) => app.status === 'pending' && app.current_approval_stage === 'applicant').length}
+          color="warning"
+          max={99999}
+        >
+          <span>{t('leaveHistory.title')}</span>
+        </Badge>
       </Typography>
 
       <Paper sx={{ mt: 2, p: { xs: 1.5, sm: 2 } }}>
@@ -520,6 +533,7 @@ const LeaveHistory = () => {
                     <MenuItem value="pending">{t('leaveHistory.pending')}</MenuItem>
                     <MenuItem value="approved">{t('leaveHistory.approved')}</MenuItem>
                     <MenuItem value="rejected">{t('leaveHistory.rejected')}</MenuItem>
+                    <MenuItem value="withdrawn">{t('leaveHistory.withdrawn')}</MenuItem>
                     <MenuItem value="reversed">{t('leaveHistory.reversed')}</MenuItem>
                   </Select>
                 </FormControl>

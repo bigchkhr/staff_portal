@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Grid,
@@ -9,7 +9,8 @@ import {
   CardContent,
   CardActionArea,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Badge
 } from '@mui/material';
 import {
   Assignment as AssignmentIcon,
@@ -18,6 +19,7 @@ import {
   Work as WorkIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import axios from 'axios';
 import Layout from '../components/Layout';
 
 const MyApplications = () => {
@@ -25,6 +27,13 @@ const MyApplications = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [returnedLeaveCount, setReturnedLeaveCount] = useState(0);
+
+  useEffect(() => {
+    axios.get('/api/leaves/returned-count')
+      .then((response) => setReturnedLeaveCount(response.data.count || 0))
+      .catch(() => setReturnedLeaveCount(0));
+  }, []);
 
   const applicationItems = [
     {
@@ -35,7 +44,11 @@ const MyApplications = () => {
     },
     {
       key: 'leaveHistory',
-      icon: <HistoryIcon sx={{ fontSize: 48 }} />,
+      icon: (
+        <Badge badgeContent={returnedLeaveCount} color="warning" max={99999}>
+          <HistoryIcon sx={{ fontSize: 48 }} />
+        </Badge>
+      ),
       path: '/leave/history',
       translationKey: 'leaveHistory'
     },

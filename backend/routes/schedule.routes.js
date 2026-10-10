@@ -33,6 +33,10 @@ router.get('/', scheduleController.getSchedules.bind(scheduleController));
 // 取得幫舖排班列表（helper schedules）
 router.get('/helpers', scheduleController.getHelperSchedules.bind(scheduleController));
 
+// 當日崗位（必須放在 /:id 之前）
+router.get('/daily-duties', scheduleController.getDailyDuties.bind(scheduleController));
+router.put('/daily-duties', scheduleController.saveDailyDuties.bind(scheduleController));
+
 // 取得單一排班記錄
 router.get('/:id', scheduleController.getSchedule.bind(scheduleController));
 

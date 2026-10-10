@@ -67,17 +67,20 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [langAnchorEl, setLangAnchorEl] = useState(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [returnedLeaveCount, setReturnedLeaveCount] = useState(0);
   const [schedulePendingCount, setSchedulePendingCount] = useState(0);
   const [isApprovalMember, setIsApprovalMember] = useState(false);
 
   useEffect(() => {
     fetchPendingCount();
     fetchSchedulePendingCount();
+    fetchReturnedLeaveCount();
     checkApprovalMembership();
     // 設置定時刷新，減少更新頻率
     const interval = setInterval(() => {
       fetchPendingCount();
       fetchSchedulePendingCount();
+      fetchReturnedLeaveCount();
     }, 60000); // 改為每60秒更新一次
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +94,20 @@ const Layout = ({ children }) => {
     if (location.pathname.startsWith('/schedule') || location.pathname.startsWith('/shift-management')) {
       fetchSchedulePendingCount();
     }
+    if (location.pathname === '/my-applications' || location.pathname.startsWith('/leave/history') || location.pathname.startsWith('/approval')) {
+      fetchReturnedLeaveCount();
+    }
   }, [location.pathname]);
+
+  const fetchReturnedLeaveCount = async () => {
+    try {
+      const response = await axios.get('/api/leaves/returned-count');
+      setReturnedLeaveCount(response.data.count || 0);
+    } catch (error) {
+      console.error('獲取發還假期數量錯誤:', error);
+      setReturnedLeaveCount(0);
+    }
+  };
 
   const fetchPendingCount = async () => {
     try {
@@ -99,6 +115,7 @@ const Layout = ({ children }) => {
         params: { page: 1, limit: 1 }
       });
       const count =
+        response.data.pagination?.actionable_total ??
         response.data.pagination?.total ??
         response.data.applications?.length ??
         0;
@@ -145,11 +162,13 @@ const Layout = ({ children }) => {
         const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
         const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
         const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
+        const supervisorId = group.supervisor_id ? Number(group.supervisor_id) : null;
         
         return (checkerId !== null && userDelegationGroupIds.includes(checkerId)) ||
                (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
                (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
-               (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
+               (approver3Id !== null && userDelegationGroupIds.includes(approver3Id)) ||
+               (supervisorId !== null && userDelegationGroupIds.includes(supervisorId));
       });
       
       setIsApprovalMember(isMember);
@@ -161,7 +180,11 @@ const Layout = ({ children }) => {
 
   const menuItems = [
     { key: 'dashboard', icon: <DashboardIcon />, path: '/', show: true },
-    { key: 'myApplications', icon: <AssignmentIcon />, path: '/my-applications', show: true },
+    { key: 'myApplications', icon: (
+        <Badge badgeContent={returnedLeaveCount} color="warning" max={99999}>
+          <AssignmentIcon />
+        </Badge>
+      ), path: '/my-applications', show: true },
     { 
       key: 'myApprovals', 
       icon: (

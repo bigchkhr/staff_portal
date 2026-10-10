@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -28,27 +28,26 @@ import {
   FormControl,
   InputLabel
 } from '@mui/material';
-import { Visibility as VisibilityIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, Search as SearchIcon, Flag as FlagIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { formatDate } from '../utils/dateFormat';
 
 const ApprovalList = () => {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [applications, setApplications] = useState([]);
-  const [allApplications, setAllApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit] = useState(15); // 每頁顯示數量（與後端預設一致）
   const [totalPages, setTotalPages] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('all');
+  const appliedFilterKey = useRef(`${search}|${stageFilter}`);
   const [openingId, setOpeningId] = useState(null);
   const navigate = useNavigate();
 
@@ -79,28 +78,50 @@ const ApprovalList = () => {
   };
 
   useEffect(() => {
-    fetchPendingApprovals();
-  }, [page]);
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const fetchPendingApprovals = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get('/api/approvals/pending', {
-        params: { page, limit }
-      });
-      const fetchedApplications = response.data.applications || [];
-      setAllApplications(fetchedApplications);
-      
-      // 更新分頁信息（以後端合併排序後的總筆數為準）
-      if (response.data.pagination) {
-        setTotalPages(response.data.pagination.totalPages || 1);
+  useEffect(() => {
+    const filterKey = `${search}|${stageFilter}`;
+    if (appliedFilterKey.current !== filterKey) {
+      appliedFilterKey.current = filterKey;
+      if (page !== 1) {
+        setPage(1);
+        return;
       }
-    } catch (error) {
-      console.error('Fetch pending approvals error:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    let cancelled = false;
+    const fetchPendingApprovals = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get('/api/approvals/pending', {
+          params: {
+            page,
+            limit,
+            keyword: search || undefined,
+            stage: stageFilter !== 'all' ? stageFilter : undefined
+          }
+        });
+        if (cancelled) return;
+        setApplications(response.data.applications || []);
+        setTotalPages(response.data.pagination?.totalPages || 1);
+        if (response.data.pagination?.page && response.data.pagination.page !== page) {
+          setPage(response.data.pagination.page);
+        }
+      } catch (error) {
+        if (!cancelled) console.error('Fetch pending approvals error:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchPendingApprovals();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, limit, search, stageFilter]);
 
   const handlePageChange = (event, value) => {
     setPage(value);
@@ -119,47 +140,11 @@ const ApprovalList = () => {
     return 'completed';
   };
 
-  // 過濾申請列表
-  const filteredApplications = useMemo(() => {
-    let filtered = [...allApplications];
+  const needsMyApproval = (application) => application.view_only !== true;
 
-    // 搜尋過濾
-    if (search.trim()) {
-      const searchLower = search.toLowerCase();
-      filtered = filtered.filter(app => {
-        const transactionId = app.transaction_id?.toString().toLowerCase() || '';
-        const applicantName = app.applicant_display_name?.toLowerCase() || '';
-        const employeeNumber = (app.applicant_employee_number || app.user_employee_number || '').toLowerCase();
-        const leaveTypeName = app.leave_type_name_zh?.toLowerCase() || app.leave_type_name?.toLowerCase() || '';
-        
-        return transactionId.includes(searchLower) ||
-               applicantName.includes(searchLower) ||
-               employeeNumber.includes(searchLower) ||
-               leaveTypeName.includes(searchLower);
-      });
-    }
-
-    // 階段篩選
-    if (stageFilter !== 'all') {
-      filtered = filtered.filter(app => {
-        const stage = getCurrentStage(app);
-        return stage === stageFilter;
-      });
-    }
-
-    return filtered;
-  }, [allApplications, search, stageFilter]);
-
-  // 後端已按 page/limit 分頁；此處只做搜尋／階段篩選，勿再 slice 或用本頁筆數覆寫 totalPages（否則超過 15 筆無法翻頁）
-
-  const canApprove = (application) => {
-    const stage = getCurrentStage(application);
-    if (stage === 'checker' && application.checker_id === user.id) return true;
-    if (stage === 'approver_1' && application.approver_1_id === user.id) return true;
-    if (stage === 'approver_2' && application.approver_2_id === user.id) return true;
-    if (stage === 'approver_3' && application.approver_3_id === user.id) return true;
-    return false;
-  };
+  const renderYourTurnFlag = () => (
+    <FlagIcon color="warning" fontSize="small" sx={{ ml: 0.5 }} />
+  );
 
   const getApplicationTypeText = (app) => {
     if (app.application_type === 'extra_working_hours') {
@@ -205,6 +190,7 @@ const ApprovalList = () => {
       approver_1: t('approvalList.stageApprover1'),
       approver_2: t('approvalList.stageApprover2'),
       approver_3: t('approvalList.stageApprover3'),
+      applicant: t('approvalList.stageApplicant'),
       completed: t('approvalList.stageCompleted')
     };
     return stageMap[stage] || stage;
@@ -212,25 +198,41 @@ const ApprovalList = () => {
 
   const renderMobileCard = (app) => {
     const stage = getCurrentStage(app);
-    const canApproveThis = canApprove(app);
+    const canApproveThis = needsMyApproval(app);
 
     return (
-      <Card key={app.id} sx={{ mb: 2 }}>
+      <Card
+        key={app.id}
+        sx={{
+          mb: 2,
+          ...(canApproveThis ? { borderLeft: 4, borderColor: 'warning.main' } : {})
+        }}
+      >
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Box>
               <Typography variant="caption" color="text.secondary" display="block">
                 {t('approvalList.transactionId')}
               </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                {app.transaction_id}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                  {app.transaction_id}
+                </Typography>
+                {canApproveThis && renderYourTurnFlag()}
+              </Box>
             </Box>
-            <Chip
-              label={getStageText(stage)}
-              color={canApproveThis ? 'warning' : 'default'}
-              size="small"
-            />
+            <Box>
+              <Chip
+                label={getStageText(stage)}
+                color={canApproveThis ? 'warning' : 'default'}
+                size="small"
+              />
+              {app.return_reason && (
+                <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5, maxWidth: 180 }}>
+                  {t('approvalList.returnReason')}：{app.return_reason}
+                </Typography>
+              )}
+            </Box>
           </Box>
 
           <Divider sx={{ my: 1.5 }} />
@@ -379,14 +381,6 @@ const ApprovalList = () => {
     );
   };
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <Box sx={{ px: { xs: 1, sm: 2 }, py: { xs: 1, sm: 2 } }}>
       <Typography 
@@ -403,11 +397,8 @@ const ApprovalList = () => {
           <TextField
             fullWidth
             placeholder={t('approvalList.searchPlaceholder') || t('common.search')}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1); // 重置到第一頁
-            }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -421,10 +412,7 @@ const ApprovalList = () => {
             <InputLabel>{t('approvalList.currentStage')}</InputLabel>
             <Select
               value={stageFilter}
-              onChange={(e) => {
-                setStageFilter(e.target.value);
-                setPage(1); // 重置到第一頁
-              }}
+              onChange={(e) => setStageFilter(e.target.value)}
               label={t('approvalList.currentStage')}
             >
               <MenuItem value="all">{t('approvalList.allStages') || t('common.all')}</MenuItem>
@@ -437,15 +425,19 @@ const ApprovalList = () => {
           </FormControl>
         </Box>
 
-        {isMobile ? (
+        {loading ? (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="240px">
+            <CircularProgress />
+          </Box>
+        ) : isMobile ? (
           // 手機版：卡片式布局
           <Box>
-            {filteredApplications.length === 0 ? (
+            {applications.length === 0 ? (
               <Alert severity="info" sx={{ mt: 2 }}>
                 {t('approvalList.noPendingApplications')}
               </Alert>
             ) : (
-              filteredApplications.map((app) => renderMobileCard(app))
+              applications.map((app) => renderMobileCard(app))
             )}
           </Box>
         ) : (
@@ -473,18 +465,27 @@ const ApprovalList = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredApplications.length === 0 ? (
+                {applications.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} align="center">{t('approvalList.noPendingApplications')}</TableCell>
                   </TableRow>
                 ) : (
-                  filteredApplications.map((app) => {
+                  applications.map((app) => {
                     const stage = getCurrentStage(app);
-                    const canApproveThis = canApprove(app);
+                    const canApproveThis = needsMyApproval(app);
                     
                     return (
-                      <TableRow key={app.id} hover>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
+                      <TableRow
+                        key={app.id}
+                        hover
+                        sx={canApproveThis ? { boxShadow: 'inset 4px 0 0 #ed6c02' } : undefined}
+                      >
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {app.transaction_id}
+                            {canApproveThis && renderYourTurnFlag()}
+                          </Box>
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {app.applicant_display_name}
                           {(app.applicant_employee_number || app.user_employee_number) && (
@@ -525,12 +526,17 @@ const ApprovalList = () => {
                             return display.value;
                           })()}
                         </TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        <TableCell>
                           <Chip
                             label={getStageText(stage)}
                             color={canApproveThis ? 'warning' : 'default'}
                             size="small"
                           />
+                          {app.return_reason && (
+                            <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5, whiteSpace: 'normal', maxWidth: 220 }}>
+                              {t('approvalList.returnReason')}：{app.return_reason}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Button

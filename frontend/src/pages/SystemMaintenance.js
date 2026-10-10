@@ -16,6 +16,7 @@ import {
   EventNote as EventNoteIcon,
   Business as BusinessIcon,
   Work as WorkIcon,
+  Badge as BadgeIcon,
   Group as GroupIcon,
   CalendarToday as CalendarTodayIcon,
   Storefront as StorefrontIcon,
@@ -54,6 +55,12 @@ const SystemMaintenance = () => {
       icon: <WorkIcon sx={{ fontSize: 48 }} />,
       path: '/admin/positions',
       translationKey: 'positionManagement'
+    },
+    {
+      key: 'shiftDutyRoleManagement',
+      icon: <BadgeIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/shift-duty-roles',
+      translationKey: 'shiftDutyRoleManagement'
     },
     {
       key: 'groupManagement',

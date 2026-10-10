@@ -14,6 +14,12 @@ import {
   ListItemText,
   Card,
   CardContent,
+  FormControl,
+  FormControlLabel,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
   IconButton,
   Link,
   Dialog,
@@ -30,11 +36,13 @@ import {
   TableHead,
   TableRow
 } from '@mui/material';
-import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon, Upload as UploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon, Upload as UploadIcon, Delete as DeleteIcon, AttachFile as AttachFileIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
-import { formatDateTime, formatDate } from '../utils/dateFormat';
+import { formatDateTime, formatDate, toHKCalendarDate, toHKDayjs } from '../utils/dateFormat';
+import { calculateLeaveDays } from '../utils/leaveDays';
+import YearSelector from '../components/YearSelector';
 import Swal from 'sweetalert2';
 
 const ApprovalDetail = () => {
@@ -62,6 +70,16 @@ const ApprovalDetail = () => {
   const [viewingFile, setViewingFile] = useState(null);
   const [fileBlobUrl, setFileBlobUrl] = useState(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [workflow, setWorkflow] = useState(null);
+  const [returnStage, setReturnStage] = useState('');
+  const [workflowReason, setWorkflowReason] = useState('');
+  const [workflowActing, setWorkflowActing] = useState(false);
+  const [reviseForm, setReviseForm] = useState(null);
+  const [reviseDialogOpen, setReviseDialogOpen] = useState(false);
+  const [reviseIncludeWeekends, setReviseIncludeWeekends] = useState(false);
+  const [reviseYearManual, setReviseYearManual] = useState(false);
+  const [reviseFiles, setReviseFiles] = useState([]);
+  const [leaveTypes, setLeaveTypes] = useState([]);
   const [hrRejectionReason, setHrRejectionReason] = useState('');
   const [hrRejecting, setHrRejecting] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -117,6 +135,17 @@ const ApprovalDetail = () => {
       }
       console.log('Application data:', response.data.application);
       setApplication(response.data.application);
+      try {
+        const workflowResponse = await axios.get(`/api/approvals/${id}/workflow`, {
+          params: { application_type: type }
+        });
+        setWorkflow(workflowResponse.data);
+        const targets = workflowResponse.data.return_targets || [];
+        setReturnStage(targets[0]?.stage || '');
+      } catch (workflowError) {
+        console.error('Fetch workflow error:', workflowError);
+        setWorkflow(null);
+      }
     } catch (error) {
       console.error('Fetch application error:', error);
       let errorMessage = t('approvalDetail.fetchError');
@@ -538,6 +567,227 @@ const ApprovalDetail = () => {
     resetImageTransform();
     setFileDialogOpen(false);
     setViewingFile(null);
+  };
+
+  const stageLabel = (stage) => {
+    const stageMap = {
+      applicant: t('approvalDetail.stageApplicant'),
+      checker: t('approvalDetail.stageChecker'),
+      approver_1: t('approvalDetail.stageApprover1'),
+      approver_2: t('approvalDetail.stageApprover2'),
+      approver_3: t('approvalDetail.stageApprover3')
+    };
+    return stageMap[stage] || stage;
+  };
+
+  const refreshAfterWorkflow = async (title) => {
+    await Swal.fire({
+      icon: 'success',
+      title,
+      confirmButtonText: t('common.confirm'),
+      confirmButtonColor: '#28a745'
+    });
+    setWorkflowReason('');
+    await fetchApplication(applicationType);
+  };
+
+  const handleWithdraw = async () => {
+    if (!workflowReason.trim()) {
+      await Swal.fire({ icon: 'warning', title: t('approvalDetail.reasonRequired'), confirmButtonText: t('common.confirm') });
+      return;
+    }
+    const confirmed = await Swal.fire({
+      icon: 'warning',
+      title: t('approvalDetail.confirmWithdraw'),
+      showCancelButton: true,
+      confirmButtonText: t('approvalDetail.withdraw'),
+      cancelButtonText: t('common.cancel')
+    });
+    if (!confirmed.isConfirmed) return;
+    try {
+      setWorkflowActing(true);
+      await axios.post(`/api/approvals/${id}/withdraw`, {
+        application_type: applicationType,
+        reason: workflowReason.trim()
+      });
+      await refreshAfterWorkflow(t('approvalDetail.withdrawSuccess'));
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: error.response?.data?.message || t('approvalDetail.operationFailed'),
+        confirmButtonText: t('common.confirm')
+      });
+    } finally {
+      setWorkflowActing(false);
+    }
+  };
+
+  const handleReturnApplication = async () => {
+    if (!returnStage || !workflowReason.trim()) {
+      await Swal.fire({ icon: 'warning', title: t('approvalDetail.reasonRequired'), confirmButtonText: t('common.confirm') });
+      return;
+    }
+    try {
+      setWorkflowActing(true);
+      await axios.post(`/api/approvals/${id}/return`, {
+        application_type: applicationType,
+        to_stage: returnStage,
+        reason: workflowReason.trim()
+      });
+      await refreshAfterWorkflow(t('approvalDetail.returnSuccess'));
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: error.response?.data?.message || t('approvalDetail.operationFailed'),
+        confirmButtonText: t('common.confirm')
+      });
+    } finally {
+      setWorkflowActing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (applicationType !== 'leave' || !workflow?.can_resubmit || !application) return;
+    const isStore = user?.position_stream === 'Store';
+    const startDate = toHKCalendarDate(application.start_date) || '';
+    const startYear = startDate ? toHKDayjs(startDate).year() : toHKDayjs(new Date()).year();
+    const applicationYear = Number(application.year || startYear);
+    setReviseIncludeWeekends(isStore);
+    setReviseYearManual(Number(applicationYear) !== Number(startYear));
+    setReviseForm({
+      leave_type_id: application.leave_type_id || '',
+      start_date: startDate,
+      start_session: application.start_session || 'AM',
+      end_date: toHKCalendarDate(application.end_date) || '',
+      end_session: application.end_session || 'PM',
+      total_days: '',
+      reason: application.reason || '',
+      year: applicationYear,
+      exclude_public_holidays: !isStore
+    });
+    axios.get('/api/leave-types/available-in-flow')
+      .then((response) => setLeaveTypes(response.data.leaveTypes || response.data.leave_types || response.data || []))
+      .catch((error) => console.error('Fetch leave types error:', error));
+  }, [applicationType, workflow?.can_resubmit, application, user?.position_stream]);
+
+  useEffect(() => {
+    if (!reviseForm?.start_date || !reviseForm?.end_date) return;
+    let cancelled = false;
+    const updateDays = async () => {
+      const days = await calculateLeaveDays(
+        reviseForm.start_date,
+        reviseForm.end_date,
+        reviseForm.start_session,
+        reviseForm.end_session,
+        reviseIncludeWeekends,
+        reviseForm.exclude_public_holidays
+      );
+      if (cancelled) return;
+      const startYear = toHKDayjs(reviseForm.start_date)?.year();
+      setReviseForm((prev) => {
+        if (!prev) return prev;
+        const nextYear = reviseYearManual ? prev.year : startYear;
+        const nextDays = days > 0 ? String(days) : '';
+        if (String(prev.total_days) === nextDays && Number(prev.year) === Number(nextYear)) return prev;
+        return { ...prev, total_days: nextDays, year: nextYear };
+      });
+    };
+    updateDays();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    reviseForm?.start_date,
+    reviseForm?.end_date,
+    reviseForm?.start_session,
+    reviseForm?.end_session,
+    reviseForm?.exclude_public_holidays,
+    reviseIncludeWeekends,
+    reviseYearManual
+  ]);
+
+  const handleReviseFileChange = async (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp', 'image/tiff', 'image/tif', 'application/pdf'];
+    const allowedExtensions = ['.pdf', '.jpeg', '.jpg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'];
+    const maxSize = 5 * 1024 * 1024;
+    const validFiles = [];
+    const errors = [];
+
+    selectedFiles.forEach((file) => {
+      const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+      const isValidType = allowedTypes.includes(file.type) || allowedExtensions.includes(fileExt);
+      const isValidSize = file.size <= maxSize;
+      if (!isValidType) {
+        errors.push(`${file.name}: ${t('leaveApplication.unsupportedFileType', { types: allowedExtensions.join(', ') })}`);
+      } else if (!isValidSize) {
+        errors.push(`${file.name}: ${t('leaveApplication.fileSizeLimit')}`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (errors.length > 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: t('approvalDetail.uploadError'),
+        html: errors.join('<br>'),
+        confirmButtonText: t('common.confirm')
+      });
+    }
+    if (validFiles.length > 0) {
+      setReviseFiles((prev) => [...prev, ...validFiles]);
+    }
+    e.target.value = '';
+  };
+
+  const handleReviseCameraCapture = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.onchange = async (event) => {
+      if (event.target.files && event.target.files.length > 0) {
+        await handleReviseFileChange(event);
+      }
+    };
+    input.click();
+  };
+
+  const handleResubmit = async () => {
+    try {
+      setWorkflowActing(true);
+      if (applicationType === 'leave') {
+        if (!reviseForm?.start_date || !reviseForm?.end_date || !reviseForm?.leave_type_id || !reviseForm?.total_days) {
+          await Swal.fire({ icon: 'warning', title: t('approvalDetail.fillRequiredFields'), confirmButtonText: t('common.confirm') });
+          return;
+        }
+        await axios.put(`/api/leaves/${id}/revise`, reviseForm);
+        if (reviseFiles.length > 0) {
+          const formData = new FormData();
+          reviseFiles.forEach((file) => formData.append('files', file));
+          await axios.post(`/api/leaves/${id}/documents`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          setReviseFiles([]);
+          await fetchDocuments();
+        }
+      }
+      await axios.post(`/api/approvals/${id}/resubmit`, {
+        application_type: applicationType
+      });
+      setReviseFiles([]);
+      setReviseDialogOpen(false);
+      await refreshAfterWorkflow(t('approvalDetail.resubmitSuccess'));
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: error.response?.data?.message || t('approvalDetail.operationFailed'),
+        confirmButtonText: t('common.confirm')
+      });
+    } finally {
+      setWorkflowActing(false);
+    }
   };
 
   const applicantGroupPositionSubtitle = useMemo(() => {
@@ -1377,79 +1627,174 @@ const ApprovalDetail = () => {
               </>
             )}
           </Paper>
+          {workflow?.actions?.length > 0 && (
+            <Paper sx={{ p: 2, mt: 2 }}>
+              <Typography variant="h6" gutterBottom>{t('approvalDetail.actionHistory')}</Typography>
+              <List>
+                {workflow.actions.map((item) => (
+                  <ListItem key={item.id} disablePadding sx={{ py: 0.5 }}>
+                    <ListItemText
+                      primary={`${item.actor_display_name || '-'} · ${
+                        item.action === 'withdrawn'
+                          ? t('approvalDetail.withdraw')
+                          : item.action === 'returned'
+                            ? `${t('approvalDetail.returnTo')} ${stageLabel(item.to_stage)}`
+                            : t('approvalDetail.resubmit')
+                      }`}
+                      secondary={
+                        <>
+                          {item.reason && (
+                            <Typography component="span" variant="body2" sx={{ display: 'block', color: 'error.main', fontWeight: 700 }}>
+                              {item.reason}
+                            </Typography>
+                          )}
+                          {item.created_at ? formatDateTime(item.created_at) : null}
+                        </>
+                      }
+                      secondaryTypographyProps={{ component: 'div' }}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+          )}
         </Grid>
 
-        {canApproveThis && application.status === 'pending' && (
-          <Grid item xs={12} md={4}>
-            <Card>
+        <Grid item xs={12} md={4}>
+        {((canApproveThis && application.status === 'pending') || workflow?.can_withdraw || workflow?.can_return || workflow?.can_resubmit) && (
+            <Card sx={{ mb: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   {t('approvalDetail.approvalAction')}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {t('approvalDetail.approvalStage')}：{displayText}
-                </Typography>
+                {(canApproveThis || workflow?.can_return) && application.status === 'pending' && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {t('approvalDetail.approvalStage')}：{displayText}
+                  </Typography>
+                )}
 
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label={t('approvalDetail.approvalComment')}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  sx={{ mb: 2 }}
-                />
+                {(action === 'return' || action === 'withdraw') ? (
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label={action === 'return' ? t('approvalDetail.returnReason') : t('approvalDetail.withdrawReason')}
+                    value={workflowReason}
+                    onChange={(e) => setWorkflowReason(e.target.value)}
+                    sx={{ mb: 2 }}
+                  />
+                ) : canApproveThis && application.status === 'pending' && (
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label={t('approvalDetail.approvalComment')}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    sx={{ mb: 2 }}
+                  />
+                )}
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                  {canApproveThis && (
+                <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                  {canApproveThis && application.status === 'pending' && (
                     <Button
                       variant={action === 'approve' ? 'contained' : 'outlined'}
                       color="success"
                       onClick={() => setAction('approve')}
                       fullWidth
+                      sx={{ flex: '1 1 45%' }}
                     >
                       {t('approvalDetail.approve')}
                     </Button>
                   )}
-                  {canRejectThis && (
+                  {canRejectThis && application.status === 'pending' && (
                     <Button
                       variant={action === 'reject' ? 'contained' : 'outlined'}
                       color="error"
                       onClick={() => setAction('reject')}
                       fullWidth
+                      sx={{ flex: '1 1 45%' }}
                     >
                       {t('approvalDetail.reject')}
                     </Button>
                   )}
+                  {(workflow?.can_withdraw || workflow?.can_return) && (
+                    <Button
+                      variant={action === 'return' || action === 'withdraw' ? 'contained' : 'outlined'}
+                      color="warning"
+                      onClick={() => setAction(workflow.can_return ? 'return' : 'withdraw')}
+                      disabled={workflowActing}
+                      fullWidth
+                      sx={{ flex: '1 1 100%' }}
+                    >
+                      {t('approvalDetail.workflowAction')}
+                    </Button>
+                  )}
                 </Box>
 
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleSubmit}
-                  disabled={approving || !action}
-                  sx={{
-                    opacity: !action ? 0.5 : 1,
-                    cursor: !action ? 'not-allowed' : 'pointer',
-                    '&:disabled': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.12)',
-                      color: 'rgba(0, 0, 0, 0.26)'
-                    }
-                  }}
-                >
-                  {approving ? t('approvalDetail.processing') : !action ? t('approvalDetail.selectAction') : t('approvalDetail.submit')}
-                </Button>
+                {action === 'return' && (
+                  <FormControl fullWidth sx={{ mb: 2 }}>
+                    <InputLabel>{t('approvalDetail.returnTo')}</InputLabel>
+                    <Select
+                      value={returnStage}
+                      label={t('approvalDetail.returnTo')}
+                      onChange={(e) => setReturnStage(e.target.value)}
+                    >
+                      {(workflow?.return_targets || []).map((target) => (
+                        <MenuItem key={target.stage} value={target.stage}>
+                          {stageLabel(target.stage)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+
+                {((canApproveThis && application.status === 'pending') || workflow?.can_withdraw || workflow?.can_return) && (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    onClick={() => {
+                      if (action === 'return') handleReturnApplication();
+                      else if (action === 'withdraw') handleWithdraw();
+                      else handleSubmit();
+                    }}
+                    disabled={approving || workflowActing || !action}
+                    sx={{
+                      mb: workflow?.can_resubmit ? 1 : 0,
+                      opacity: !action ? 0.5 : 1,
+                      cursor: !action ? 'not-allowed' : 'pointer',
+                      '&:disabled': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.12)',
+                        color: 'rgba(0, 0, 0, 0.26)'
+                      }
+                    }}
+                  >
+                    {(approving || workflowActing)
+                      ? t('approvalDetail.processing')
+                      : !action
+                        ? t('approvalDetail.selectAction')
+                        : t('approvalDetail.submit')}
+                  </Button>
+                )}
+
+                {workflow?.can_resubmit && applicationType === 'leave' && (
+                  <Button fullWidth color="primary" variant="contained" disabled={workflowActing} onClick={() => setReviseDialogOpen(true)}>
+                    {t('approvalDetail.reviseAndResubmit')}
+                  </Button>
+                )}
+                {workflow?.can_resubmit && applicationType !== 'leave' && (
+                  <Button fullWidth color="primary" variant="contained" disabled={workflowActing} onClick={handleResubmit}>
+                    {t('approvalDetail.resubmit')}
+                  </Button>
+                )}
               </CardContent>
             </Card>
-          </Grid>
         )}
 
-        {/* HR Group 獲授權人專用拒絕操作 Grid */}
         {user?.is_hr_member && 
          application?.status === 'pending' && 
          currentStage !== 'completed' && (
-          <Grid item xs={12} md={4}>
-            <Card>
+            <Card sx={{ mt: 2 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
                   {t('approvalDetail.hrRejectionAction')}
@@ -1486,9 +1831,209 @@ const ApprovalDetail = () => {
                 </Button>
               </CardContent>
             </Card>
-          </Grid>
         )}
+        </Grid>
       </Grid>
+
+      <Dialog
+        open={reviseDialogOpen}
+        onClose={() => {
+          if (!workflowActing) setReviseDialogOpen(false);
+        }}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>{t('approvalDetail.reviseAndResubmit')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t('approvalDetail.reviseHint')}
+          </Typography>
+          {reviseForm && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+              <FormControl fullWidth>
+                <InputLabel>{t('approvalDetail.leaveType')}</InputLabel>
+                <Select
+                  value={reviseForm.leave_type_id}
+                  label={t('approvalDetail.leaveType')}
+                  onChange={(e) => setReviseForm((prev) => ({ ...prev, leave_type_id: e.target.value }))}
+                >
+                  {(Array.isArray(leaveTypes) ? leaveTypes : []).map((type) => (
+                    <MenuItem key={type.id} value={type.id}>
+                      {i18n.language === 'en' ? (type.name || type.name_zh) : (type.name_zh || type.name)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <YearSelector
+                value={reviseForm.year}
+                onChange={(year) => {
+                  setReviseYearManual(true);
+                  setReviseForm((prev) => ({ ...prev, year: Number(year) }));
+                }}
+                labelKey="leaveApplication.year"
+                suffix={t('leaveApplication.yearSuffix')}
+                fullWidth
+                required
+              />
+              <TextField
+                type="date"
+                label={t('approvalDetail.startDate')}
+                value={reviseForm.start_date}
+                onChange={(e) => setReviseForm((prev) => ({ ...prev, start_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+              />
+              <FormControl fullWidth>
+                <InputLabel>{t('approvalDetail.startSession')}</InputLabel>
+                <Select
+                  value={reviseForm.start_session}
+                  label={t('approvalDetail.startSession')}
+                  onChange={(e) => setReviseForm((prev) => ({ ...prev, start_session: e.target.value }))}
+                >
+                  <MenuItem value="AM">{t('approvalDetail.am')}</MenuItem>
+                  <MenuItem value="PM">{t('approvalDetail.pm')}</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                type="date"
+                label={t('approvalDetail.endDate')}
+                value={reviseForm.end_date}
+                onChange={(e) => setReviseForm((prev) => ({ ...prev, end_date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                inputProps={{ min: reviseForm.start_date || undefined }}
+              />
+              <FormControl fullWidth>
+                <InputLabel>{t('approvalDetail.endSession')}</InputLabel>
+                <Select
+                  value={reviseForm.end_session}
+                  label={t('approvalDetail.endSession')}
+                  onChange={(e) => setReviseForm((prev) => ({ ...prev, end_session: e.target.value }))}
+                >
+                  <MenuItem value="AM">{t('approvalDetail.am')}</MenuItem>
+                  <MenuItem value="PM">{t('approvalDetail.pm')}</MenuItem>
+                </Select>
+              </FormControl>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={reviseIncludeWeekends}
+                      onChange={(e) => setReviseIncludeWeekends(e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={t('leaveApplication.includeWeekends')}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {reviseIncludeWeekends
+                    ? t('leaveApplication.includeWeekendsDescription1')
+                    : t('leaveApplication.includeWeekendsDescription2')}
+                </Typography>
+              </Box>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={!!reviseForm.exclude_public_holidays}
+                      onChange={(e) => setReviseForm((prev) => ({ ...prev, exclude_public_holidays: e.target.checked }))}
+                      color="primary"
+                    />
+                  }
+                  label={t('leaveApplication.excludePublicHolidays')}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {reviseForm.exclude_public_holidays
+                    ? t('leaveApplication.excludePublicHolidaysDescription1')
+                    : t('leaveApplication.excludePublicHolidaysDescription2')}
+                </Typography>
+              </Box>
+              <TextField
+                type="number"
+                label={t('approvalDetail.days')}
+                value={reviseForm.total_days}
+                disabled
+                inputProps={{ min: 0.5, step: 0.5 }}
+              />
+              <TextField
+                multiline
+                rows={3}
+                label={t('approvalDetail.reason')}
+                value={reviseForm.reason}
+                onChange={(e) => setReviseForm((prev) => ({ ...prev, reason: e.target.value }))}
+              />
+              <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500, whiteSpace: 'pre-line' }}>
+                {t('leaveApplication.documentRequirementNotice')}
+              </Typography>
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  {t('leaveApplication.attachFilesTitle')}
+                </Typography>
+                {documents.length > 0 && (
+                  <List dense>
+                    {documents.map((doc) => (
+                      <ListItem key={doc.id} disablePadding>
+                        <ListItemText
+                          primary={doc.file_name}
+                          secondary={doc.file_size ? formatFileSize(doc.file_size) : ''}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                  <Button variant="outlined" component="label" startIcon={<AttachFileIcon />} disabled={workflowActing}>
+                    {t('leaveApplication.selectFile')}
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      accept=".pdf,.jpeg,.jpg,.png,.gif,.bmp,.webp,.tiff,.tif,image/*"
+                      onChange={handleReviseFileChange}
+                    />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<CameraIcon />}
+                    onClick={handleReviseCameraCapture}
+                    disabled={workflowActing}
+                  >
+                    {t('leaveApplication.takePhoto')}
+                  </Button>
+                </Box>
+                {reviseFiles.length > 0 && (
+                  <List dense>
+                    {reviseFiles.map((file, index) => (
+                      <ListItem
+                        key={`${file.name}-${index}`}
+                        secondaryAction={
+                          <IconButton
+                            edge="end"
+                            aria-label={t('leaveApplication.removeFileLabel')}
+                            onClick={() => setReviseFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))}
+                            disabled={workflowActing}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        }
+                      >
+                        <ListItemText primary={file.name} secondary={formatFileSize(file.size)} />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setReviseDialogOpen(false)} disabled={workflowActing}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="contained" onClick={handleResubmit} disabled={workflowActing || !reviseForm}>
+            {workflowActing ? t('approvalDetail.processing') : t('approvalDetail.reviseAndResubmit')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 文件查看 Dialog */}
       <Dialog

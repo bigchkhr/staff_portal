@@ -32,6 +32,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Search as SearchIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,6 +40,7 @@ import { formatDate } from '../utils/dateFormat';
 
 const ExtraWorkingHoursHistory = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -104,17 +106,22 @@ const ExtraWorkingHoursHistory = () => {
       pending: 'warning',
       approved: 'success',
       rejected: 'error',
-      cancelled: 'default'
+      cancelled: 'default',
+      withdrawn: 'default'
     };
     return statusMap[status] || 'default';
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = (status, app) => {
+    if (app?.status === 'pending' && app?.current_approval_stage === 'applicant') {
+      return t('approvalHistory.returned');
+    }
     const statusMap = {
       pending: t('extraWorkingHoursHistory.pending'),
       approved: t('extraWorkingHoursHistory.approved'),
       rejected: t('extraWorkingHoursHistory.rejected'),
-      cancelled: t('extraWorkingHoursHistory.cancelled')
+      cancelled: t('extraWorkingHoursHistory.cancelled'),
+      withdrawn: t('extraWorkingHoursHistory.withdrawn')
     };
     return statusMap[status] || status;
   };
@@ -168,7 +175,7 @@ const ExtraWorkingHoursHistory = () => {
   }, [search, allApplications]);
 
   const renderMobileCard = (app) => (
-    <Card key={app.id} sx={{ mb: 2 }}>
+    <Card key={app.id} sx={{ mb: 2, cursor: 'pointer' }} onClick={() => navigate(`/approval/${app.id}?type=extra_working_hours`)}>
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
@@ -180,7 +187,7 @@ const ExtraWorkingHoursHistory = () => {
             </Typography>
           </Box>
           <Chip
-            label={getStatusText(app.status)}
+            label={getStatusText(app.status, app)}
             color={getStatusColor(app.status)}
             size="small"
           />
@@ -269,6 +276,7 @@ const ExtraWorkingHoursHistory = () => {
                       <MenuItem value="pending">{t('extraWorkingHoursHistory.pending')}</MenuItem>
                       <MenuItem value="approved">{t('extraWorkingHoursHistory.approved')}</MenuItem>
                       <MenuItem value="rejected">{t('extraWorkingHoursHistory.rejected')}</MenuItem>
+                      <MenuItem value="withdrawn">{t('extraWorkingHoursHistory.withdrawn')}</MenuItem>
                       <MenuItem value="cancelled">{t('extraWorkingHoursHistory.cancelled')}</MenuItem>
                     </Select>
                   </FormControl>
@@ -353,7 +361,7 @@ const ExtraWorkingHoursHistory = () => {
                 </TableRow>
               ) : (
                 applications.map((app) => (
-                  <TableRow key={app.id} hover>
+                  <TableRow key={app.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/approval/${app.id}?type=extra_working_hours`)}>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{app.transaction_id}</TableCell>
                     <TableCell>{renderStackedDateTime(app.start_date, app.start_time)}</TableCell>
                     <TableCell>{renderStackedDateTime(app.end_date, app.end_time)}</TableCell>
@@ -368,7 +376,7 @@ const ExtraWorkingHoursHistory = () => {
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       <Chip
-                        label={getStatusText(app.status)}
+                        label={getStatusText(app.status, app)}
                         color={getStatusColor(app.status)}
                         size="small"
                       />

@@ -450,7 +450,8 @@ const ApprovalHistory = () => {
         pending: 'warning',
         approved: 'success',
         rejected: 'error',
-        cancelled: 'default'
+        cancelled: 'default',
+        withdrawn: 'default'
       };
       return statusMap[application] || 'default';
     }
@@ -459,7 +460,8 @@ const ApprovalHistory = () => {
       pending: 'warning',
       approved: 'success',
       rejected: 'error',
-      cancelled: 'default'
+      cancelled: 'default',
+      withdrawn: 'default'
     };
     return statusMap[application.status] || 'default';
   }, []);
@@ -476,16 +478,22 @@ const ApprovalHistory = () => {
         pending: t('approvalHistory.pending'),
         approved: t('approvalHistory.approved'),
         rejected: t('approvalHistory.rejected'),
-        cancelled: t('approvalHistory.cancelled')
+        cancelled: t('approvalHistory.cancelled'),
+        withdrawn: t('approvalHistory.withdrawn')
       };
       return statusMap[application] || application;
+    }
+
+    if (application.status === 'pending' && application.current_approval_stage === 'applicant') {
+      return t('approvalHistory.returned');
     }
     
     const statusMap = {
       pending: t('approvalHistory.pending'),
       approved: t('approvalHistory.approved'),
       rejected: t('approvalHistory.rejected'),
-      cancelled: t('approvalHistory.cancelled')
+      cancelled: t('approvalHistory.cancelled'),
+      withdrawn: t('approvalHistory.withdrawn')
     };
     return statusMap[application.status] || application.status;
   }, [t]);
@@ -519,6 +527,18 @@ const ApprovalHistory = () => {
       }
     }
     
+    if (application.status === 'pending' && application.current_approval_stage) {
+      const currentStageMap = {
+        checker: t('approvalHistory.stageChecker'),
+        approver_1: t('approvalHistory.stageApprover1'),
+        approver_2: t('approvalHistory.stageApprover2'),
+        approver_3: t('approvalHistory.stageApprover3'),
+        applicant: t('approvalList.stageApplicant'),
+        completed: t('approvalHistory.stageCompleted')
+      };
+      return currentStageMap[application.current_approval_stage] || t('approvalHistory.stageUnknown');
+    }
+
     // 優先使用後端返回的 user_approval_stage
     if (application.user_approval_stage) {
       const stageMap = {
@@ -993,7 +1013,9 @@ const ApprovalHistory = () => {
                     <MenuItem value="all">{t('approvalHistory.all')}</MenuItem>
                     <MenuItem value="approved">{t('approvalHistory.approved')}</MenuItem>
                     <MenuItem value="rejected">{t('approvalHistory.rejected')}</MenuItem>
+                    <MenuItem value="pending">{t('approvalHistory.pending')}</MenuItem>
                     <MenuItem value="cancelled">{t('approvalHistory.cancelled')}</MenuItem>
+                    <MenuItem value="withdrawn">{t('approvalHistory.withdrawn')}</MenuItem>
                     <MenuItem value="reversed">{t('approvalHistory.reversed')}</MenuItem>
                   </Select>
                 </FormControl>

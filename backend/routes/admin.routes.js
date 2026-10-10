@@ -42,4 +42,9 @@ router.post('/stores', adminController.createStore);
 router.put('/stores/:id', adminController.updateStore);
 router.delete('/stores/:id', adminController.deleteStore);
 
+router.get('/shift-duty-roles', adminController.getShiftDutyRoles);
+router.post('/shift-duty-roles', adminController.createShiftDutyRole);
+router.put('/shift-duty-roles/:id', adminController.updateShiftDutyRole);
+router.delete('/shift-duty-roles/:id', adminController.deleteShiftDutyRole);
+
 module.exports = router;

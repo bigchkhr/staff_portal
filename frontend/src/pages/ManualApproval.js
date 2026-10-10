@@ -18,7 +18,8 @@ import {
   AccountBalanceWallet as AccountBalanceWalletIcon,
   EventAvailable as EventAvailableIcon,
   Cake as CakeIcon,
-  Healing as HealingIcon
+  Healing as HealingIcon,
+  LocalHospital as LocalHospitalIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import Layout from '../components/Layout';
@@ -71,6 +72,12 @@ const ManualApproval = () => {
       icon: <HealingIcon sx={{ fontSize: 48 }} />,
       path: '/admin/paid-sick-leave-bulk',
       translationKey: 'paidSickLeaveBulk'
+    },
+    {
+      key: 'sicknessAllowanceBulk',
+      icon: <LocalHospitalIcon sx={{ fontSize: 48 }} />,
+      path: '/admin/sickness-allowance',
+      translationKey: 'sicknessAllowanceBulk'
     }
   ];
 

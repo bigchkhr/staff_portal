@@ -4,6 +4,7 @@ const LeaveBalance = require('../database/models/LeaveBalance');
 const LeaveBalanceTransaction = require('../database/models/LeaveBalanceTransaction');
 const Department = require('../database/models/Department');
 const Position = require('../database/models/Position');
+const ShiftDutyRole = require('../database/models/ShiftDutyRole');
 const { hashPassword } = require('../utils/password');
 const knex = require('../config/database');
 const { toHKCalendarDate } = require('../utils/hkDate');
@@ -22,6 +23,32 @@ const {
   grantSicknessAllowanceManual,
   isSicknessAllowance
 } = require('../services/sicknessAllowance.service');
+
+function normalizeDutyRolePayload(body, { partial = false } = {}) {
+  const payload = {};
+  if (!partial || body.name !== undefined) {
+    payload.name = body.name != null ? String(body.name).trim() : '';
+  }
+  if (!partial || body.name_zh !== undefined) {
+    payload.name_zh = body.name_zh != null ? String(body.name_zh).trim() : '';
+  }
+  if (!partial || body.code !== undefined) {
+    const code = body.code != null ? String(body.code).trim() : '';
+    payload.code = code || null;
+  }
+  if (!partial || body.description !== undefined) {
+    const description = body.description != null ? String(body.description).trim() : '';
+    payload.description = description || null;
+  }
+  if (!partial || body.display_order !== undefined) {
+    const order = parseInt(body.display_order, 10);
+    payload.display_order = Number.isNaN(order) ? 0 : order;
+  }
+  if (!partial || body.is_active !== undefined) {
+    payload.is_active = body.is_active !== false && body.is_active !== 'false';
+  }
+  return payload;
+}
 
 function normalizeBirthdayFields(birthday_month, birthday_day) {
   const month = parseBirthdayMonth(birthday_month);
@@ -1196,6 +1223,76 @@ class AdminController {
     } catch (error) {
       console.error('Manual sickness allowance error:', error);
       res.status(500).json({ message: '人手發放疾病津貼假時發生錯誤', error: error.message });
+    }
+  }
+
+  async getShiftDutyRoles(req, res) {
+    try {
+      const roles = await ShiftDutyRole.findAll({ includeInactive: true });
+      res.json({ roles });
+    } catch (error) {
+      console.error('Get shift duty roles error:', error);
+      res.status(500).json({ message: '獲取崗位列表時發生錯誤', error: error.message });
+    }
+  }
+
+  async createShiftDutyRole(req, res) {
+    try {
+      const payload = normalizeDutyRolePayload(req.body);
+      if (!payload.name || !payload.name_zh) {
+        return res.status(400).json({ message: '請填寫崗位名稱' });
+      }
+      if (payload.code && await ShiftDutyRole.findByCode(payload.code)) {
+        return res.status(400).json({ message: '崗位代碼已存在' });
+      }
+      const role = await ShiftDutyRole.create(payload);
+      res.status(201).json({ message: '崗位已建立', role });
+    } catch (error) {
+      console.error('Create shift duty role error:', error);
+      res.status(500).json({ message: '建立崗位時發生錯誤', error: error.message });
+    }
+  }
+
+  async updateShiftDutyRole(req, res) {
+    try {
+      const { id } = req.params;
+      const existing = await ShiftDutyRole.findById(id);
+      if (!existing) {
+        return res.status(404).json({ message: '崗位不存在' });
+      }
+      const payload = normalizeDutyRolePayload(req.body, { partial: true });
+      if (payload.name !== undefined && !payload.name) {
+        return res.status(400).json({ message: '請填寫崗位名稱' });
+      }
+      if (payload.name_zh !== undefined && !payload.name_zh) {
+        return res.status(400).json({ message: '請填寫崗位名稱' });
+      }
+      if (payload.code && await ShiftDutyRole.findByCode(payload.code, id)) {
+        return res.status(400).json({ message: '崗位代碼已存在' });
+      }
+      const role = await ShiftDutyRole.update(id, payload);
+      res.json({ message: '崗位已更新', role });
+    } catch (error) {
+      console.error('Update shift duty role error:', error);
+      res.status(500).json({ message: '更新崗位時發生錯誤', error: error.message });
+    }
+  }
+
+  async deleteShiftDutyRole(req, res) {
+    try {
+      const { id } = req.params;
+      const existing = await ShiftDutyRole.findById(id);
+      if (!existing) {
+        return res.status(404).json({ message: '崗位不存在' });
+      }
+      if (await ShiftDutyRole.isInUse(id)) {
+        return res.status(400).json({ message: '此崗位已有指派紀錄，請改為停用' });
+      }
+      await ShiftDutyRole.delete(id);
+      res.json({ message: '崗位已刪除' });
+    } catch (error) {
+      console.error('Delete shift duty role error:', error);
+      res.status(500).json({ message: '刪除崗位時發生錯誤', error: error.message });
     }
   }
 }

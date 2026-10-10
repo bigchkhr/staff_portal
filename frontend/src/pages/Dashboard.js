@@ -752,7 +752,8 @@ const Dashboard = () => {
   const visibleMyTodos = myTodos.slice((myTodoCurrentPage - 1) * myTodoPageSize, myTodoCurrentPage * myTodoPageSize);
 
   return (
-    <Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ order: { xs: 1, md: 0 } }}>
       <Typography 
         variant={isMobile ? "h5" : "h4"} 
         gutterBottom
@@ -770,9 +771,10 @@ const Dashboard = () => {
           : `${user?.department_name_zh || user?.department_name || ''} - ${user?.position_name_zh || user?.position_name || ''}`
         }
       </Typography>
+      </Box>
 
       {/* 待辦事項、表格庫、連結 widgets 平排 */}
-      <Grid container spacing={2} sx={{ mb: 1 }} alignItems="stretch">
+      <Grid container spacing={2} sx={{ mb: 1, order: { xs: 2, md: 0 } }} alignItems="stretch">
         <Grid item xs={12} md={4}>
           <Paper
             variant="outlined"
@@ -918,9 +920,9 @@ const Dashboard = () => {
         </Grid>
       </Grid>
 
-      {/* 最新消息列表 */}
-      <Box sx={{ mt: 3 }}>
-        <Divider sx={{ mb: 3 }} />
+      {/* 最新消息列表：平板及手機放在最頂 */}
+      <Box sx={{ order: { xs: 0, md: 0 }, mt: { xs: 0, md: 3 }, mb: { xs: 3, md: 0 } }}>
+        <Divider sx={{ mb: 3, display: { xs: 'none', md: 'block' } }} />
         <Box 
           sx={{ 
             display: 'flex', 

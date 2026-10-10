@@ -33,6 +33,8 @@ import {
   Collapse,
   CircularProgress,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -51,7 +53,8 @@ import {
   FileDownload as FileDownloadIcon,
   PictureAsPdf as PictureAsPdfIcon,
   Send as SendIcon,
-  Undo as UndoIcon
+  Undo as UndoIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -64,6 +67,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import OutdoorWorkCalendarChip from '../components/OutdoorWorkCalendarChip';
+import DailyShiftDuties, { DutySlotTicks } from './DailyShiftDuties';
 import { getRosterDurationMinutes } from '../utils/rosterDuration';
 import { HK_TZ, toHKCalendarDate, toHKDayjs } from '../utils/dateFormat';
 
@@ -131,6 +135,11 @@ const Schedule = ({ noLayout = false }) => {
   const [endDate, setEndDate] = useState(() => dayjs().tz('Asia/Hong_Kong').endOf('month'));
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [workMode, setWorkMode] = useState('roster');
+  const [dutyByScheduleId, setDutyByScheduleId] = useState({});
+  const [dutyFocusDate, setDutyFocusDate] = useState(null);
+  const [dutyDirty, setDutyDirty] = useState(false);
+  const [dutyRefresh, setDutyRefresh] = useState(0);
   const [canEdit, setCanEdit] = useState(false);
   const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
   const [selectedDates, setSelectedDates] = useState([]);
@@ -187,6 +196,33 @@ const Schedule = ({ noLayout = false }) => {
     const idSet = new Set(editMemberIds.map(Number));
     return groupMembers.filter((m) => idSet.has(Number(m.id)));
   }, [editMode, groupMembers, editMemberIds]);
+  const helperUsers = useMemo(() => {
+    const selectedId = selectedDefaultStoreId ? Number(selectedDefaultStoreId) : null;
+    const byUser = {};
+    (helperSchedules || []).forEach((helper) => {
+      const loanIds = Array.isArray(helper.loan_store_ids) ? helper.loan_store_ids.map(Number) : [];
+      if (selectedId && Number(helper.store_id) !== selectedId && !loanIds.includes(selectedId)) return;
+      const userId = helper.user_id;
+      if (!byUser[userId]) {
+        byUser[userId] = {
+          user_id: userId,
+          id: userId,
+          employee_number: helper.employee_number,
+          display_name: helper.user_name || helper.employee_number || '',
+          group_name: helper.group_name_zh || helper.group_name || '',
+          position_name: helper.position_name,
+          position_name_zh: helper.position_name_zh,
+          position_code: helper.position_code,
+          position_employment_mode: helper.position_employment_mode,
+          termination_date: helper.user_termination_date || null,
+          schedules: {}
+        };
+      }
+      const dateStr = toHKCalendarDate(helper.schedule_date);
+      if (dateStr) byUser[userId].schedules[dateStr] = helper;
+    });
+    return Object.values(byUser);
+  }, [helperSchedules, selectedDefaultStoreId]);
   const selectedCellKeySet = useMemo(() => new Set(selectedCellKeys), [selectedCellKeys]);
   const findSelectedGroup = (groups = departmentGroups) =>
     (groups || []).find((g) => Number(g.id) === Number(selectedGroupId));
@@ -223,6 +259,41 @@ const Schedule = ({ noLayout = false }) => {
       fetchSchedules();
     }
   }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
+
+  useEffect(() => {
+    if (workMode !== 'duty' || !selectedGroupId) {
+      setDutyByScheduleId({});
+      return undefined;
+    }
+    const start = toHKCalendarDate(startDate);
+    const end = toHKCalendarDate(endDate);
+    if (!start || !end) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = {
+          department_group_id: selectedGroupId,
+          start_date: start,
+          end_date: end
+        };
+        if (selectedDefaultStoreId) params.store_id = selectedDefaultStoreId;
+        const response = await axios.get('/api/schedules/daily-duties', { params });
+        if (cancelled) return;
+        const map = {};
+        (response.data.staff || []).forEach((row) => {
+          map[row.schedule_id] = row;
+          map[String(row.schedule_id)] = row;
+        });
+        setDutyByScheduleId(map);
+      } catch (error) {
+        console.error('Fetch schedule duty marks error:', error);
+        if (!cancelled) setDutyByScheduleId({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workMode, selectedGroupId, startDate, endDate, selectedDefaultStoreId, dutyRefresh]);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -377,21 +448,17 @@ const Schedule = ({ noLayout = false }) => {
       
       // 獲取幫舖排班（helper schedules）
       let helperSchedulesData = [];
-      if (selectedDefaultStoreId) {
-        try {
-          const helperResponse = await axios.get('/api/schedules/helpers', {
-            params: {
-              department_group_id: selectedGroupId,
-              store_id: selectedDefaultStoreId,
-              start_date: startDateStr,
-              end_date: endDateStr
-            }
-          });
-          helperSchedulesData = helperResponse.data.helperSchedules || [];
-        } catch (error) {
-          console.error('Fetch helper schedules error:', error);
-          // 如果獲取幫舖排班失敗，不影響原本群組的排班顯示
-        }
+      try {
+        const helperParams = {
+          department_group_id: selectedGroupId,
+          start_date: startDateStr,
+          end_date: endDateStr
+        };
+        if (selectedDefaultStoreId) helperParams.store_id = selectedDefaultStoreId;
+        const helperResponse = await axios.get('/api/schedules/helpers', { params: helperParams });
+        helperSchedulesData = helperResponse.data.helperSchedules || [];
+      } catch (error) {
+        console.error('Fetch helper schedules error:', error);
       }
       setSchedules(schedulesData);
       setOutdoorWorkByCell(schedulesResponse.data.outdoor_work_by_cell || {});
@@ -466,7 +533,8 @@ const Schedule = ({ noLayout = false }) => {
       const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
       const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-      const isApproverRole = !!(isApprover1 || isApprover2 || isApprover3);
+      const isSupervisor = group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id));
+      const isApproverRole = !!(isApprover1 || isApprover2 || isApprover3 || isSupervisor);
 
       setCanControlCheckerEdit(isApproverRole);
       setIsApprover(isApproverRole);
@@ -1120,6 +1188,53 @@ const Schedule = ({ noLayout = false }) => {
     setEditRangeEnd(null);
   };
 
+  const confirmDiscardDuty = async () => {
+    if (!dutyDirty) return true;
+    const result = await Swal.fire({
+      icon: 'warning',
+      title: t('dailyShiftDuties.unsavedTitle'),
+      text: t('dailyShiftDuties.unsavedText'),
+      showCancelButton: true,
+      confirmButtonText: t('dailyShiftDuties.discard'),
+      cancelButtonText: t('common.cancel')
+    });
+    return result.isConfirmed;
+  };
+
+  const openDutyDay = async (date) => {
+    const dateStr = typeof date === 'string' ? date : toHKCalendarDate(date);
+    if (!dateStr || dateStr === dutyFocusDate) return;
+    if (dutyFocusDate && !(await confirmDiscardDuty())) return;
+    setDutyDirty(false);
+    setDutyFocusDate(dateStr);
+  };
+
+  const closeDutyDialog = async () => {
+    if (!(await confirmDiscardDuty())) return;
+    setDutyDirty(false);
+    setDutyFocusDate(null);
+  };
+
+  const finishDutyDialog = () => {
+    setDutyDirty(false);
+    setDutyFocusDate(null);
+    setDutyRefresh((count) => count + 1);
+  };
+
+  const switchWorkMode = async (value) => {
+    if (!value || value === workMode) return;
+    if (workMode === 'duty' && !(await confirmDiscardDuty())) return;
+    setDutyDirty(false);
+    setDutyFocusDate(null);
+    if (value === 'duty') handleExitEditMode();
+    setWorkMode(value);
+  };
+
+  const dutyRowForSchedule = (schedule) => {
+    if (workMode !== 'duty' || !schedule?.id) return null;
+    return dutyByScheduleId[schedule.id] || dutyByScheduleId[String(schedule.id)] || null;
+  };
+
   const handleOpenEditSetup = () => {
     if (!canEdit || !selectedGroupId || groupMembers.length === 0) return;
     const defaultStart = startDate;
@@ -1204,6 +1319,10 @@ const Schedule = ({ noLayout = false }) => {
     const key = makeCellKey(member.id, dateStr);
 
     if (!editMode) {
+      if (workMode === 'duty') {
+        openDutyDay(date);
+        return;
+      }
       if (canViewLeaveTypeDetail()) {
         handleOpenHistory(member.id, date);
       }
@@ -1264,7 +1383,8 @@ const Schedule = ({ noLayout = false }) => {
     const leaveText = getLeaveTypeDisplayText(schedule);
     const storeLabel = schedule?.store_short_name || schedule?.store_code;
     const hasOutdoor = outdoorApps && outdoorApps.length > 0;
-    const empty = !timeText && !leaveText && !storeLabel && !hasOutdoor;
+    const dutyRow = dutyRowForSchedule(schedule);
+    const empty = !timeText && !leaveText && !storeLabel && !hasOutdoor && !dutyRow;
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.2, alignItems: 'center', width: '100%', pointerEvents: 'none' }}>
@@ -1296,6 +1416,9 @@ const Schedule = ({ noLayout = false }) => {
           <Typography variant="caption" sx={{ fontSize: '0.62rem', color: 'text.secondary', lineHeight: 1.2 }}>
             {storeLabel}
           </Typography>
+        )}
+        {dutyRow && (
+          <DutySlotTicks shiftSlots={dutyRow.shift_slots} slots={dutyRow.slots} incoming={!!dutyRow.is_borrowed} />
         )}
         {hasOutdoor && (
           <Box sx={{ pointerEvents: 'auto' }}>
@@ -1329,7 +1452,7 @@ const Schedule = ({ noLayout = false }) => {
           p: 0.5,
           py: 1,
           userSelect: 'none',
-          cursor: editMode ? (editable ? 'cell' : 'not-allowed') : (canViewLeaveTypeDetail() ? 'pointer' : 'default'),
+          cursor: workMode === 'duty' ? 'pointer' : (editMode ? (editable ? 'cell' : 'not-allowed') : (canViewLeaveTypeDetail() ? 'pointer' : 'default')),
           bgcolor: selected
             ? 'rgba(25, 118, 210, 0.22)'
             : (schedule?._change?.status === 'pending'
@@ -1883,6 +2006,7 @@ const Schedule = ({ noLayout = false }) => {
                     <TableCell
                       key={toHKCalendarDate(date)}
                       align="center"
+                      onClick={() => { if (workMode === 'duty') openDutyDay(date); }}
                       sx={{
                         bgcolor: 'primary.main',
                         color: 'primary.contrastText',
@@ -1890,6 +2014,7 @@ const Schedule = ({ noLayout = false }) => {
                         minWidth: 80,
                         whiteSpace: 'nowrap',
                         fontSize: '0.85rem',
+                        cursor: workMode === 'duty' ? 'pointer' : 'default',
                       }}
                     >
                       <Badge
@@ -2000,6 +2125,33 @@ const Schedule = ({ noLayout = false }) => {
                     </Box>
                   </TableCell>
                   {dates.map((date, colIndex) => renderMemberDateCell(member, date, rowIndex, colIndex))}
+                </TableRow>
+              ))}
+              {!editMode && helperUsers.map((helperUser, rowIndex) => (
+                <TableRow key={`helper-${helperUser.user_id}`}>
+                  <TableCell
+                    sx={{
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 1,
+                      bgcolor: 'grey.50',
+                      borderRight: '2px solid',
+                      borderColor: 'divider',
+                      minWidth: 120,
+                      maxWidth: 150,
+                      py: 1,
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
+                        {helperUser.display_name || helperUser.employee_number}
+                      </Typography>
+                      {helperUser.group_name && (
+                        <Chip label={helperUser.group_name} size="small" color="info" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', mt: 0.25 }} />
+                      )}
+                    </Box>
+                  </TableCell>
+                  {dates.map((date, colIndex) => renderMemberDateCell(helperUser, date, displayedMembers.length + rowIndex, colIndex))}
                 </TableRow>
               ))}
               {/* 統計行：顯示每日 FT 和 PT 數量 */}
@@ -2819,35 +2971,7 @@ const Schedule = ({ noLayout = false }) => {
       : (member.position_name_zh || member.position_name)) || '';
   };
 
-  const getHelperUsersForExport = () => {
-    const selectedStore = selectedDefaultStoreId
-      ? stores.find((s) => Number(s.id) === Number(selectedDefaultStoreId))
-      : null;
-    const selectedStoreShortName = selectedStore?.store_short_name_ || null;
-    if (!selectedStoreShortName) return [];
-
-    const helperByUser = {};
-    helperSchedules.forEach((helper) => {
-      if (helper.store_short_name !== selectedStoreShortName) return;
-      const userId = helper.user_id;
-      if (!helperByUser[userId]) {
-        helperByUser[userId] = {
-          user_id: userId,
-          employee_number: helper.employee_number,
-          display_name: helper.user_name || helper.user_name_zh || '',
-          position_code: helper.position_code,
-          position_name: helper.position_name,
-          position_name_zh: helper.position_name_zh,
-          position_employment_mode: helper.position_employment_mode,
-          employment_mode: helper.employment_mode,
-          schedules: {}
-        };
-      }
-      const dateStr = toHKCalendarDate(helper.schedule_date);
-      helperByUser[userId].schedules[dateStr] = helper;
-    });
-    return Object.values(helperByUser);
-  };
+  const getHelperUsersForExport = () => helperUsers;
 
   const getExportGroupFilenamePrefix = (prefix, ext = 'csv') => {
     const group = findSelectedGroup();
@@ -3293,12 +3417,21 @@ const Schedule = ({ noLayout = false }) => {
               </Grid>
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {isChecker && !canEdit && (
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={workMode}
+                    onChange={(_, value) => switchWorkMode(value)}
+                  >
+                    <ToggleButton value="roster">{t('schedule.rosterMode')}</ToggleButton>
+                    <ToggleButton value="duty">{t('schedule.dutyMode')}</ToggleButton>
+                  </ToggleButtonGroup>
+                  {workMode === 'roster' && isChecker && !canEdit && (
                     <Alert severity="warning" sx={{ width: '100%' }}>
                       {t('schedule.checkerEditDisabledHint')}
                     </Alert>
                   )}
-                  {canEdit && (
+                  {workMode === 'roster' && canEdit && (
                     <Button
                       variant={editMode ? 'contained' : 'outlined'}
                       onClick={() => (editMode ? handleExitEditMode() : handleOpenEditSetup())}
@@ -3318,7 +3451,7 @@ const Schedule = ({ noLayout = false }) => {
                       {editMode ? t('schedule.exitEdit') : t('schedule.edit')}
                     </Button>
                   )}
-                  {canEdit && editMode && (
+                  {workMode === 'roster' && canEdit && editMode && (
                     <>
                       <Button
                         variant="outlined"
@@ -3747,6 +3880,11 @@ const Schedule = ({ noLayout = false }) => {
           )}
 
 
+          {workMode === 'duty' && selectedGroupId && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {t('schedule.dutyModeHint')}
+            </Alert>
+          )}
           {editMode && (
             <Card elevation={1} sx={{ mb: 2, p: 2, bgcolor: '#e3f2fd' }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -3790,6 +3928,7 @@ const Schedule = ({ noLayout = false }) => {
                         <TableCell 
                           key={toHKCalendarDate(date)} 
                           align="center"
+                          onClick={() => { if (workMode === 'duty') openDutyDay(date); }}
                           sx={{
                             bgcolor: 'primary.main',
                             color: 'primary.contrastText',
@@ -3797,6 +3936,7 @@ const Schedule = ({ noLayout = false }) => {
                             fontSize: '0.9rem',
                             py: 2,
                             minWidth: 100,
+                            cursor: workMode === 'duty' ? 'pointer' : 'default',
                           }}
                         >
                           <Badge
@@ -3875,44 +4015,7 @@ const Schedule = ({ noLayout = false }) => {
                     </TableRow>
                   ))}
                   {/* 顯示跨群組的 helper */}
-                  {!editMode && (() => {
-                    // 獲取選中的 store 的 store_short_name_
-                    const selectedStore = selectedDefaultStoreId 
-                      ? stores.find(s => Number(s.id) === Number(selectedDefaultStoreId))
-                      : null;
-                    const selectedStoreShortName = selectedStore?.store_short_name_ || null;
-                    
-                    // 按用戶分組 helper schedules，只處理 store_short_name 匹配的 helper
-                    const helperByUser = {};
-                    helperSchedules.forEach(helper => {
-                      // 如果選中了 store，只處理 store_short_name 匹配的 helper
-                      if (selectedStoreShortName) {
-                        if (helper.store_short_name !== selectedStoreShortName) {
-                          return; // 跳過不匹配的 helper
-                        }
-                      } else {
-                        // 如果沒有選中 store，不顯示任何 helper
-                        return;
-                      }
-                      
-                      const userId = helper.user_id;
-                      if (!helperByUser[userId]) {
-                        helperByUser[userId] = {
-                          user_id: userId,
-                          employee_number: helper.employee_number,
-                          display_name: helper.user_name || helper.user_name_zh || '',
-                          group_name: helper.group_name_zh || helper.group_name || '',
-                          position_name: helper.position_name,
-                          position_name_zh: helper.position_name_zh,
-                          termination_date: helper.user_termination_date || null,
-                          schedules: {}
-                        };
-                      }
-                      const dateStr = toHKCalendarDate(helper.schedule_date);
-                      helperByUser[userId].schedules[dateStr] = helper;
-                    });
-                    
-                    return Object.values(helperByUser).map(helperUser => (
+                  {!editMode && helperUsers.map(helperUser => (
                       <TableRow key={`helper-${helperUser.user_id}`}>
                         <TableCell
                           sx={{
@@ -3988,10 +4091,12 @@ const Schedule = ({ noLayout = false }) => {
                             <TableCell 
                               key={dateStr} 
                               align="center"
+                              onClick={() => { if (workMode === 'duty') openDutyDay(date); }}
                               sx={{
                                 py: 1.5,
                                 borderRight: '1px solid',
                                 borderColor: 'divider',
+                                cursor: workMode === 'duty' ? 'pointer' : 'default',
                                 '&:hover': {
                                   bgcolor: 'action.hover',
                                 },
@@ -4046,10 +4151,31 @@ const Schedule = ({ noLayout = false }) => {
                                       }}
                                     />
                                   )}
+                                  {schedule.loan_store_short_name && schedule.loan_store_short_name !== schedule.store_short_name && (
+                                    <Chip
+                                      label={schedule.loan_store_short_name}
+                                      size="small"
+                                      sx={{
+                                        fontSize: '0.65rem',
+                                        height: '20px',
+                                        mb: 0.5,
+                                        fontWeight: 600,
+                                        bgcolor: '#E8F5E9',
+                                        color: '#2e7d32',
+                                      }}
+                                    />
+                                  )}
                                   <OutdoorWorkCalendarChip
                                     applications={outdoorApps}
                                     sx={{ fontSize: '0.65rem', height: '20px' }}
                                   />
+                                  {dutyRowForSchedule(schedule) && (
+                                    <DutySlotTicks
+                                      shiftSlots={dutyRowForSchedule(schedule).shift_slots}
+                                      slots={dutyRowForSchedule(schedule).slots}
+                                      incoming
+                                    />
+                                  )}
                                 </Box>
                               ) : (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
@@ -4068,8 +4194,7 @@ const Schedule = ({ noLayout = false }) => {
                           );
                         })}
                       </TableRow>
-                    ));
-                  })()}
+                  ))}
                   {/* 統計行：顯示每日 FT 和 PT 數量 */}
                   <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 'bold' }}>
                     <TableCell
@@ -4775,6 +4900,36 @@ const Schedule = ({ noLayout = false }) => {
               {t('common.save')}
             </Button>
           </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(dutyFocusDate)}
+          onClose={closeDutyDialog}
+          maxWidth="xl"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, pr: 1 }}>
+            <Typography component="span" variant="h6" sx={{ fontWeight: 700 }}>
+              {t('schedule.dutyMode')}{dutyFocusDate ? ` · ${dayjs(dutyFocusDate).format('DD/MM/YYYY')}` : ''}
+            </Typography>
+            <IconButton aria-label={t('common.close')} onClick={closeDutyDialog} size="large" sx={{ color: 'text.primary' }}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent>
+            {dutyFocusDate && (
+              <DailyShiftDuties
+                key={dutyFocusDate}
+                embedded
+                groupId={selectedGroupId}
+                storeId={selectedDefaultStoreId || ''}
+                anchorDate={dutyFocusDate}
+                fixedView="day"
+                onDirtyChange={setDutyDirty}
+                onSaved={finishDutyDialog}
+              />
+            )}
+          </DialogContent>
         </Dialog>
 
         <Dialog

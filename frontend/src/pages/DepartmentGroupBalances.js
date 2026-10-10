@@ -137,6 +137,20 @@ const DepartmentGroupBalances = () => {
         />
       );
     }
+    if (deptGroup.supervisor_id) {
+      const supervisorName = i18n.language === 'en'
+        ? (deptGroup.supervisor_name || deptGroup.supervisor_name_zh)
+        : (deptGroup.supervisor_name_zh || deptGroup.supervisor_name);
+      chips.push(
+        <Chip
+          key="supervisor"
+          label={`${t('departmentGroupBalances.supervisor')}: ${supervisorName}`}
+          size="small"
+          color="info"
+          sx={{ mr: { xs: 0.5, sm: 1 }, mb: { xs: 0.5, sm: 1 }, fontSize: { xs: '0.7rem', sm: '0.875rem' } }}
+        />
+      );
+    }
     return chips;
   };
 

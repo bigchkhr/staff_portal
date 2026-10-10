@@ -33,6 +33,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import YearSelector from '../components/YearSelector';
 import { formatDateUTC8, todayHK } from '../utils/dateFormat';
+import { calculateLeaveDays } from '../utils/leaveDays';
 
 const LeaveApplication = () => {
   const { t, i18n } = useTranslation();
@@ -90,171 +91,10 @@ const LeaveApplication = () => {
     }
   }, [formData.start_date, yearManuallySet]);
 
-  // 計算工作日（排除週末）
-  const calculateWorkingDays = (startDate, endDate) => {
-    if (!startDate || !endDate) return 0;
-    
-    let count = 0;
-    let current = dayjs(startDate);
-    const end = dayjs(endDate);
-    
-    // 使用 isBefore 和 isSame 來替代 isSameOrBefore
-    while (current.isBefore(end, 'day') || current.isSame(end, 'day')) {
-      const dayOfWeek = current.day(); // 0 = Sunday, 6 = Saturday
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        count++;
-      }
-      current = current.add(1, 'day');
-    }
-    
-    return count;
-  };
-
-  // 獲取日期範圍內的法定假期，並計算需要減去的天數
-  const getPublicHolidaysCount = async (startDate, endDate, startSession, endSession) => {
-    if (!startDate || !endDate) return 0;
-    
-    try {
-      const response = await axios.get('/api/public-holidays/range', {
-        params: {
-          start_date: startDate.format('YYYY-MM-DD'),
-          end_date: endDate.format('YYYY-MM-DD')
-        }
-      });
-      const holidays = response.data.publicHolidays || [];
-      
-      if (holidays.length === 0) return 0;
-      
-      // 計算需要減去的天數
-      let count = 0;
-      holidays.forEach(holiday => {
-        const holidayDate = dayjs(holiday.date);
-        
-        // 如果法定假期在開始日期
-        if (holidayDate.isSame(startDate, 'day')) {
-          // 如果是同一天
-          if (startDate.isSame(endDate, 'day')) {
-            // 上午 + 下午 = 整天，法定假期也是整天，所以減去1天
-            if (startSession === 'AM' && endSession === 'PM') {
-              count += 1;
-            }
-            // 只請上午或只請下午 = 0.5天，法定假期是整天，所以減去0.5天
-            else {
-              count += 0.5;
-            }
-          }
-          // 如果是多天，開始日期是法定假期
-          else {
-            // 如果開始時段是上午，請了整天，減去1天
-            if (startSession === 'AM') {
-              count += 1;
-            }
-            // 如果開始時段是下午，只請了下午，減去0.5天
-            else {
-              count += 0.5;
-            }
-          }
-        }
-        // 如果法定假期在結束日期
-        else if (holidayDate.isSame(endDate, 'day')) {
-          // 如果結束時段是下午，請了整天，減去1天
-          if (endSession === 'PM') {
-            count += 1;
-          }
-          // 如果結束時段是上午，只請了上午，減去0.5天
-          else {
-            count += 0.5;
-          }
-        }
-        // 如果法定假期在日期範圍中間，減去完整的一天
-        else {
-          count += 1;
-        }
-      });
-      
-      return count;
-    } catch (error) {
-      console.error('Get public holidays error:', error);
-      return 0; // 如果獲取失敗，返回0，不影響計算
-    }
-  };
-
-  // 計算天數，考慮半日假期
-  // 規則：
-  // - 開始上午 + 結束下午 = 整數（如4日或5日）
-  // - 開始上午 + 結束上午 = 半日數（如4.5日或5.5日）
-  // - 開始下午 + 結束下午 = 半日數（如3.5日或6.5日）
-  // - 開始下午 + 結束上午 = 整數 - 1（因為第一天下午+最後一天上午=1日）
-  const calculateDays = async (startDate, endDate, startSession, endSession, includeWeekends, excludePublicHolidays) => {
-    if (!startDate || !endDate || !startSession || !endSession) return 0;
-
-    // 計算基礎天數
-    let baseDays;
-    if (includeWeekends) {
-      // 包含週末：計算總天數
-      baseDays = endDate.diff(startDate, 'day') + 1;
-    } else {
-      // 不包含週末：只計算工作日
-      baseDays = calculateWorkingDays(startDate, endDate);
-    }
-
-    // 如果排除法定假期，需要減去法定假期的天數
-    let publicHolidaysDeduction = 0;
-    if (excludePublicHolidays) {
-      publicHolidaysDeduction = await getPublicHolidaysCount(startDate, endDate, startSession, endSession);
-    }
-
-    // 如果是同一天
-    if (startDate.isSame(endDate, 'day')) {
-      let days = 0;
-      // 上午 + 下午 = 1日
-      if (startSession === 'AM' && endSession === 'PM') {
-        days = 1;
-      }
-      // 相同時段 = 0.5日
-      else if (startSession === endSession) {
-        days = 0.5;
-      }
-      // 下午 + 上午（同一天不應該出現，但處理為0.5日）
-      else {
-        days = 0.5;
-      }
-      
-      // 減去法定假期
-      return Math.max(0, days - publicHolidaysDeduction);
-    }
-
-    // 多天的情況
-    let days = 0;
-    // 開始上午 + 結束下午 = 整數
-    if (startSession === 'AM' && endSession === 'PM') {
-      days = baseDays;
-    }
-    // 開始上午 + 結束上午 = 整數 - 0.5
-    else if (startSession === 'AM' && endSession === 'AM') {
-      days = baseDays - 0.5;
-    }
-    // 開始下午 + 結束下午 = 整數 - 0.5
-    else if (startSession === 'PM' && endSession === 'PM') {
-      days = baseDays - 0.5;
-    }
-    // 開始下午 + 結束上午 = 整數 - 1
-    // 因為第一天下午(0.5) + 中間完整天數 + 最後一天上午(0.5) = baseDays - 1
-    else if (startSession === 'PM' && endSession === 'AM') {
-      days = baseDays - 1;
-    }
-    else {
-      days = baseDays;
-    }
-
-    // 減去法定假期，確保天數不會為負數
-    return Math.max(0, days - publicHolidaysDeduction);
-  };
-
   useEffect(() => {
     const updateDays = async () => {
       if (formData.start_date && formData.end_date) {
-        const days = await calculateDays(
+        const days = await calculateLeaveDays(
           formData.start_date,
           formData.end_date,
           formData.start_session,
