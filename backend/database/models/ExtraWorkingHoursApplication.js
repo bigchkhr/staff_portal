@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { approveAndRecord, rejectAndRecord } = require('../../services/applicationDecision.service');
 const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
 const APPROVAL_STAGE_CONFIG = [
@@ -362,48 +363,26 @@ class ExtraWorkingHoursApplication {
 
   // 批核申請
   static async approve(applicationId, approverId, level, remarks = null) {
-    const updateData = {};
-    updateData[`${level}_at`] = knex.fn.now();
-    updateData[`${level}_id`] = approverId;
-    if (remarks) {
-      updateData[`${level}_remarks`] = remarks;
-    }
-
-    await knex('extra_working_hours_applications')
-      .where('id', applicationId)
-      .update(updateData);
-
-    const nextApprover = await this.getNextApprover(applicationId);
-    const stageUpdate = nextApprover ? nextApprover.level : 'completed';
-
-    if (!nextApprover) {
-      await knex('extra_working_hours_applications')
-        .where('id', applicationId)
-        .update({
-          status: 'approved',
-          current_approval_stage: stageUpdate
-        });
-    } else {
-      await knex('extra_working_hours_applications')
-        .where('id', applicationId)
-        .update({ current_approval_stage: stageUpdate });
-    }
-
+    await approveAndRecord(
+      'extra_working_hours_applications',
+      'extra_working_hours',
+      applicationId,
+      approverId,
+      level,
+      remarks
+    );
     return await this.findById(applicationId);
   }
 
   // 拒絕申請
   static async reject(applicationId, rejectorId, reason) {
-    await knex('extra_working_hours_applications')
-      .where('id', applicationId)
-      .update({
-        status: 'rejected',
-        rejected_by_id: rejectorId,
-        rejected_at: knex.fn.now(),
-        rejection_reason: reason,
-        current_approval_stage: 'completed'
-      });
-
+    await rejectAndRecord(
+      'extra_working_hours_applications',
+      'extra_working_hours',
+      applicationId,
+      rejectorId,
+      reason
+    );
     return await this.findById(applicationId);
   }
 }

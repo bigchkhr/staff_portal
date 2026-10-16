@@ -547,6 +547,7 @@ const ApprovalHistory = () => {
         approver_2: t('approvalHistory.stageApprover2'),
         approver_3: t('approvalHistory.stageApprover3'),
         rejected: t('approvalHistory.stageRejected'),
+        withdrawn: t('approvalHistory.withdrawn'),
         paper_flow: t('approvalHistory.stagePaperFlow')
       };
       return stageMap[application.user_approval_stage] || t('approvalHistory.stageUnknown');

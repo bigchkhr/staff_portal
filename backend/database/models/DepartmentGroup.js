@@ -35,6 +35,7 @@ const formatGroupRecord = (record) => {
 };
 
 const SCHEDULE_MANAGER_FIELDS = ['approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id'];
+const SHIFT_DUTY_VIEW_FIELDS = ['checker_id', 'supervisor_id', 'approver_1_id', 'approver_2_id', 'approver_3_id'];
 
 class DepartmentGroup {
   static matchesRole(group, delegationGroupIds, fields) {
@@ -99,6 +100,19 @@ class DepartmentGroup {
 
   static isScheduleManager(group, delegationGroupIds) {
     return this.matchesRole(group, delegationGroupIds, SCHEDULE_MANAGER_FIELDS);
+  }
+
+  static canViewShiftDuties(group, delegationGroupIds) {
+    return this.matchesRole(group, delegationGroupIds, SHIFT_DUTY_VIEW_FIELDS);
+  }
+
+  static async userCanViewShiftDuties(userId, departmentGroupId) {
+    const group = await knex('department_groups').where('id', departmentGroupId).first();
+    if (!group) return false;
+    const delegationGroups = await knex('delegation_groups')
+      .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+      .select('id');
+    return this.canViewShiftDuties(group, delegationGroups.map((item) => Number(item.id)));
   }
 
   static async findAll(closedFilter) {

@@ -9,6 +9,7 @@ const emailService = require('../utils/emailService');
 const path = require('path');
 const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
 const { syncAnnualLeaveForTermination } = require('../services/annualLeaveBalance.service');
+const { recordCreatedApproval } = require('../services/applicationDecision.service');
 
 class LeaveController {
   async createApplication(req, res) {
@@ -310,6 +311,7 @@ class LeaveController {
       }
 
       const application = await LeaveApplication.create(applicationData);
+      await recordCreatedApproval('leave', application, applied_by_id);
 
       // 如果是 e-flow 申請，發送通知給當前批核階段的批核群組成員
       if (actualFlowType === 'e-flow' && application.status === 'pending') {
@@ -419,13 +421,15 @@ class LeaveController {
         year
       } = req.body;
 
-      if (!start_date || !start_session || !end_date || !end_session || !total_days || !leave_type_id) {
+      const startDate = toHKCalendarDate(start_date);
+      const endDate = toHKCalendarDate(end_date);
+      if (!startDate || !start_session || !endDate || !end_session || !total_days || !leave_type_id) {
         return res.status(400).json({ message: '請填寫所有必填欄位' });
       }
       if (!['AM', 'PM'].includes(start_session) || !['AM', 'PM'].includes(end_session)) {
         return res.status(400).json({ message: '時段必須是上午(AM)或下午(PM)' });
       }
-      if (start_date > end_date) {
+      if (startDate > endDate) {
         return res.status(400).json({ message: '結束日期不可早於開始日期' });
       }
 
@@ -445,7 +449,7 @@ class LeaveController {
         return res.status(404).json({ message: '假期類型不存在' });
       }
 
-      const applicationYear = year ? parseInt(year, 10) : new Date(start_date).getFullYear();
+      const applicationYear = year ? parseInt(year, 10) : parseInt(startDate.slice(0, 4), 10);
       if (leaveType.requires_balance) {
         const LeaveBalanceTransaction = require('../database/models/LeaveBalanceTransaction');
         const balanceRecord = await LeaveBalance.findByUserAndType(req.user.id, leave_type_id, applicationYear);
@@ -455,8 +459,8 @@ class LeaveController {
         const validBalance = await LeaveBalanceTransaction.getValidBalanceForPeriod(
           req.user.id,
           leave_type_id,
-          start_date,
-          end_date,
+          startDate,
+          endDate,
           applicationYear
         );
         if (validBalance < parseFloat(total_days)) {
@@ -470,8 +474,8 @@ class LeaveController {
       const overlap = await knex('leave_applications')
         .where('user_id', req.user.id)
         .where('id', '!=', id)
-        .where('start_date', '<=', end_date)
-        .where('end_date', '>=', start_date)
+        .where('start_date', '<=', endDate)
+        .where('end_date', '>=', startDate)
         .where(function () {
           this.where('status', 'approved').orWhere('status', 'pending');
         })
@@ -489,9 +493,9 @@ class LeaveController {
 
       await knex('leave_applications').where('id', id).update({
         leave_type_id,
-        start_date,
+        start_date: startDate,
         start_session,
-        end_date,
+        end_date: endDate,
         end_session,
         year: applicationYear,
         total_days: parseFloat(total_days),

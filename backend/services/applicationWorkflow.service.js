@@ -1,5 +1,6 @@
 const knex = require('../config/database');
 const ApplicationAction = require('../database/models/ApplicationAction');
+const { mergeSnapshotActions } = require('./applicationDecision.service');
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const User = require('../database/models/User');
@@ -164,7 +165,11 @@ async function getWorkflow(applicationType, applicationId, userId) {
     can_resubmit: isApplicant && pending && stage === 'applicant',
     can_return: canApprove,
     return_targets: canApprove ? returnTargets(application, stage) : [],
-    actions: await ApplicationAction.listByApplication(type, applicationId)
+    actions: await mergeSnapshotActions(
+      type,
+      application,
+      await ApplicationAction.listByApplication(type, applicationId)
+    )
   };
 }
 

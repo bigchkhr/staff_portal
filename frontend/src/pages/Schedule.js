@@ -226,6 +226,7 @@ const Schedule = ({ noLayout = false }) => {
   const selectedCellKeySet = useMemo(() => new Set(selectedCellKeys), [selectedCellKeys]);
   const findSelectedGroup = (groups = departmentGroups) =>
     (groups || []).find((g) => Number(g.id) === Number(selectedGroupId));
+  const canViewDuty = findSelectedGroup()?.can_view_duty === true;
 
   useEffect(() => {
     const init = async () => {
@@ -261,7 +262,15 @@ const Schedule = ({ noLayout = false }) => {
   }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
 
   useEffect(() => {
-    if (workMode !== 'duty' || !selectedGroupId) {
+    if (!canViewDuty && workMode === 'duty') {
+      setDutyDirty(false);
+      setDutyFocusDate(null);
+      setWorkMode('roster');
+    }
+  }, [canViewDuty, workMode]);
+
+  useEffect(() => {
+    if (workMode !== 'duty' || !selectedGroupId || !canViewDuty) {
       setDutyByScheduleId({});
       return undefined;
     }
@@ -293,7 +302,7 @@ const Schedule = ({ noLayout = false }) => {
     return () => {
       cancelled = true;
     };
-  }, [workMode, selectedGroupId, startDate, endDate, selectedDefaultStoreId, dutyRefresh]);
+  }, [workMode, selectedGroupId, startDate, endDate, selectedDefaultStoreId, dutyRefresh, canViewDuty]);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -1196,12 +1205,18 @@ const Schedule = ({ noLayout = false }) => {
       text: t('dailyShiftDuties.unsavedText'),
       showCancelButton: true,
       confirmButtonText: t('dailyShiftDuties.discard'),
-      cancelButtonText: t('common.cancel')
+      cancelButtonText: t('common.cancel'),
+      heightAuto: false,
+      didOpen: () => {
+        const container = Swal.getContainer();
+        if (container) container.style.zIndex = '20000';
+      }
     });
     return result.isConfirmed;
   };
 
   const openDutyDay = async (date) => {
+    if (!canViewDuty) return;
     const dateStr = typeof date === 'string' ? date : toHKCalendarDate(date);
     if (!dateStr || dateStr === dutyFocusDate) return;
     if (dutyFocusDate && !(await confirmDiscardDuty())) return;
@@ -1223,6 +1238,7 @@ const Schedule = ({ noLayout = false }) => {
 
   const switchWorkMode = async (value) => {
     if (!value || value === workMode) return;
+    if (value === 'duty' && !canViewDuty) return;
     if (workMode === 'duty' && !(await confirmDiscardDuty())) return;
     setDutyDirty(false);
     setDutyFocusDate(null);
@@ -3417,15 +3433,17 @@ const Schedule = ({ noLayout = false }) => {
               </Grid>
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <ToggleButtonGroup
-                    exclusive
-                    size="small"
-                    value={workMode}
-                    onChange={(_, value) => switchWorkMode(value)}
-                  >
-                    <ToggleButton value="roster">{t('schedule.rosterMode')}</ToggleButton>
-                    <ToggleButton value="duty">{t('schedule.dutyMode')}</ToggleButton>
-                  </ToggleButtonGroup>
+                  {canViewDuty && (
+                    <ToggleButtonGroup
+                      exclusive
+                      size="small"
+                      value={workMode}
+                      onChange={(_, value) => switchWorkMode(value)}
+                    >
+                      <ToggleButton value="roster">{t('schedule.rosterMode')}</ToggleButton>
+                      <ToggleButton value="duty">{t('schedule.dutyMode')}</ToggleButton>
+                    </ToggleButtonGroup>
+                  )}
                   {workMode === 'roster' && isChecker && !canEdit && (
                     <Alert severity="warning" sx={{ width: '100%' }}>
                       {t('schedule.checkerEditDisabledHint')}
@@ -4907,6 +4925,7 @@ const Schedule = ({ noLayout = false }) => {
           onClose={closeDutyDialog}
           maxWidth="xl"
           fullWidth
+          disableEnforceFocus
         >
           <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, pr: 1 }}>
             <Typography component="span" variant="h6" sx={{ fontWeight: 700 }}>

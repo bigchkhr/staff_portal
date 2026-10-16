@@ -1001,6 +1001,34 @@ class ApprovalController {
         .select('id');
       
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+
+      // 已撤銷申請要讓 approver 3 群組全體見到。SQL ANY 有時對唔上群組成員，改為讀出群組後在記憶體比對。
+      const applicantApprover3GroupCache = new Map();
+      const approver3MemberCache = new Map();
+      const userIsApprover3ForApplicant = async (applicantUserId) => {
+        const applicantKey = Number(applicantUserId);
+        if (!applicantApprover3GroupCache.has(applicantKey)) {
+          const dept = await knex('department_groups')
+            .whereRaw('? = ANY(user_ids)', [applicantKey])
+            .orderBy('id', 'asc')
+            .first('approver_3_id');
+          applicantApprover3GroupCache.set(
+            applicantKey,
+            dept?.approver_3_id ? Number(dept.approver_3_id) : null
+          );
+        }
+        const groupId = applicantApprover3GroupCache.get(applicantKey);
+        if (!groupId) return false;
+        if (userDelegationGroupIds.includes(groupId)) return true;
+        if (!approver3MemberCache.has(groupId)) {
+          const group = await DelegationGroup.findById(groupId);
+          approver3MemberCache.set(
+            groupId,
+            new Set((group?.user_ids || []).map((id) => Number(id)))
+          );
+        }
+        return approver3MemberCache.get(groupId).has(Number(userId));
+      };
       
       // 過濾出用戶批核過的申請
       const isHRMember = await User.isHRMember(userId);
@@ -1137,24 +1165,40 @@ class ApprovalController {
           }
         }
         
-        // 方法4：若申請已被拒絕或撤回，且當前用戶屬於該申請較早階段，也顯示在批核記錄。
-        // approver3 / HR Group 的拒絕只算實際執行拒絕的人，不算成個群組。
-        if (!isApprover && (app.status === 'rejected' || app.status === 'withdrawn') && userDelegationGroupIds.length > 0) {
-          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
-          if (departmentGroups && departmentGroups.length > 0) {
-            const deptGroup = departmentGroups[0];
-            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
-            for (const step of approvalFlow) {
-              if (step.level === 'approver_3') continue;
-              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
-                isApprover = true;
-                userApprovalStage = app.status === 'withdrawn' ? 'withdrawn' : 'rejected';
-                break;
+        // 方法4：若申請已被拒絕或撤銷，批核流程中的群組成員仍可見。
+        // 拒絕時 approver3 / HR Group 只算實際執行拒絕的人；撤銷則包含當時負責的全部階段（含最後階段）。
+        if (!isApprover && (app.status === 'rejected' || app.status === 'withdrawn')) {
+          const directlyAssigned = [
+            app.checker_id,
+            app.approver_1_id,
+            app.approver_2_id,
+            app.approver_3_id
+          ].some((id) => id != null && Number(id) === Number(userId));
+          if (app.status === 'withdrawn' && directlyAssigned) {
+            isApprover = true;
+            userApprovalStage = 'withdrawn';
+          } else if (userDelegationGroupIds.length > 0) {
+            const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+            if (departmentGroups && departmentGroups.length > 0) {
+              const deptGroup = departmentGroups[0];
+              const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+              for (const step of approvalFlow) {
+                if (app.status !== 'withdrawn' && step.level === 'approver_3') continue;
+                if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                  isApprover = true;
+                  userApprovalStage = app.status === 'withdrawn' ? 'withdrawn' : 'rejected';
+                  break;
+                }
               }
             }
           }
         }
         
+        if (!isApprover && app.status === 'withdrawn' && (isHRMember || await userIsApprover3ForApplicant(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'approver_3';
+        }
+
         if (!isApprover && supervisedApplicantIdSet.has(Number(app.user_id))) {
           isApprover = true;
           userApprovalStage = 'supervisor';
@@ -1231,21 +1275,44 @@ class ApprovalController {
           }
         }
         
-        // 方法4：被拒絕的申請，較早階段的群組成員仍可見。approver3 / HR Group 拒絕只算執行者本人。
-        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
-          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
-          if (departmentGroups && departmentGroups.length > 0) {
-            const deptGroup = departmentGroups[0];
-            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
-            for (const step of approvalFlow) {
-              if (step.level === 'approver_3') continue;
-              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
-                isApprover = true;
-                userApprovalStage = 'rejected';
-                break;
+        // 方法4：被拒絕或撤銷的申請，批核流程中的群組成員仍可見。
+        // 拒絕時 approver3 只算執行者本人；撤銷則包含當時負責的全部階段。
+        if (!isApprover && (app.status === 'rejected' || app.status === 'withdrawn')) {
+          const directlyAssigned = [
+            app.checker_id,
+            app.approver_1_id,
+            app.approver_2_id,
+            app.approver_3_id
+          ].some((id) => id != null && Number(id) === Number(userId));
+          if (app.status === 'withdrawn' && directlyAssigned) {
+            isApprover = true;
+            userApprovalStage = 'withdrawn';
+          } else if (userDelegationGroupIds.length > 0) {
+            const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+            if (departmentGroups && departmentGroups.length > 0) {
+              const deptGroup = departmentGroups[0];
+              const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+              for (const step of approvalFlow) {
+                if (app.status !== 'withdrawn' && step.level === 'approver_3') continue;
+                if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                  isApprover = true;
+                  userApprovalStage = app.status === 'withdrawn' ? 'withdrawn' : 'rejected';
+                  break;
+                }
               }
             }
           }
+        }
+
+        if (!isApprover && app.status === 'withdrawn' && (isHRMember || await userIsApprover3ForApplicant(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'approver_3';
+        }
+
+        if (!isApprover && supervisedApplicantIdSet.has(Number(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'supervisor';
+          app.view_only = true;
         }
         
         if (isApprover) {
@@ -1318,21 +1385,44 @@ class ApprovalController {
           }
         }
         
-        // 方法4：被拒絕的申請，較早階段的群組成員仍可見。approver3 / HR Group 拒絕只算執行者本人。
-        if (!isApprover && app.status === 'rejected' && userDelegationGroupIds.length > 0) {
-          const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
-          if (departmentGroups && departmentGroups.length > 0) {
-            const deptGroup = departmentGroups[0];
-            const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
-            for (const step of approvalFlow) {
-              if (step.level === 'approver_3') continue;
-              if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
-                isApprover = true;
-                userApprovalStage = 'rejected';
-                break;
+        // 方法4：被拒絕或撤銷的申請，批核流程中的群組成員仍可見。
+        // 拒絕時 approver3 只算執行者本人；撤銷則包含當時負責的全部階段。
+        if (!isApprover && (app.status === 'rejected' || app.status === 'withdrawn')) {
+          const directlyAssigned = [
+            app.checker_id,
+            app.approver_1_id,
+            app.approver_2_id,
+            app.approver_3_id
+          ].some((id) => id != null && Number(id) === Number(userId));
+          if (app.status === 'withdrawn' && directlyAssigned) {
+            isApprover = true;
+            userApprovalStage = 'withdrawn';
+          } else if (userDelegationGroupIds.length > 0) {
+            const departmentGroups = await DepartmentGroup.findByUserId(app.user_id);
+            if (departmentGroups && departmentGroups.length > 0) {
+              const deptGroup = departmentGroups[0];
+              const approvalFlow = await DepartmentGroup.getApprovalFlow(deptGroup.id);
+              for (const step of approvalFlow) {
+                if (app.status !== 'withdrawn' && step.level === 'approver_3') continue;
+                if (step.delegation_group_id && userDelegationGroupIds.includes(Number(step.delegation_group_id))) {
+                  isApprover = true;
+                  userApprovalStage = app.status === 'withdrawn' ? 'withdrawn' : 'rejected';
+                  break;
+                }
               }
             }
           }
+        }
+
+        if (!isApprover && app.status === 'withdrawn' && (isHRMember || await userIsApprover3ForApplicant(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'approver_3';
+        }
+
+        if (!isApprover && supervisedApplicantIdSet.has(Number(app.user_id))) {
+          isApprover = true;
+          userApprovalStage = 'supervisor';
+          app.view_only = true;
         }
         
         if (isApprover) {

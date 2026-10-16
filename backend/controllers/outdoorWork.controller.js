@@ -6,6 +6,7 @@ const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
 const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
+const { recordCreatedApproval } = require('../services/applicationDecision.service');
 
 class OutdoorWorkController {
   async createApplication(req, res) {
@@ -106,6 +107,7 @@ class OutdoorWorkController {
       }
 
       const application = await OutdoorWorkApplication.create(applicationData);
+      await recordCreatedApproval('outdoor_work', application, applied_by_id);
 
       // 處理上傳的檔案（如果有的話）
       const uploadedDocuments = [];

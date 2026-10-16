@@ -1,4 +1,5 @@
 const knex = require('../../config/database');
+const { approveAndRecord, rejectAndRecord } = require('../../services/applicationDecision.service');
 const { toHKCalendarDate } = require('../../utils/hkDate');
 const { attachApplicantDepartmentGroups } = require('./applicantProfileAttach');
 
@@ -63,11 +64,19 @@ const formatApplication = (application) => {
   const approvalStage =
     application.current_approval_stage || determineCurrentApprovalStage(application);
 
+  const calendarDate = (value) => {
+    if (value == null || value === '') return value;
+    return toHKCalendarDate(value) || value;
+  };
+
   return {
     ...application,
     transaction_id: transactionId,
     applicant_display_name: applicantNameZh,
     applicant_employee_number: applicantEmployeeNumber,
+    application_date: calendarDate(application.application_date),
+    start_date: calendarDate(application.start_date),
+    end_date: calendarDate(application.end_date),
     days,
     current_approval_stage: approvalStage
   };
@@ -627,51 +636,13 @@ class LeaveApplication {
 
   // 批核申請
   static async approve(applicationId, approverId, level, remarks = null) {
-    const updateData = {};
-    updateData[`${level}_at`] = knex.fn.now();
-    // 更新批核者ID為實際批核的用戶，確保記錄正確的批核者
-    updateData[`${level}_id`] = approverId;
-    if (remarks) {
-      updateData[`${level}_remarks`] = remarks;
-    }
-
-    await knex('leave_applications')
-      .where('id', applicationId)
-      .update(updateData);
-
-    // 檢查是否所有批核都已完成
-    const nextApprover = await this.getNextApprover(applicationId);
-    const stageUpdate = nextApprover ? nextApprover.level : 'completed';
-
-    if (!nextApprover) {
-      // 所有批核完成
-      await knex('leave_applications')
-        .where('id', applicationId)
-        .update({
-          status: 'approved',
-          current_approval_stage: stageUpdate
-        });
-    } else {
-      await knex('leave_applications')
-        .where('id', applicationId)
-        .update({ current_approval_stage: stageUpdate });
-    }
-
+    await approveAndRecord('leave_applications', 'leave', applicationId, approverId, level, remarks);
     return await this.findById(applicationId);
   }
 
   // 拒絕申請
   static async reject(applicationId, rejectorId, reason) {
-    await knex('leave_applications')
-      .where('id', applicationId)
-      .update({
-        status: 'rejected',
-        rejected_by_id: rejectorId,
-        rejected_at: knex.fn.now(),
-        rejection_reason: reason,
-        current_approval_stage: 'completed'
-      });
-
+    await rejectAndRecord('leave_applications', 'leave', applicationId, rejectorId, reason);
     return await this.findById(applicationId);
   }
 

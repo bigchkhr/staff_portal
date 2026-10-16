@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -36,7 +37,7 @@ import {
   TableHead,
   TableRow
 } from '@mui/material';
-import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon, Upload as UploadIcon, Delete as DeleteIcon, AttachFile as AttachFileIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
+import { Visibility as VisibilityIcon, GetApp as GetAppIcon, Description as DescriptionIcon, Image as ImageIcon, Close as CloseIcon, Upload as UploadIcon, Delete as DeleteIcon, AttachFile as AttachFileIcon, CameraAlt as CameraIcon, CheckCircle as CheckCircleIcon, Cancel as CancelIcon, Undo as UndoIcon, Reply as ReplyIcon, Send as SendIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
@@ -575,7 +576,9 @@ const ApprovalDetail = () => {
       checker: t('approvalDetail.stageChecker'),
       approver_1: t('approvalDetail.stageApprover1'),
       approver_2: t('approvalDetail.stageApprover2'),
-      approver_3: t('approvalDetail.stageApprover3')
+      approver_3: t('approvalDetail.stageApprover3'),
+      paper_flow: t('approvalDetail.stagePaperFlow'),
+      completed: t('approvalDetail.stageCompleted')
     };
     return stageMap[stage] || stage;
   };
@@ -754,15 +757,36 @@ const ApprovalDetail = () => {
     input.click();
   };
 
+  const alertOverDialog = (options) => Swal.fire({
+    heightAuto: false,
+    ...options,
+    didOpen: () => {
+      const container = Swal.getContainer();
+      if (container) container.style.zIndex = '20000';
+    }
+  });
+
   const handleResubmit = async () => {
+    const startDate = toHKCalendarDate(reviseForm?.start_date);
+    const endDate = toHKCalendarDate(reviseForm?.end_date);
+    if (applicationType === 'leave' && (!startDate || !endDate || !reviseForm?.leave_type_id || !reviseForm?.total_days)) {
+      await alertOverDialog({
+        icon: 'warning',
+        title: t('approvalDetail.fillRequiredFields'),
+        confirmButtonText: t('common.confirm')
+      });
+      return;
+    }
+
     try {
       setWorkflowActing(true);
       if (applicationType === 'leave') {
-        if (!reviseForm?.start_date || !reviseForm?.end_date || !reviseForm?.leave_type_id || !reviseForm?.total_days) {
-          await Swal.fire({ icon: 'warning', title: t('approvalDetail.fillRequiredFields'), confirmButtonText: t('common.confirm') });
-          return;
-        }
-        await axios.put(`/api/leaves/${id}/revise`, reviseForm);
+        await axios.put(`/api/leaves/${id}/revise`, {
+          ...reviseForm,
+          start_date: startDate,
+          end_date: endDate,
+          year: Number(reviseForm.year) || Number(startDate.slice(0, 4))
+        });
         if (reviseFiles.length > 0) {
           const formData = new FormData();
           reviseFiles.forEach((file) => formData.append('files', file));
@@ -776,11 +800,21 @@ const ApprovalDetail = () => {
       await axios.post(`/api/approvals/${id}/resubmit`, {
         application_type: applicationType
       });
-      setReviseFiles([]);
-      setReviseDialogOpen(false);
-      await refreshAfterWorkflow(t('approvalDetail.resubmitSuccess'));
+      flushSync(() => {
+        setReviseFiles([]);
+        setReviseDialogOpen(false);
+        setWorkflowActing(false);
+      });
+      await alertOverDialog({
+        icon: 'success',
+        title: t('approvalDetail.resubmitSuccess'),
+        timer: 1600,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+      await fetchApplication(applicationType);
     } catch (error) {
-      await Swal.fire({
+      await alertOverDialog({
         icon: 'error',
         title: error.response?.data?.message || t('approvalDetail.operationFailed'),
         confirmButtonText: t('common.confirm')
@@ -799,6 +833,27 @@ const ApprovalDetail = () => {
       : (application.applicant_position_name_zh || application.applicant_position_name);
     return [grp, pos].filter((p) => p != null && String(p).trim() !== '').join(' · ');
   }, [application, i18n.language]);
+
+  const timelineEvents = useMemo(() => {
+    const items = [...(workflow?.actions || [])];
+    if (application?.created_at && !items.some((item) => item.action === 'submitted')) {
+      items.push({
+        id: 'submitted',
+        action: 'submitted',
+        actor_display_name: application.applicant_display_name || application.user_display_name || null,
+        from_stage: 'applicant',
+        created_at: application.created_at
+      });
+    }
+    return items.sort((a, b) => {
+      const timeOf = (item) => new Date(item.sort_at || item.created_at || 0).getTime();
+      const diff = timeOf(a) - timeOf(b);
+      if (!Number.isNaN(diff) && diff !== 0) return diff;
+      if (a.action === 'submitted') return -1;
+      if (b.action === 'submitted') return 1;
+      return 0;
+    });
+  }, [workflow, application]);
 
   if (loading) {
     return <Box>{t('common.loading')}</Box>;
@@ -1406,161 +1461,6 @@ const ApprovalDetail = () => {
               </>
             )}
 
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="h6" gutterBottom>
-              {t('approvalDetail.approvalProcess')}
-            </Typography>
-
-            {/* 檢查是否為紙本申請 */}
-            {(application.is_paper_flow === true || application.flow_type === 'paper-flow') ? (
-              <List>
-                <ListItem>
-                  <ListItemText
-                    primary={t('approvalDetail.paperFlowApproval')}
-                    secondary={
-                      application.status === 'approved' 
-                        ? t('approvalDetail.approved')
-                        : application.status === 'rejected'
-                        ? t('approvalDetail.rejected')
-                        : t('approvalDetail.pending')
-                    }
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1' }}
-                  />
-                </ListItem>
-                {application.status === 'rejected' && application.rejected_by_name && (
-                  <ListItem>
-                    <ListItemText
-                      primary={t('approvalDetail.rejection')}
-                      secondary={
-                        <Box>
-                          <Box>
-                            {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
-                          </Box>
-                          {application.rejection_reason && (
-                            <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                              {application.rejection_reason}
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                    />
-                  </ListItem>
-                )}
-              </List>
-            ) : (
-              <List>
-                <ListItem>
-                  <ListItemText
-                    primary={t('approvalDetail.checkerStage')}
-                    secondary={
-                      <Box>
-                        <Box>
-                          {application.checker_at 
-                            ? `${t('approvalDetail.checkedAt')} ${formatDateTime(application.checker_at)}${application.checker_name ? ` - ${application.checker_name}` : ''}` 
-                            : t('approvalDetail.pendingCheck')}
-                        </Box>
-                        {application.checker_remarks && (
-                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                            {application.checker_remarks}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary={t('approvalDetail.approver1Stage')}
-                    secondary={
-                      <Box>
-                        <Box>
-                          {application.approver_1_at 
-                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_1_at)}${application.approver_1_name ? ` - ${application.approver_1_name}` : ''}` 
-                            : application.checker_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                        </Box>
-                        {application.approver_1_remarks && (
-                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                            {application.approver_1_remarks}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary={t('approvalDetail.approver2Stage')}
-                    secondary={
-                      <Box>
-                        <Box>
-                          {application.approver_2_at 
-                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_2_at)}${application.approver_2_name ? ` - ${application.approver_2_name}` : ''}` 
-                            : application.approver_1_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                        </Box>
-                        {application.approver_2_remarks && (
-                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                            {application.approver_2_remarks}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary={t('approvalDetail.approver3Stage')}
-                    secondary={
-                      <Box>
-                        <Box>
-                          {application.approver_3_at 
-                            ? `${t('approvalDetail.approvedAt')} ${formatDateTime(application.approver_3_at)}${application.approver_3_name ? ` - ${application.approver_3_name}` : ''}` 
-                            : application.approver_2_at ? t('approvalDetail.pendingApproval') : t('approvalDetail.notStarted')}
-                        </Box>
-                        {application.approver_3_remarks && (
-                          <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                            {application.approver_3_remarks}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    primaryTypographyProps={{ variant: 'caption' }}
-                    secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                  />
-                </ListItem>
-                {application.status === 'rejected' && application.rejected_by_name && (
-                  <ListItem>
-                    <ListItemText
-                      primary={t('approvalDetail.rejection')}
-                      secondary={
-                        <Box>
-                          <Box>
-                            {t('approvalDetail.rejectedAt')} {formatDateTime(application.rejected_at)} - {application.rejected_by_name}
-                          </Box>
-                          {application.rejection_reason && (
-                            <Typography variant="body1" sx={{ color: '#d32f2f', mt: 1, fontWeight: 'bold' }}>
-                              {application.rejection_reason}
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                      primaryTypographyProps={{ variant: 'caption' }}
-                      secondaryTypographyProps={{ variant: 'body1', component: 'div' }}
-                    />
-                  </ListItem>
-                )}
-              </List>
-            )}
-
             {application.reversal_transactions && application.reversal_transactions.length > 0 && (
               <>
                 <Divider sx={{ my: 2 }} />
@@ -1627,35 +1527,95 @@ const ApprovalDetail = () => {
               </>
             )}
           </Paper>
-          {workflow?.actions?.length > 0 && (
+          {timelineEvents.length > 0 && (
             <Paper sx={{ p: 2, mt: 2 }}>
               <Typography variant="h6" gutterBottom>{t('approvalDetail.actionHistory')}</Typography>
-              <List>
-                {workflow.actions.map((item) => (
-                  <ListItem key={item.id} disablePadding sx={{ py: 0.5 }}>
-                    <ListItemText
-                      primary={`${item.actor_display_name || '-'} · ${
-                        item.action === 'withdrawn'
-                          ? t('approvalDetail.withdraw')
-                          : item.action === 'returned'
-                            ? `${t('approvalDetail.returnTo')} ${stageLabel(item.to_stage)}`
-                            : t('approvalDetail.resubmit')
-                      }`}
-                      secondary={
-                        <>
-                          {item.reason && (
-                            <Typography component="span" variant="body2" sx={{ display: 'block', color: 'error.main', fontWeight: 700 }}>
-                              {item.reason}
-                            </Typography>
-                          )}
-                          {item.created_at ? formatDateTime(item.created_at) : null}
-                        </>
-                      }
-                      secondaryTypographyProps={{ component: 'div' }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
+              <Box>
+                {timelineEvents.map((item, index) => {
+                  const appearance = {
+                    submitted: { color: 'primary.main', Icon: SendIcon, title: t('approvalDetail.actionSubmitted') },
+                    approved: {
+                      color: 'success.main',
+                      Icon: CheckCircleIcon,
+                      title: item.from_stage
+                        ? `${t('approvalDetail.actionApproved')} · ${stageLabel(item.from_stage)}`
+                        : t('approvalDetail.actionApproved')
+                    },
+                    rejected: {
+                      color: 'error.main',
+                      Icon: CancelIcon,
+                      title: item.from_stage
+                        ? `${t('approvalDetail.actionRejected')} · ${stageLabel(item.from_stage)}`
+                        : t('approvalDetail.actionRejected')
+                    },
+                    withdrawn: { color: 'warning.main', Icon: UndoIcon, title: t('approvalDetail.withdraw') },
+                    returned: {
+                      color: 'warning.main',
+                      Icon: ReplyIcon,
+                      title: `${t('approvalDetail.returnTo')} ${stageLabel(item.to_stage)}`
+                    },
+                    resubmitted: { color: 'info.main', Icon: RefreshIcon, title: t('approvalDetail.resubmit') }
+                  }[item.action] || { color: 'text.secondary', Icon: SendIcon, title: item.action };
+                  const EventIcon = appearance.Icon;
+                  const isLast = index === timelineEvents.length - 1;
+                  const reasonIsNegative = item.action === 'rejected' || item.action === 'returned' || item.action === 'withdrawn';
+                  const followUp = item.action === 'approved' && item.to_stage
+                    ? (item.to_stage === 'completed'
+                      ? t('approvalDetail.actionCompleted')
+                      : t('approvalDetail.actionHandedTo', { stage: stageLabel(item.to_stage) }))
+                    : null;
+
+                  return (
+                    <Box key={item.id} sx={{ display: 'flex', gap: 1.5 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 28 }}>
+                        <Box sx={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          bgcolor: appearance.color,
+                          color: 'common.white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <EventIcon sx={{ fontSize: 16 }} />
+                        </Box>
+                        {!isLast && <Box sx={{ width: 2, flexGrow: 1, bgcolor: 'divider', my: 0.5 }} />}
+                      </Box>
+                      <Box sx={{ flex: 1, pb: isLast ? 0 : 2, pt: 0.25 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+                          {appearance.title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {[item.actor_display_name, item.created_at ? formatDateTime(item.created_at) : null].filter(Boolean).join(' · ') || '-'}
+                        </Typography>
+                        {followUp && (
+                          <Typography variant="body2" color="text.secondary">{followUp}</Typography>
+                        )}
+                        {item.recovered && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            {t('approvalDetail.actionTimeNotKept')}
+                          </Typography>
+                        )}
+                        {item.reason && (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              mt: 0.5,
+                              fontWeight: reasonIsNegative ? 700 : 500,
+                              color: reasonIsNegative ? 'error.main' : 'text.primary',
+                              whiteSpace: 'pre-wrap'
+                            }}
+                          >
+                            {item.reason}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
             </Paper>
           )}
         </Grid>
@@ -1843,6 +1803,7 @@ const ApprovalDetail = () => {
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
+        disableRestoreFocus
       >
         <DialogTitle>{t('approvalDetail.reviseAndResubmit')}</DialogTitle>
         <DialogContent>
@@ -1879,7 +1840,7 @@ const ApprovalDetail = () => {
               <TextField
                 type="date"
                 label={t('approvalDetail.startDate')}
-                value={reviseForm.start_date}
+                value={toHKCalendarDate(reviseForm.start_date) || ''}
                 onChange={(e) => setReviseForm((prev) => ({ ...prev, start_date: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
               />
@@ -1897,7 +1858,7 @@ const ApprovalDetail = () => {
               <TextField
                 type="date"
                 label={t('approvalDetail.endDate')}
-                value={reviseForm.end_date}
+                value={toHKCalendarDate(reviseForm.end_date) || ''}
                 onChange={(e) => setReviseForm((prev) => ({ ...prev, end_date: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 inputProps={{ min: reviseForm.start_date || undefined }}

@@ -6,6 +6,7 @@ const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 const emailService = require('../utils/emailService');
 const { toHKCalendarDate, todayHK } = require('../utils/hkDate');
+const { recordCreatedApproval } = require('../services/applicationDecision.service');
 
 class ExtraWorkingHoursController {
   async createApplication(req, res) {
@@ -103,6 +104,7 @@ class ExtraWorkingHoursController {
       }
 
       const application = await ExtraWorkingHoursApplication.create(applicationData);
+      await recordCreatedApproval('extra_working_hours', application, applied_by_id);
 
       // 處理上傳的檔案（如果有的話）
       const uploadedDocuments = [];

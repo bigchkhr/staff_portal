@@ -1476,13 +1476,15 @@ class ScheduleController {
     const userId = options.userId != null ? Number(options.userId) : null;
     const isStoreSupervisor = options.isStoreSupervisor === true;
     return (groups || []).map((group) => {
+      const canViewDuty = DepartmentGroup.canViewShiftDuties(group, ids);
       if (isSystemAdmin) {
         return {
           ...group,
           can_edit: true,
           is_checker: false,
           is_approver: true,
-          can_control_checker_edit: true
+          can_control_checker_edit: true,
+          can_view_duty: canViewDuty
         };
       }
 
@@ -1495,7 +1497,8 @@ class ScheduleController {
         can_edit: isApprover || (isChecker && group.allow_checker_edit !== false),
         is_checker: isChecker && !isApprover,
         is_approver: isApprover,
-        can_control_checker_edit: isApprover
+        can_control_checker_edit: isApprover,
+        can_view_duty: canViewDuty
       };
     });
   }
@@ -1519,8 +1522,13 @@ class ScheduleController {
       // 系統管理員可以查看所有群組
       if (isSystemAdmin) {
         const allGroups = await DepartmentGroup.findAll({ closed: false });
+        const adminDelegationGroups = await User.getDelegationGroups(userId);
         const groupsWithDateStr = await this._attachPendingItemCounts(
-          this._attachActorFlags(allGroups.map(g => this._formatGroupDateFields(g)), [], true),
+          this._attachActorFlags(
+            allGroups.map(g => this._formatGroupDateFields(g)),
+            adminDelegationGroups.map(g => Number(g.id)),
+            true
+          ),
           userId,
           true
         );
@@ -2215,6 +2223,10 @@ class ScheduleController {
       if (!canView) {
         return res.status(403).json({ message: '您沒有權限查看此群組的排班' });
       }
+      const canViewDuty = await DepartmentGroup.userCanViewShiftDuties(req.user.id, groupId);
+      if (!canViewDuty) {
+        return res.status(403).json({ message: '您沒有權限查看崗位' });
+      }
 
       let store = null;
       if (storeId) {
@@ -2275,6 +2287,11 @@ class ScheduleController {
         if (Number.isNaN(storeId)) {
           return res.status(400).json({ message: '店舖不正確' });
         }
+      }
+
+      const canViewDuty = await DepartmentGroup.userCanViewShiftDuties(req.user.id, groupId);
+      if (!canViewDuty) {
+        return res.status(403).json({ message: '您沒有權限編輯崗位' });
       }
 
       const { staff, roles } = await this._loadDailyDutyBoard(groupId, storeId, range.start, range.end);

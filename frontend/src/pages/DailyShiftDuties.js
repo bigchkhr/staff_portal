@@ -85,6 +85,15 @@ const slotLoanId = (slots, minute) => {
   return saved?.loan_store_id ? String(saved.loan_store_id) : '';
 };
 
+const swalOverDialog = (options) => Swal.fire({
+  heightAuto: false,
+  ...options,
+  didOpen: () => {
+    const container = Swal.getContainer();
+    if (container) container.style.zIndex = '20000';
+  }
+});
+
 function DutyRoleTooltip({ roles, extra, children }) {
   const list = (Array.isArray(roles) ? roles : [roles]).filter(Boolean);
   if (!extra && !list.length) return children;
@@ -450,7 +459,7 @@ const DailyShiftDuties = ({
       setSavedLoans({});
       setSelectedKeys({});
       setSelectionAnchor(null);
-      Swal.fire({
+      swalOverDialog({
         icon: 'error',
         title: t('common.error'),
         text: error.response?.data?.message || t('dailyShiftDuties.fetchFailed')
@@ -505,7 +514,7 @@ const DailyShiftDuties = ({
       action();
       return;
     }
-    const result = await Swal.fire({
+    const result = await swalOverDialog({
       icon: 'warning',
       title: t('dailyShiftDuties.unsavedTitle'),
       text: t('dailyShiftDuties.unsavedText'),
@@ -546,14 +555,14 @@ const DailyShiftDuties = ({
       });
       applyBoard(response.data);
       onSavedRef.current?.();
-      Swal.fire({
+      swalOverDialog({
         icon: 'success',
         title: t('dailyShiftDuties.saved'),
         timer: 1400,
         showConfirmButton: false
       });
     } catch (error) {
-      Swal.fire({
+      swalOverDialog({
         icon: 'error',
         title: t('common.error'),
         text: error.response?.data?.message || t('dailyShiftDuties.saveFailed')
@@ -646,7 +655,7 @@ const DailyShiftDuties = ({
   const paintLoan = (storeValue) => {
     if (!selectedCount || saving) return;
     if (!storeValue) {
-      Swal.fire({ icon: 'warning', title: t('dailyShiftDuties.lendStoreRequired') });
+      swalOverDialog({ icon: 'warning', title: t('dailyShiftDuties.lendStoreRequired') });
       return;
     }
     const storeKey = String(storeValue);
