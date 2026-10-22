@@ -57,6 +57,8 @@ const payrollHoursRoutes = require('./routes/payrollHours.routes');
 app.use('/api/internal/payroll-hours', payrollHoursRoutes);
 const leaveDaysRoutes = require('./routes/leaveDays.routes');
 app.use('/api/internal/leave-days', leaveDaysRoutes);
+const scheduleHeadcountRoutes = require('./routes/scheduleHeadcount.routes');
+app.use('/api/internal/schedule-headcount', scheduleHeadcountRoutes);
 
 // API Rate Limiting
 app.use('/api', apiLimiter);
