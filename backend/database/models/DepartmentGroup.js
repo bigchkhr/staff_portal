@@ -74,6 +74,24 @@ class DepartmentGroup {
     return applicantIds.map(Number).includes(Number(applicantUserId));
   }
 
+  // Supervisor 本身不可批核 e-leave。同一人若同時屬於當前階段的 Checker / Approver 群組，才保留該階段的批核權。
+  static async supervisorKeepsStageApproval(userId, applicantUserId, currentStage, delegationGroupIds) {
+    if (!(await this.isSupervisorOfApplicant(userId, applicantUserId))) {
+      return true;
+    }
+    if (!currentStage || currentStage === 'completed') {
+      return false;
+    }
+    const ids = (delegationGroupIds || await this.getUserDelegationGroupIds(userId)).map(Number);
+    const groups = await this.findByUserId(applicantUserId);
+    if (!groups || groups.length === 0) {
+      return false;
+    }
+    const flow = await this.getApprovalFlow(groups[0].id);
+    const step = flow.find((item) => item.level === currentStage);
+    return !!(step && step.delegation_group_id && ids.includes(Number(step.delegation_group_id)));
+  }
+
   static userCompletedApprovalStage(application, userId, delegationGroupIds, approvalFlow) {
     if (!application) return false;
     const uid = Number(userId);

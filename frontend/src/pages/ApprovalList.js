@@ -52,16 +52,16 @@ const ApprovalList = () => {
   const navigate = useNavigate();
 
   const handleView = async (app) => {
-    // 外勤工作：按下查看時即時檢測該申請者有幾多筆待批核外勤，
-    // 如多於 1 筆就自動 redirect 去批量批核頁（避免只靠當前頁資料而漏判）
-    if (app.application_type === 'outdoor_work') {
+    // 外勤工作：只有真正可批核的人，多於一筆時才進入批量批核。Supervisor 只讀，直接看單筆詳情。
+    if (app.application_type === 'outdoor_work' && app.can_approve === true) {
       const applicantId = app.user_id;
       if (applicantId) {
         try {
           setOpeningId(app.id);
           const res = await axios.get(`/api/approvals/pending/outdoor-work/applicant/${applicantId}`);
           const apps = res.data.applications || [];
-          if (apps.length > 1) {
+          const approvableCount = apps.filter((item) => item.can_approve === true).length;
+          if (approvableCount > 1) {
             navigate(`/approval/outdoor-work/bulk/${applicantId}`);
             return;
           }
@@ -140,7 +140,7 @@ const ApprovalList = () => {
     return 'completed';
   };
 
-  const needsMyApproval = (application) => application.view_only !== true;
+  const needsMyApproval = (application) => application.can_approve === true;
 
   const renderYourTurnFlag = () => (
     <FlagIcon color="warning" fontSize="small" sx={{ ml: 0.5 }} />

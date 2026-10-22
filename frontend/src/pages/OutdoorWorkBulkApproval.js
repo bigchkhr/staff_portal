@@ -407,34 +407,41 @@ const OutdoorWorkBulkApproval = () => {
               </Table>
             </TableContainer>
 
-            <Box sx={{ mt: 2 }}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label={t('outdoorWorkBulkApproval.remarksOptional')}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-              />
-            </Box>
+            {permissionsLoaded && selectableIds.length > 0 && (
+              <>
+                <Box sx={{ mt: 2 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={3}
+                    label={t('outdoorWorkBulkApproval.remarksOptional')}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                  />
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    disabled={submitting || selectedIds.length === 0}
+                    onClick={() => submit('approve')}
+                  >
+                    {t('outdoorWorkBulkApproval.approveSelected')}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    disabled={submitting || selectedIds.length === 0}
+                    onClick={() => submit('reject')}
+                  >
+                    {t('outdoorWorkBulkApproval.rejectSelected')}
+                  </Button>
+                </Box>
+              </>
+            )}
 
             <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                color="success"
-                disabled={submitting || selectedIds.length === 0}
-                onClick={() => submit('approve')}
-              >
-                {t('outdoorWorkBulkApproval.approveSelected')}
-              </Button>
-              <Button
-                variant="contained"
-                color="error"
-                disabled={submitting || selectedIds.length === 0}
-                onClick={() => submit('reject')}
-              >
-                {t('outdoorWorkBulkApproval.rejectSelected')}
-              </Button>
               <Button
                 variant="outlined"
                 disabled={submitting}

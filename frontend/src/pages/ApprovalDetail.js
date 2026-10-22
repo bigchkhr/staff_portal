@@ -244,59 +244,20 @@ const ApprovalDetail = () => {
       return;
     }
     
-    // 檢查用戶是否屬於當前階段的批核者（直接設置或通過授權群組）
-    let isCurrentStageApprover = false;
-    
-    // 方法1：檢查是否直接設置為當前階段的批核者，且該階段尚未批核
-    if (currentStage === 'checker' && application.checker_id === user?.id && !application.checker_at) {
-      isCurrentStageApprover = true;
-    } else if (currentStage === 'approver_1' && application.approver_1_id === user?.id && !application.approver_1_at) {
-      isCurrentStageApprover = true;
-    } else if (currentStage === 'approver_2' && application.approver_2_id === user?.id && !application.approver_2_at) {
-      isCurrentStageApprover = true;
-    } else if (currentStage === 'approver_3' && application.approver_3_id === user?.id && !application.approver_3_at) {
-      isCurrentStageApprover = true;
+    try {
+      const response = await axios.get(`/api/users/can-approve/${id}`, {
+        params: { application_type: applicationType }
+      });
+      const canApproveFromBackend = !!response.data?.canApprove;
+      setCanApproveThis(canApproveFromBackend);
+      setCanRejectThis(canApproveFromBackend);
+      setUserApprovalStage(canApproveFromBackend ? currentStage : null);
+    } catch (error) {
+      console.error('Check approval permission error:', error);
+      setCanApproveThis(false);
+      setCanRejectThis(false);
+      setUserApprovalStage(null);
     }
-    
-    // 方法2：如果不是直接批核者，檢查是否通過授權群組屬於當前階段的批核者
-    if (!isCurrentStageApprover) {
-      try {
-        // 調用後端 API 檢查用戶是否有權限批核當前階段
-        let response;
-        if (applicationType === 'outdoor_work') {
-          response = await axios.get(`/api/users/can-approve/${id}`, {
-            params: { application_type: applicationType }
-          });
-        } else {
-          response = await axios.get(`/api/users/can-approve/${id}`, {
-            params: { application_type: applicationType }
-          });
-        }
-        const canApproveFromBackend = response.data.canApprove || false;
-        
-        if (canApproveFromBackend) {
-          // 後端返回可以批核，說明用戶是當前階段的批核者
-          isCurrentStageApprover = true;
-        }
-      } catch (error) {
-        console.error('Check approval permission error:', error);
-      }
-    }
-    
-    // 如果用戶是當前階段的批核者，按照正常流程處理
-    // 這包括：直接設置為批核者，或通過授權群組屬於當前階段的批核者
-    // 無論用戶是否是 HR Group 成員，只要是用戶是當前階段的批核者，就可以批准和拒絕
-    if (isCurrentStageApprover) {
-      setCanApproveThis(true);
-      setCanRejectThis(true);
-      setUserApprovalStage(currentStage);
-      return;
-    }
-    
-    // 未輪到的批核者只能查看申請資料，不能批核（不顯示批核操作 div）
-    setCanApproveThis(false);
-    setCanRejectThis(false);
-    setUserApprovalStage(null);
   };
 
   const handleSubmit = async () => {

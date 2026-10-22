@@ -502,6 +502,7 @@ class LeaveApplication {
         const canView = await User.canViewApplication(userId, app.id);
         if (!canView) continue;
         const canApproveNow = await User.canApprove(userId, app.id);
+        app.can_approve = !!canApproveNow;
         if (!canApproveNow) {
           app.view_only = true;
         }
@@ -593,7 +594,19 @@ class LeaveApplication {
       }
 
       const isSupervisorView = supervisedApplicantIds.has(Number(app.user_id));
+      if (canApprove && isSupervisorView) {
+        const keepsApproval = await DepartmentGroup.supervisorKeepsStageApproval(
+          userId,
+          app.user_id,
+          currentStage,
+          userDelegationGroupIds
+        );
+        if (!keepsApproval) {
+          canApprove = false;
+        }
+      }
       if (canApprove || isSupervisorView || app.view_only) {
+        app.can_approve = !!canApprove;
         if (!canApprove) {
           app.view_only = true;
         }

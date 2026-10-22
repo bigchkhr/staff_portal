@@ -390,14 +390,15 @@ class User {
 
     // 方法1：檢查使用者是否直接設置為當前階段的批核者
     // 只檢查當前階段，未輪到的批核者不能批核
-    if (currentStage === 'checker' && application.checker_id === userId && !application.checker_at) {
-      return true;
-    } else if (currentStage === 'approver_1' && application.approver_1_id === userId && !application.approver_1_at) {
-      return true;
-    } else if (currentStage === 'approver_2' && application.approver_2_id === userId && !application.approver_2_at) {
-      return true;
-    } else if (currentStage === 'approver_3' && application.approver_3_id === userId && !application.approver_3_at) {
-      return true;
+    const DepartmentGroupForSupervisor = require('./DepartmentGroup');
+    const directStageMatch = (
+      (currentStage === 'checker' && Number(application.checker_id) === Number(userId) && !application.checker_at)
+      || (currentStage === 'approver_1' && Number(application.approver_1_id) === Number(userId) && !application.approver_1_at)
+      || (currentStage === 'approver_2' && Number(application.approver_2_id) === Number(userId) && !application.approver_2_at)
+      || (currentStage === 'approver_3' && Number(application.approver_3_id) === Number(userId) && !application.approver_3_at)
+    );
+    if (directStageMatch) {
+      return DepartmentGroupForSupervisor.supervisorKeepsStageApproval(userId, application.user_id, currentStage);
     }
 
     // 方法2：檢查是否屬於對應的授權群組（特定部門群組）
@@ -482,14 +483,15 @@ class User {
       return false;
     }
 
-    if (currentStage === 'checker' && application.checker_id === userId && !application.checker_at) {
-      return true;
-    } else if (currentStage === 'approver_1' && application.approver_1_id === userId && !application.approver_1_at) {
-      return true;
-    } else if (currentStage === 'approver_2' && application.approver_2_id === userId && !application.approver_2_at) {
-      return true;
-    } else if (currentStage === 'approver_3' && application.approver_3_id === userId && !application.approver_3_at) {
-      return true;
+    const DepartmentGroupForSupervisor = require('./DepartmentGroup');
+    const directStageMatch = (
+      (currentStage === 'checker' && Number(application.checker_id) === Number(userId) && !application.checker_at)
+      || (currentStage === 'approver_1' && Number(application.approver_1_id) === Number(userId) && !application.approver_1_at)
+      || (currentStage === 'approver_2' && Number(application.approver_2_id) === Number(userId) && !application.approver_2_at)
+      || (currentStage === 'approver_3' && Number(application.approver_3_id) === Number(userId) && !application.approver_3_at)
+    );
+    if (directStageMatch) {
+      return DepartmentGroupForSupervisor.supervisorKeepsStageApproval(userId, application.user_id, currentStage);
     }
 
     const DepartmentGroup = require('./DepartmentGroup');
@@ -559,17 +561,16 @@ class User {
       return false;
     }
 
+    const DepartmentGroupForSupervisor = require('./DepartmentGroup');
     const currentUserId = Number(userId);
-
-    // Method 1: Check if the user is directly assigned as the current stage approver
-    if (currentStage === 'checker' && Number(application.checker_id) === currentUserId && !application.checker_at) {
-      return true;
-    } else if (currentStage === 'approver_1' && Number(application.approver_1_id) === currentUserId && !application.approver_1_at) {
-      return true;
-    } else if (currentStage === 'approver_2' && Number(application.approver_2_id) === currentUserId && !application.approver_2_at) {
-      return true;
-    } else if (currentStage === 'approver_3' && Number(application.approver_3_id) === currentUserId && !application.approver_3_at) {
-      return true;
+    const directStageMatch = (
+      (currentStage === 'checker' && Number(application.checker_id) === currentUserId && !application.checker_at)
+      || (currentStage === 'approver_1' && Number(application.approver_1_id) === currentUserId && !application.approver_1_at)
+      || (currentStage === 'approver_2' && Number(application.approver_2_id) === currentUserId && !application.approver_2_at)
+      || (currentStage === 'approver_3' && Number(application.approver_3_id) === currentUserId && !application.approver_3_at)
+    );
+    if (directStageMatch) {
+      return DepartmentGroupForSupervisor.supervisorKeepsStageApproval(userId, application.user_id, currentStage);
     }
 
     // Method 2: Check if the user belongs to the corresponding delegation group for the current stage
