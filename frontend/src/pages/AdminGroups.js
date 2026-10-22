@@ -28,7 +28,8 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   InputAdornment,
-  ListItemButton
+  ListItemButton,
+  Tooltip
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -38,7 +39,8 @@ import {
   Group as GroupIcon,
   Block as BlockIcon,
   CheckCircle as CheckCircleIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  ManageAccounts as ManageAccountsIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
@@ -131,15 +133,20 @@ const AdminGroups = () => {
   const [closedFilter, setClosedFilter] = useState('all'); // 'all', 'active', 'closed'
   const [memberSearchTerm, setMemberSearchTerm] = useState('');
   const [memberSearchKeyword, setMemberSearchKeyword] = useState('');
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [rolesGroup, setRolesGroup] = useState(null);
+  const [roleForm, setRoleForm] = useState({
+    checker_id: '',
+    supervisor_id: '',
+    observer_id: '',
+    approver_1_id: '',
+    approver_2_id: '',
+    approver_3_id: ''
+  });
   const [formData, setFormData] = useState({
     name: '',
     name_zh: '',
     description: '',
-    checker_id: '',
-    approver_1_id: '',
-    approver_2_id: '',
-    approver_3_id: '',
-    supervisor_id: '',
     closed: false
   });
 
@@ -190,11 +197,6 @@ const AdminGroups = () => {
         name: '', 
         name_zh: '', 
         description: '',
-        checker_id: '',
-        approver_1_id: '',
-        approver_2_id: '',
-        approver_3_id: '',
-        supervisor_id: '',
         closed: false
       });
     } else {
@@ -216,11 +218,6 @@ const AdminGroups = () => {
         name: group.name,
         name_zh: group.name_zh,
         description: group.description || '',
-        checker_id: group.checker_id || '',
-        approver_1_id: group.approver_1_id || '',
-        approver_2_id: group.approver_2_id || '',
-        approver_3_id: group.approver_3_id || '',
-        supervisor_id: group.supervisor_id || '',
         closed: group.closed || false
       });
     } else {
@@ -232,6 +229,31 @@ const AdminGroups = () => {
       });
     }
     setOpen(true);
+  };
+
+  const handleOpenRoles = (group) => {
+    setRolesGroup(group);
+    setRoleForm({
+      checker_id: group.checker_id || '',
+      supervisor_id: group.supervisor_id || '',
+      observer_id: group.observer_id || '',
+      approver_1_id: group.approver_1_id || '',
+      approver_2_id: group.approver_2_id || '',
+      approver_3_id: group.approver_3_id || ''
+    });
+    setRolesOpen(true);
+  };
+
+  const handleSaveRoles = async () => {
+    if (!rolesGroup) return;
+    try {
+      await axios.put(`/api/groups/department/${rolesGroup.id}`, roleForm);
+      setRolesOpen(false);
+      fetchGroups();
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || t('adminGroups.operationFailed');
+      alert(errorMessage);
+    }
   };
 
   const handleSubmit = async () => {
@@ -426,11 +448,6 @@ const AdminGroups = () => {
                   <TableRow>
                     <TableCell>{t('adminGroups.name')}</TableCell>
                     <TableCell>{t('adminGroups.chineseName')}</TableCell>
-                    <TableCell>{t('adminGroups.checkerGroup')}</TableCell>
-                    <TableCell>{t('adminGroups.approver1Group')}</TableCell>
-                    <TableCell>{t('adminGroups.approver2Group')}</TableCell>
-                    <TableCell>{t('adminGroups.approver3Group')}</TableCell>
-                    <TableCell>{t('adminGroups.supervisorGroup')}</TableCell>
                     <TableCell>{t('adminGroups.memberCount')}</TableCell>
                     <TableCell>{t('adminGroups.actions')}</TableCell>
                   </TableRow>
@@ -444,31 +461,6 @@ const AdminGroups = () => {
                           : (group.name_zh || group.name || '-')}
                       </TableCell>
                       <TableCell>{group.name_zh}</TableCell>
-                      <TableCell>
-                        {i18n.language === 'en' 
-                          ? (group.checker_name || group.checker_name_zh || '-')
-                          : (group.checker_name_zh || group.checker_name || '-')}
-                      </TableCell>
-                      <TableCell>
-                        {i18n.language === 'en' 
-                          ? (group.approver_1_name || group.approver_1_name_zh || '-')
-                          : (group.approver_1_name_zh || group.approver_1_name || '-')}
-                      </TableCell>
-                      <TableCell>
-                        {i18n.language === 'en' 
-                          ? (group.approver_2_name || group.approver_2_name_zh || '-')
-                          : (group.approver_2_name_zh || group.approver_2_name || '-')}
-                      </TableCell>
-                      <TableCell>
-                        {i18n.language === 'en' 
-                          ? (group.approver_3_name || group.approver_3_name_zh || '-')
-                          : (group.approver_3_name_zh || group.approver_3_name || '-')}
-                      </TableCell>
-                      <TableCell>
-                        {i18n.language === 'en' 
-                          ? (group.supervisor_name || group.supervisor_name_zh || '-')
-                          : (group.supervisor_name_zh || group.supervisor_name || '-')}
-                      </TableCell>
                       <TableCell>{group.user_ids?.length || 0}</TableCell>
                       <TableCell>
                         <Chip 
@@ -477,6 +469,11 @@ const AdminGroups = () => {
                           size="small"
                           sx={{ mr: 1 }}
                         />
+                        <Tooltip title={t('adminGroups.editRoles')}>
+                          <IconButton size="small" onClick={() => handleOpenRoles(group)}>
+                            <ManageAccountsIcon />
+                          </IconButton>
+                        </Tooltip>
                         <IconButton size="small" onClick={() => handleEdit(group, 'department')}>
                           <EditIcon />
                         </IconButton>
@@ -602,95 +599,6 @@ const AdminGroups = () => {
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
             />
-            {selectedGroupType === 'department' && (
-              <>
-                <FormControl>
-                  <InputLabel>{t('adminGroups.checkerGroup')}</InputLabel>
-                  <Select
-                    value={formData.checker_id}
-                    label={t('adminGroups.checkerGroup')}
-                    onChange={(e) => setFormData(prev => ({ ...prev, checker_id: e.target.value }))}
-                  >
-                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
-                    {delegationGroups.filter(g => !g.closed).map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' 
-                          ? (group.name || group.name_zh || '-')
-                          : (group.name_zh || group.name || '-')}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl>
-                  <InputLabel>{t('adminGroups.approver1Group')}</InputLabel>
-                  <Select
-                    value={formData.approver_1_id}
-                    label={t('adminGroups.approver1Group')}
-                    onChange={(e) => setFormData(prev => ({ ...prev, approver_1_id: e.target.value }))}
-                  >
-                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
-                    {delegationGroups.filter(g => !g.closed).map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' 
-                          ? (group.name || group.name_zh || '-')
-                          : (group.name_zh || group.name || '-')}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl>
-                  <InputLabel>{t('adminGroups.approver2Group')}</InputLabel>
-                  <Select
-                    value={formData.approver_2_id}
-                    label={t('adminGroups.approver2Group')}
-                    onChange={(e) => setFormData(prev => ({ ...prev, approver_2_id: e.target.value }))}
-                  >
-                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
-                    {delegationGroups.filter(g => !g.closed).map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' 
-                          ? (group.name || group.name_zh || '-')
-                          : (group.name_zh || group.name || '-')}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl>
-                  <InputLabel>{t('adminGroups.approver3Group')}</InputLabel>
-                  <Select
-                    value={formData.approver_3_id}
-                    label={t('adminGroups.approver3Group')}
-                    onChange={(e) => setFormData(prev => ({ ...prev, approver_3_id: e.target.value }))}
-                  >
-                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
-                    {delegationGroups.filter(g => !g.closed).map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' 
-                          ? (group.name || group.name_zh || '-')
-                          : (group.name_zh || group.name || '-')}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl>
-                  <InputLabel>{t('adminGroups.supervisorGroup')}</InputLabel>
-                  <Select
-                    value={formData.supervisor_id}
-                    label={t('adminGroups.supervisorGroup')}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supervisor_id: e.target.value }))}
-                  >
-                    <MenuItem value="">{t('adminGroups.none')}</MenuItem>
-                    {delegationGroups.filter(g => !g.closed).map((group) => (
-                      <MenuItem key={group.id} value={group.id}>
-                        {i18n.language === 'en' 
-                          ? (group.name || group.name_zh || '-')
-                          : (group.name_zh || group.name || '-')}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </>
-            )}
             <FormControl>
               <InputLabel>狀態</InputLabel>
               <Select
@@ -707,6 +615,49 @@ const AdminGroups = () => {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>{t('adminGroups.cancel')}</Button>
           <Button onClick={handleSubmit} variant="contained">{t('adminGroups.save')}</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={rolesOpen} onClose={() => setRolesOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {t('adminGroups.editRoles')}
+          {rolesGroup ? ` - ${i18n.language === 'en'
+            ? (rolesGroup.name || rolesGroup.name_zh || '')
+            : (rolesGroup.name_zh || rolesGroup.name || '')}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            {[
+              ['checker_id', t('adminGroups.checkerGroup')],
+              ['supervisor_id', t('adminGroups.supervisorGroup')],
+              ['observer_id', t('adminGroups.observerGroup')],
+              ['approver_1_id', t('adminGroups.approver1Group')],
+              ['approver_2_id', t('adminGroups.approver2Group')],
+              ['approver_3_id', t('adminGroups.approver3Group')]
+            ].map(([field, label]) => (
+              <FormControl key={field} fullWidth>
+                <InputLabel>{label}</InputLabel>
+                <Select
+                  value={roleForm[field]}
+                  label={label}
+                  onChange={(e) => setRoleForm((prev) => ({ ...prev, [field]: e.target.value }))}
+                >
+                  <MenuItem value="">{t('adminGroups.none')}</MenuItem>
+                  {delegationGroups.filter((group) => !group.closed).map((group) => (
+                    <MenuItem key={group.id} value={group.id}>
+                      {i18n.language === 'en'
+                        ? (group.name || group.name_zh || '-')
+                        : (group.name_zh || group.name || '-')}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRolesOpen(false)}>{t('adminGroups.cancel')}</Button>
+          <Button onClick={handleSaveRoles} variant="contained">{t('adminGroups.save')}</Button>
         </DialogActions>
       </Dialog>
 

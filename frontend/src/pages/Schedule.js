@@ -172,6 +172,7 @@ const Schedule = ({ noLayout = false }) => {
   const [checkerSectionExpanded, setCheckerSectionExpanded] = useState(false);
   const [requireCheckerApproval, setRequireCheckerApproval] = useState(false);
   const [isChecker, setIsChecker] = useState(false);
+  const [isObserver, setIsObserver] = useState(false);
   const [changeSubmissions, setChangeSubmissions] = useState([]);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyLogs, setHistoryLogs] = useState([]);
@@ -498,6 +499,9 @@ const Schedule = ({ noLayout = false }) => {
     setIsApprover(!!actor.is_approver);
     setIsChecker(!!actor.is_checker && !actor.is_approver);
     setCanControlCheckerEdit(!!actor.can_control_checker_edit);
+    if (actor.is_observer !== undefined) {
+      setIsObserver(!!actor.is_observer);
+    }
   };
 
   const checkEditPermission = async () => {
@@ -511,6 +515,7 @@ const Schedule = ({ noLayout = false }) => {
         setRequireCheckerApproval(false);
         setIsApprover(false);
         setIsChecker(false);
+        setIsObserver(false);
         return;
       }
 
@@ -525,6 +530,11 @@ const Schedule = ({ noLayout = false }) => {
         return;
       }
 
+      const userDelegationGroups = user?.delegation_groups || [];
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+      const observerRole = group.is_observer === true || !!(group.observer_id && userDelegationGroupIds.includes(Number(group.observer_id)));
+      setIsObserver(observerRole);
+
       const hasApiRoleFlags = group.is_checker !== undefined || group.is_approver !== undefined || group.can_edit !== undefined;
       if (hasApiRoleFlags) {
         const isApproverFlag = group.is_approver === true;
@@ -536,8 +546,6 @@ const Schedule = ({ noLayout = false }) => {
         return;
       }
 
-      const userDelegationGroups = user?.delegation_groups || [];
-      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
       const isCheckerRole = group.checker_id && userDelegationGroupIds.includes(Number(group.checker_id));
       const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
@@ -555,6 +563,7 @@ const Schedule = ({ noLayout = false }) => {
       setCanControlCheckerEdit(false);
       setIsApprover(false);
       setIsChecker(false);
+      setIsObserver(false);
     }
   };
 
@@ -563,6 +572,13 @@ const Schedule = ({ noLayout = false }) => {
       return true;
     }
     return isApprover || isChecker;
+  };
+
+  const canViewChangeHistory = () => {
+    if (user?.is_system_admin) {
+      return true;
+    }
+    return isApprover || isChecker || isObserver;
   };
 
   const renderTerminationDateBelowPosition = (terminationDate, fontSizeRem) => {
@@ -1339,7 +1355,7 @@ const Schedule = ({ noLayout = false }) => {
         openDutyDay(date);
         return;
       }
-      if (canViewLeaveTypeDetail()) {
+      if (canViewChangeHistory()) {
         handleOpenHistory(member.id, date);
       }
       return;
@@ -1468,7 +1484,7 @@ const Schedule = ({ noLayout = false }) => {
           p: 0.5,
           py: 1,
           userSelect: 'none',
-          cursor: workMode === 'duty' ? 'pointer' : (editMode ? (editable ? 'cell' : 'not-allowed') : (canViewLeaveTypeDetail() ? 'pointer' : 'default')),
+          cursor: workMode === 'duty' ? 'pointer' : (editMode ? (editable ? 'cell' : 'not-allowed') : (canViewChangeHistory() ? 'pointer' : 'default')),
           bgcolor: selected
             ? 'rgba(25, 118, 210, 0.22)'
             : (schedule?._change?.status === 'pending'

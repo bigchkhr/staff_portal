@@ -1769,6 +1769,8 @@
     "approver2Group": "Approver 2 Group",
     "approver3Group": "Approver 3 Group",
     "supervisorGroup": "Supervisor",
+    "observerGroup": "Observer",
+    "editRoles": "Roles",
     "memberCount": "Member Count",
     "actions": "Actions",
     "edit": "Edit",

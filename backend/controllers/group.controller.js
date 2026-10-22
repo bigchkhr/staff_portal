@@ -1,13 +1,15 @@
 const DepartmentGroup = require('../database/models/DepartmentGroup');
 const DelegationGroup = require('../database/models/DelegationGroup');
 
+const ROLE_ID_FIELDS = ['checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'observer_id'];
+
 class GroupController {
   // ========== Department Groups ==========
   
   async getDepartmentGroups(req, res) {
     try {
       const { closed, forCalendar, forNews } = req.query; // 支援 closed, forCalendar, forNews 參數
-      // forCalendar: 如果為 'true'，只返回用戶是approver成員的群組（用於群組假期週曆）
+      // forCalendar: 如果為 'true'，只返回可查看群組假期週曆的群組（checker / approver / supervisor / observer）
       // forNews: 如果為 'true'，只返回用戶有權限發布消息的群組
       
       let groups = await DepartmentGroup.findAll(closed);
@@ -19,8 +21,8 @@ class GroupController {
         // 過濾出用戶是approver成員的群組
         const accessibleGroups = [];
         for (const group of groups) {
-          const isApprover = await DepartmentGroup.isApproverMember(userId, group.id);
-          if (isApprover) {
+          const canView = await DepartmentGroup.canViewLeaveCalendar(userId, group.id);
+          if (canView) {
             accessibleGroups.push(group);
           }
         }
@@ -66,13 +68,13 @@ class GroupController {
       }
       
       // 過濾和處理資料，將空字串轉換為 null（對於 ID 欄位）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'user_ids', 'closed'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'observer_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
         if (key in groupData) {
           // 對於 ID 欄位，將空字串轉換為 null
-          if (key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id' || key === 'supervisor_id') {
+          if (ROLE_ID_FIELDS.includes(key)) {
             filteredData[key] = groupData[key] === '' || groupData[key] === null || groupData[key] === undefined 
               ? null 
               : Number(groupData[key]);
@@ -112,13 +114,13 @@ class GroupController {
       console.log('[updateDepartmentGroup] 更新數據:', JSON.stringify(groupData, null, 2));
       
       // 過濾掉不需要更新的字段（如果有的話）
-      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'user_ids', 'closed'];
+      const allowedFields = ['name', 'name_zh', 'description', 'checker_id', 'approver_1_id', 'approver_2_id', 'approver_3_id', 'supervisor_id', 'observer_id', 'user_ids', 'closed'];
       const filteredData = {};
       
       for (const key of allowedFields) {
         if (key in groupData) {
           // 對於 ID 字段，將空字符串轉換為 null
-          if (key === 'checker_id' || key === 'approver_1_id' || key === 'approver_2_id' || key === 'approver_3_id' || key === 'supervisor_id') {
+          if (ROLE_ID_FIELDS.includes(key)) {
             filteredData[key] = groupData[key] === '' || groupData[key] === null || groupData[key] === undefined 
               ? null 
               : Number(groupData[key]);
@@ -238,17 +240,16 @@ class GroupController {
         return res.json({ members });
       }
 
-      // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）或 supervisor
+      // 2. 檢查是否為批核成員（approver1, approver2, approver3, checker）、supervisor 或 observer
       const isApprover = await DepartmentGroup.isApproverMember(userId, id);
       const userDelegationGroups = req.user.delegation_groups || [];
       const userDelegationGroupIds = userDelegationGroups.map((group) => Number(group.id));
       const departmentGroup = await DepartmentGroup.findById(id);
-      const isSupervisor = !!(
+      const isShiftViewer = !!(
         departmentGroup
-        && departmentGroup.supervisor_id
-        && userDelegationGroupIds.includes(Number(departmentGroup.supervisor_id))
+        && DepartmentGroup.matchesRole(departmentGroup, userDelegationGroupIds, ['supervisor_id', 'observer_id'])
       );
-      if (isApprover || isSupervisor) {
+      if (isApprover || isShiftViewer) {
         const members = await DepartmentGroup.getMembers(id);
         console.log(`[getDepartmentGroupMembers] 成功獲取 ${members.length} 個成員（批核成員權限）`);
         return res.json({ members });

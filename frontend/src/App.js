@@ -72,7 +72,7 @@ axios.defaults.baseURL = 'http://localhost:1689';
 // axios.defaults.baseURL = 'http://192.168.3.4:1689';
 
 const theme = createTheme({
-  palette: {
+  palette: {  
     primary: {
       main: '#1976d2',
     },

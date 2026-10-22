@@ -1769,6 +1769,8 @@
     "approver2Group": "第二批核群組",
     "approver3Group": "第三批核群組",
     "supervisorGroup": "Supervisor",
+    "observerGroup": "Observer",
+    "editRoles": "角色設定",
     "memberCount": "成員數",
     "actions": "操作",
     "edit": "編輯",

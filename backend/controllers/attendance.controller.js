@@ -240,8 +240,8 @@ class AttendanceController {
       let hasPermission = isSystemAdmin;
       if (!hasPermission) {
         for (const group of userGroups) {
-          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
-          if (canView) {
+          const canEdit = await this.canEditGroupAttendance(currentUserId, group.id, false);
+          if (canEdit) {
             hasPermission = true;
             break;
           }
@@ -361,8 +361,8 @@ class AttendanceController {
       let hasPermission = isSystemAdmin;
       if (!hasPermission) {
         for (const group of userGroups) {
-          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
-          if (canView) {
+          const canEdit = await this.canEditGroupAttendance(currentUserId, group.id, false);
+          if (canEdit) {
             hasPermission = true;
             break;
           }
@@ -740,19 +740,11 @@ class AttendanceController {
         return res.status(400).json({ message: '請提供有效的CSV數據' });
       }
 
-      // 檢查用戶是否有權限匯入考勤（必須是系統管理員或 approver1 / approver2 / approver3）
+      // 檢查用戶是否有權限匯入考勤（系統管理員、approver1 / approver2 / approver3 或 supervisor）
       if (!isSystemAdmin) {
-        const allGroups = await DepartmentGroup.findAll({ closed: false });
-        let hasPermission = false;
-        for (const group of allGroups) {
-          const isApprover123 = await DepartmentGroup.isApprover123(userId, group.id);
-          if (isApprover123) {
-            hasPermission = true;
-            break;
-          }
-        }
+        const hasPermission = await DepartmentGroup.userIsAttendanceManager(userId);
         if (!hasPermission) {
-          return res.status(403).json({ message: '您沒有權限匯入考勤記錄（必須是群組的 approver1、approver2 或 approver3）' });
+          return res.status(403).json({ message: '您沒有權限匯入考勤記錄（必須是群組的 approver1、approver2、approver3 或 supervisor）' });
         }
       }
 
@@ -924,8 +916,8 @@ class AttendanceController {
           const userGroups = await DepartmentGroup.findByUserId(user.id);
           let hasPermission = false;
           for (const group of userGroups) {
-            const canView = await this.canViewGroupAttendance(userId, group.id, false);
-            if (canView) {
+            const canEdit = await this.canEditGroupAttendance(userId, group.id, false);
+            if (canEdit) {
               hasPermission = true;
               break;
             }
@@ -1051,8 +1043,8 @@ class AttendanceController {
           const userGroups = await DepartmentGroup.findByUserId(user.id);
           let hasPermission = false;
           for (const group of userGroups) {
-            const canView = await this.canViewGroupAttendance(userId, group.id, false);
-            if (canView) {
+            const canEdit = await this.canEditGroupAttendance(userId, group.id, false);
+            if (canEdit) {
               hasPermission = true;
               break;
             }
@@ -1187,8 +1179,8 @@ class AttendanceController {
           const userGroups = await DepartmentGroup.findByUserId(user.id);
           let hasPermission = false;
           for (const group of userGroups) {
-            const canView = await this.canViewGroupAttendance(userId, group.id, false);
-            if (canView) {
+            const canEdit = await this.canEditGroupAttendance(userId, group.id, false);
+            if (canEdit) {
               hasPermission = true;
               break;
             }
@@ -1365,8 +1357,8 @@ class AttendanceController {
       let hasPermission = isSystemAdmin;
       if (!hasPermission) {
         for (const group of userGroups) {
-          const canView = await this.canViewGroupAttendance(currentUserId, group.id, false);
-          if (canView) {
+          const canEdit = await this.canEditGroupAttendance(currentUserId, group.id, false);
+          if (canEdit) {
             hasPermission = true;
             break;
           }
@@ -1414,16 +1406,28 @@ class AttendanceController {
     }
   }
 
-  // 檢查用戶是否有權限訪問某個群組的考勤（必須是 checker、approver1、approver2 或 approver3）
+  // 查看考勤：checker、approver、supervisor、observer，以及原本可編更的人
   async canViewGroupAttendance(userId, departmentGroupId, isSystemAdmin = false) {
-    // 系統管理員可以查看所有群組
     if (isSystemAdmin) {
       return true;
     }
 
-    // 檢查是否為批核成員（checker, approver_1, approver_2, approver_3）
-    const canEdit = await Schedule.canEditSchedule(userId, departmentGroupId);
-    return canEdit;
+    if (await Schedule.canEditSchedule(userId, departmentGroupId)) {
+      return true;
+    }
+
+    const group = await knex('department_groups').where('id', departmentGroupId).first();
+    if (!group) return false;
+    const delegationGroupIds = await DepartmentGroup.getUserDelegationGroupIds(userId);
+    return DepartmentGroup.isAttendanceViewer(group, delegationGroupIds);
+  }
+
+  // 修改考勤：與可編更相同（approver、supervisor 可直接改；checker 受編更設定限制；observer 不可改）
+  async canEditGroupAttendance(userId, departmentGroupId, isSystemAdmin = false) {
+    if (isSystemAdmin) {
+      return true;
+    }
+    return Schedule.canEditSchedule(userId, departmentGroupId);
   }
 
   // 獲取用戶有權限查看的考勤群組列表（僅顯示用戶作為 checker/approver 可以訪問的群組）

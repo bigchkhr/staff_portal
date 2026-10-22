@@ -228,6 +228,7 @@ class User {
         .orWhereIn('approver_2_id', delegationGroupIds)
         .orWhereIn('approver_3_id', delegationGroupIds)
         .orWhereIn('supervisor_id', delegationGroupIds)
+        .orWhereIn('observer_id', delegationGroupIds)
         .orWhereIn('checker_id', delegationGroupIds)
         .first('id');
 

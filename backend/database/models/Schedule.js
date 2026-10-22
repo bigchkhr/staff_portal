@@ -431,6 +431,10 @@ class Schedule {
       return true;
     }
 
+    if (DepartmentGroup.isShiftReportViewer(group, delegationGroupIds)) {
+      return true;
+    }
+
     if (isChecker) {
       return group.allow_checker_edit !== false;
     }

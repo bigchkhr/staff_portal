@@ -39,86 +39,44 @@ const ShiftManagement = () => {
   const [schedulePendingCount, setSchedulePendingCount] = useState(0);
 
   useEffect(() => {
-    const checkApproverPermission = async () => {
-      // 系統管理員可以看到批核者功能（月結表、群組假期週曆）
+    const checkShiftMenuPermissions = async () => {
       if (isSystemAdmin) {
         setCanViewApproverFeatures(true);
-        return;
-      }
-
-      if (!user || !user.delegation_groups || user.delegation_groups.length === 0) {
-        setCanViewApproverFeatures(false);
-        return;
-      }
-
-      try {
-        // 獲取所有部門群組
-        const response = await axios.get('/api/groups/department');
-        const departmentGroups = response.data.groups || [];
-        
-        // 獲取用戶所屬的授權群組 ID
-        const userDelegationGroupIds = user.delegation_groups.map(g => Number(g.id));
-        
-        // 檢查是否有任何部門群組的 approver_1_id、approver_2_id、approver_3_id 匹配用戶的授權群組（不包括 checker）
-        const isApprover = departmentGroups.some(group => {
-          const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
-          const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
-          const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
-          
-          return (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
-                 (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
-                 (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
-        });
-        
-        setCanViewApproverFeatures(isApprover);
-      } catch (error) {
-        console.error('檢查批核者權限錯誤:', error);
-        setCanViewApproverFeatures(false);
-      }
-    };
-
-    const checkApprovalMemberPermission = async () => {
-      // 系統管理員可以看到打卡管理
-      if (isSystemAdmin) {
         setCanViewAttendanceManagement(true);
         return;
       }
 
       if (!user || !user.delegation_groups || user.delegation_groups.length === 0) {
+        setCanViewApproverFeatures(false);
         setCanViewAttendanceManagement(false);
         return;
       }
 
       try {
-        // 獲取所有部門群組
         const response = await axios.get('/api/groups/department');
         const departmentGroups = response.data.groups || [];
-        
-        // 獲取用戶所屬的授權群組 ID
         const userDelegationGroupIds = user.delegation_groups.map(g => Number(g.id));
-        
-        // 檢查是否有任何部門群組的 checker_id、approver_1_id、approver_2_id、approver_3_id 匹配用戶的授權群組
-        const isApprovalMember = departmentGroups.some(group => {
-          const checkerId = group.checker_id ? Number(group.checker_id) : null;
-          const approver1Id = group.approver_1_id ? Number(group.approver_1_id) : null;
-          const approver2Id = group.approver_2_id ? Number(group.approver_2_id) : null;
-          const approver3Id = group.approver_3_id ? Number(group.approver_3_id) : null;
-          
-          return (checkerId !== null && userDelegationGroupIds.includes(checkerId)) ||
-                 (approver1Id !== null && userDelegationGroupIds.includes(approver1Id)) ||
-                 (approver2Id !== null && userDelegationGroupIds.includes(approver2Id)) ||
-                 (approver3Id !== null && userDelegationGroupIds.includes(approver3Id));
-        });
-        
-        setCanViewAttendanceManagement(isApprovalMember);
+        const hasRole = (group, field) => {
+          const id = group[field] ? Number(group[field]) : null;
+          return id !== null && userDelegationGroupIds.includes(id);
+        };
+        const isApprover = departmentGroups.some(group =>
+          hasRole(group, 'approver_1_id') || hasRole(group, 'approver_2_id') || hasRole(group, 'approver_3_id')
+        );
+        const isSupervisor = departmentGroups.some(group => hasRole(group, 'supervisor_id'));
+        const isObserver = departmentGroups.some(group => hasRole(group, 'observer_id'));
+        const isChecker = departmentGroups.some(group => hasRole(group, 'checker_id'));
+
+        setCanViewApproverFeatures(isApprover || isSupervisor || isObserver);
+        setCanViewAttendanceManagement(isChecker || isApprover || isSupervisor || isObserver);
       } catch (error) {
-        console.error('檢查批核成員權限錯誤:', error);
+        console.error('檢查編更選單權限錯誤:', error);
+        setCanViewApproverFeatures(false);
         setCanViewAttendanceManagement(false);
       }
     };
 
-    checkApproverPermission();
-    checkApprovalMemberPermission();
+    checkShiftMenuPermissions();
     const fetchSchedulePendingCount = async () => {
       try {
         const response = await axios.get('/api/schedules/changes/pending-count');

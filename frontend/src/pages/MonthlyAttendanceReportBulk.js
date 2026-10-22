@@ -39,6 +39,8 @@ import timezone from 'dayjs/plugin/timezone';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import Layout from '../components/Layout';
+import { useAuth } from '../contexts/AuthContext';
+import { useCanManageMonthlyRecords } from '../utils/shiftRoles';
 import { store } from '../store';
 import { setMonthlyReportGeneratePreference } from '../store/slices/monthlyReportGeneratePreferenceSlice';
 import { setMonthlyAttendanceSummaryDateRange } from '../store/slices/monthlyAttendanceSummaryDateRangeSlice';
@@ -77,6 +79,8 @@ function getInitialDateRange() {
 
 const MonthlyAttendanceReportBulk = () => {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManageMonthly = useCanManageMonthlyRecords(user);
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const monthlyReportGeneratePreference = useSelector((state) => state.monthlyReportGeneratePreference);
@@ -471,27 +475,31 @@ const MonthlyAttendanceReportBulk = () => {
                   total: rows.length
                 })}
               </Typography>
-              <Button
-                variant="contained"
-                startIcon={generating ? <CircularProgress size={18} color="inherit" /> : <PlaylistAddCheckIcon />}
-                onClick={handleGenerate}
-                disabled={busy || loading || selectedRows.length === 0}
-              >
-                {generating
-                  ? t('bulkMonthlyReport.generatingProgress', { current: progress.current, total: progress.total })
-                  : t('bulkMonthlyReport.generateSelected')}
-              </Button>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={deleting ? <CircularProgress size={18} color="inherit" /> : <DeleteOutlineIcon />}
-                onClick={handleDelete}
-                disabled={busy || loading || selectedDeletableRows.length === 0}
-              >
-                {deleting
-                  ? t('bulkMonthlyReport.deletingProgress', { current: progress.current, total: progress.total })
-                  : t('bulkMonthlyReport.deleteSelected', { count: selectedDeletableRows.length })}
-              </Button>
+              {canManageMonthly && (
+                <>
+                  <Button
+                    variant="contained"
+                    startIcon={generating ? <CircularProgress size={18} color="inherit" /> : <PlaylistAddCheckIcon />}
+                    onClick={handleGenerate}
+                    disabled={busy || loading || selectedRows.length === 0}
+                  >
+                    {generating
+                      ? t('bulkMonthlyReport.generatingProgress', { current: progress.current, total: progress.total })
+                      : t('bulkMonthlyReport.generateSelected')}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={deleting ? <CircularProgress size={18} color="inherit" /> : <DeleteOutlineIcon />}
+                    onClick={handleDelete}
+                    disabled={busy || loading || selectedDeletableRows.length === 0}
+                  >
+                    {deleting
+                      ? t('bulkMonthlyReport.deletingProgress', { current: progress.current, total: progress.total })
+                      : t('bulkMonthlyReport.deleteSelected', { count: selectedDeletableRows.length })}
+                  </Button>
+                </>
+              )}
               {busy && (
                 <Button color="inherit" onClick={handleCancel}>
                   {t('common.cancel')}

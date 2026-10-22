@@ -104,7 +104,9 @@ const StoreWageCostReport = () => {
         const filtered = user.is_system_admin
           ? groups
           : groups.filter((group) =>
-            [group.approver_1_id, group.approver_2_id, group.approver_3_id]
+            group.is_approver === true
+            || group.is_observer === true
+            || [group.approver_1_id, group.approver_2_id, group.approver_3_id, group.supervisor_id, group.observer_id]
               .some((id) => id && userDelegationGroupIds.includes(Number(id)))
           );
         if (!user.is_system_admin && filtered.length === 0) {
@@ -210,7 +212,9 @@ const StoreWageCostReport = () => {
     const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
     const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-    return isChecker || isApprover1 || isApprover2 || isApprover3;
+    const isSupervisor = group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id));
+    const isObserver = group.observer_id && userDelegationGroupIds.includes(Number(group.observer_id));
+    return isChecker || isApprover1 || isApprover2 || isApprover3 || isSupervisor || isObserver;
   };
 
   const renderTerminationDate = (terminationDate) => {

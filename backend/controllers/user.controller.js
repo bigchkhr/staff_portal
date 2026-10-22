@@ -120,7 +120,9 @@ class UserController {
         hasDirectApproverRole = !!directApprover;
       }
       
-      if (!isHRMember && !isSystemAdmin && !isApprovalMember && !hasDirectApproverRole) {
+      const DepartmentGroup = require('../database/models/DepartmentGroup');
+      const canViewShiftReports = await DepartmentGroup.userCanViewShiftReports(userId);
+      if (!isHRMember && !isSystemAdmin && !isApprovalMember && !hasDirectApproverRole && !canViewShiftReports) {
         return res.status(403).json({ message: '無權限存取用戶列表' });
       }
 

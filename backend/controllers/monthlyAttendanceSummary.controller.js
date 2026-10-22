@@ -477,6 +477,12 @@ class MonthlyAttendanceSummaryController {
     }
   }
 
+  async checkViewPermission(userId, targetUserId = null) {
+    if (await this.checkAccessPermission(userId, targetUserId)) return true;
+    const DepartmentGroup = require('../database/models/DepartmentGroup');
+    return DepartmentGroup.userCanViewShiftReports(userId);
+  }
+
   // 取得月結記錄列表
   async getMonthlySummaries(req, res) {
     try {
@@ -493,8 +499,8 @@ class MonthlyAttendanceSummaryController {
       // 檢查權限：如果指定了 user_id，檢查是否有權限查看該用戶的月結表
       // 如果沒有指定 user_id，檢查用戶是否有權限存取月結表（允許查看所有記錄）
       const hasPermission = filters.user_id 
-        ? await this.checkAccessPermission(userId, filters.user_id)
-        : await this.checkAccessPermission(userId);
+        ? await this.checkViewPermission(userId, filters.user_id)
+        : await this.checkViewPermission(userId);
       
       if (!hasPermission) {
         return res.status(403).json({ 
@@ -926,7 +932,7 @@ class MonthlyAttendanceSummaryController {
       }
 
       // 檢查權限：檢查是否有權限查看該用戶的月結表
-      const hasPermission = await this.checkAccessPermission(userId, summary.user_id);
+      const hasPermission = await this.checkViewPermission(userId, summary.user_id);
       if (!hasPermission) {
         return res.status(403).json({ message: '無權限存取此月結記錄' });
       }
@@ -1653,7 +1659,7 @@ class MonthlyAttendanceSummaryController {
         return res.status(404).json({ message: '找不到群組' });
       }
 
-      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.isApprover123(userId, groupId);
+      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.userCanViewGroupShiftReport(userId, groupId);
       if (!canViewGroup) {
         return res.status(403).json({ message: '無權限查看此群組的報表' });
       }
@@ -1900,7 +1906,7 @@ class MonthlyAttendanceSummaryController {
         return res.status(404).json({ message: '找不到群組' });
       }
 
-      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.isApprover123(userId, groupId);
+      const canViewGroup = req.user.is_system_admin || await DepartmentGroup.userCanViewGroupShiftReport(userId, groupId);
       if (!canViewGroup) {
         return res.status(403).json({ message: '無權限查看此群組的報表' });
       }

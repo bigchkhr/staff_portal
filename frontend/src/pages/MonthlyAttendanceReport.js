@@ -47,6 +47,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import Swal from 'sweetalert2';
 import Layout from '../components/Layout';
+import { useCanManageMonthlyRecords } from '../utils/shiftRoles';
 import dayjs from 'dayjs';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
@@ -59,6 +60,7 @@ const MonthlyAttendanceReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canManageMonthly = useCanManageMonthlyRecords(user);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -790,23 +792,27 @@ const MonthlyAttendanceReport = () => {
               >
                 {t('attendance.exportPDF') || '導出 PDF'}
               </Button>
-              <Button
-                variant="contained"
-                color="error"
-                startIcon={<DeleteIcon />}
-                onClick={handleDelete}
-              >
-                {t('common.delete')}
-              </Button>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<SaveIcon />}
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving ? t('common.saving') : t('common.save')}
-              </Button>
+              {canManageMonthly && (
+                <>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleDelete}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSave}
+                    disabled={saving}
+                  >
+                    {saving ? t('common.saving') : t('common.save')}
+                  </Button>
+                </>
+              )}
             </Box>
           </Box>
 

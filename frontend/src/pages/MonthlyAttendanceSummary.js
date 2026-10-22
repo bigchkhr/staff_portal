@@ -54,6 +54,8 @@ import { store } from '../store';
 import { setMonthlyReportGeneratePreference } from '../store/slices/monthlyReportGeneratePreferenceSlice';
 import { setMonthlyAttendanceSummaryDateRange } from '../store/slices/monthlyAttendanceSummaryDateRangeSlice';
 import Swal from 'sweetalert2';
+import { useAuth } from '../contexts/AuthContext';
+import { useCanManageMonthlyRecords } from '../utils/shiftRoles';
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 
@@ -165,6 +167,8 @@ function getInitialDateRangeForMonthlySummary() {
 
 const MonthlyAttendanceSummary = ({ noLayout = false }) => {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const canManageMonthly = useCanManageMonthlyRecords(user);
   const dispatch = useDispatch();
   const monthlyReportGeneratePreference = useSelector((state) => state.monthlyReportGeneratePreference);
   const theme = useTheme();
@@ -1336,7 +1340,7 @@ const MonthlyAttendanceSummary = ({ noLayout = false }) => {
             )}
 
             {/* 生成月報按鈕 */}
-            {summary && selectedUserId && (
+            {canManageMonthly && summary && selectedUserId && (
               <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Button
                   variant="contained"

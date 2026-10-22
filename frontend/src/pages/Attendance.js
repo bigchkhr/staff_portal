@@ -232,15 +232,16 @@ const Attendance = ({ noLayout = false }) => {
         return;
       }
 
-      // 檢查用戶是否為批核成員（僅 approver_1, approver_2, approver_3，不包含 checker）
+      // approver 1/2/3 與 supervisor 可修改打卡；checker、observer 只可查看
       const userDelegationGroups = user.delegation_groups || [];
       const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
 
       const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
       const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
       const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
+      const isSupervisor = group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id));
 
-      setCanEdit(isApprover1 || isApprover2 || isApprover3);
+      setCanEdit(isApprover1 || isApprover2 || isApprover3 || isSupervisor);
     } catch (error) {
       console.error('Check edit permission error:', error);
       setCanEdit(false);
@@ -254,7 +255,8 @@ const Attendance = ({ noLayout = false }) => {
     return Boolean(
       (group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id))) ||
       (group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id))) ||
-      (group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id)))
+      (group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id))) ||
+      (group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id)))
     );
   };
 
@@ -271,7 +273,9 @@ const Attendance = ({ noLayout = false }) => {
     const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
     const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-    return isChecker || isApprover1 || isApprover2 || isApprover3;
+    const isSupervisor = group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id));
+    const isObserver = group.observer_id && userDelegationGroupIds.includes(Number(group.observer_id));
+    return isChecker || isApprover1 || isApprover2 || isApprover3 || isSupervisor || isObserver;
   };
 
   const canViewScheduleRemarks = () => {
@@ -283,10 +287,12 @@ const Attendance = ({ noLayout = false }) => {
     const isApprover1 = group.approver_1_id && userDelegationGroupIds.includes(Number(group.approver_1_id));
     const isApprover2 = group.approver_2_id && userDelegationGroupIds.includes(Number(group.approver_2_id));
     const isApprover3 = group.approver_3_id && userDelegationGroupIds.includes(Number(group.approver_3_id));
-    if (isChecker) {
+    const isSupervisor = group.supervisor_id && userDelegationGroupIds.includes(Number(group.supervisor_id));
+    const isObserver = group.observer_id && userDelegationGroupIds.includes(Number(group.observer_id));
+    if (isChecker && !isApprover1 && !isApprover2 && !isApprover3 && !isSupervisor && !isObserver) {
       return group.allow_checker_edit !== false;
     }
-    return isApprover1 || isApprover2 || isApprover3;
+    return isApprover1 || isApprover2 || isApprover3 || isSupervisor || isObserver;
   };
 
   const getRosterTotalHoursLabel = (startTime, endTime) => {

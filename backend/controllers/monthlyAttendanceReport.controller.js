@@ -93,6 +93,12 @@ class MonthlyAttendanceReportController {
     }
   }
 
+  async checkViewPermission(currentUserId, targetUserId = null) {
+    if (await this.checkAccessPermission(currentUserId, targetUserId)) return true;
+    const DepartmentGroup = require('../database/models/DepartmentGroup');
+    return DepartmentGroup.userCanViewShiftReports(currentUserId);
+  }
+
   // 根據假期類型代碼或名稱歸類假期
   classifyLeaveType(leaveTypeCode, leaveTypeNameZh) {
     const code = (leaveTypeCode || '').trim().toUpperCase();
@@ -212,7 +218,7 @@ class MonthlyAttendanceReportController {
   async getClockedUsers(req, res) {
     try {
       const currentUserId = req.user.id;
-      const hasPermission = await this.checkAccessPermission(currentUserId);
+      const hasPermission = await this.checkViewPermission(currentUserId);
       if (!hasPermission) {
         return res.status(403).json({ message: '無權限存取此功能' });
       }
@@ -812,14 +818,13 @@ class MonthlyAttendanceReportController {
 
       // 如果指定了 user_id，檢查權限
       if (filters.user_id) {
-        const hasPermission = await this.checkAccessPermission(userId, filters.user_id);
+        const hasPermission = await this.checkViewPermission(userId, filters.user_id);
         if (!hasPermission) {
           return res.status(403).json({ message: '無權限存取此月報記錄' });
         }
       } else {
         // 如果沒有指定 user_id，檢查用戶是否有權限查看所有報告
-        // 允許：HR 成員、系統管理員、批核者（approver1、approver2、approver3）
-        const hasPermission = await this.checkAccessPermission(userId);
+        const hasPermission = await this.checkViewPermission(userId);
         if (!hasPermission) {
           return res.status(403).json({ message: '無權限存取月報列表' });
         }
@@ -845,7 +850,7 @@ class MonthlyAttendanceReportController {
       }
 
       // 檢查權限
-      const hasPermission = await this.checkAccessPermission(userId, report.user_id);
+      const hasPermission = await this.checkViewPermission(userId, report.user_id);
       if (!hasPermission) {
         return res.status(403).json({ message: '無權限存取此月報記錄' });
       }
@@ -934,7 +939,7 @@ class MonthlyAttendanceReportController {
       }
 
       // 檢查權限 - 需要能夠查看所有報告的權限
-      const hasPermission = await this.checkAccessPermission(userId);
+      const hasPermission = await this.checkViewPermission(userId);
       if (!hasPermission) {
         return res.status(403).json({ message: '無權限導出月報' });
       }

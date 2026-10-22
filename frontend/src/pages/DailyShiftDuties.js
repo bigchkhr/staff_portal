@@ -390,7 +390,7 @@ const DailyShiftDuties = ({
         const filtered = user.is_system_admin
           ? groups
           : groups.filter((group) => {
-            const ids = [group.checker_id, group.approver_1_id, group.approver_2_id, group.approver_3_id, group.supervisor_id];
+            const ids = [group.checker_id, group.approver_1_id, group.approver_2_id, group.approver_3_id, group.supervisor_id, group.observer_id];
             return ids.some((id) => id && userDelegationGroupIds.includes(Number(id)));
           });
         if (!user.is_system_admin && filtered.length === 0) {
