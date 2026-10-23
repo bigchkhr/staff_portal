@@ -67,6 +67,75 @@ const formatApplication = (application) => {
 };
 
 class OutdoorWorkApplication {
+  // 用戶是否為該申請人外勤流程的 Approver 1 / 2 / 3（直接指定或所屬授權群組）
+  static async userIsApprover123(userId, applicantUserId, application = null, delegationGroupIds = null, flowCache = null) {
+    const uid = Number(userId);
+    const applicantId = Number(applicantUserId);
+    if (!uid || !applicantId) return false;
+
+    if (application && [application.approver_1_id, application.approver_2_id, application.approver_3_id]
+      .some((id) => id != null && Number(id) === uid)) {
+      return true;
+    }
+
+    if (!application) {
+      const direct = await knex('outdoor_work_applications')
+        .where({ user_id: applicantId, status: 'pending' })
+        .where(function directApprover() {
+          this.where('approver_1_id', uid)
+            .orWhere('approver_2_id', uid)
+            .orWhere('approver_3_id', uid);
+        })
+        .first('id');
+      if (direct) return true;
+    }
+
+    let groupIds = delegationGroupIds;
+    if (!groupIds) {
+      const rows = await knex('delegation_groups')
+        .whereRaw('? = ANY(delegation_groups.user_ids)', [uid])
+        .select('id');
+      groupIds = rows.map((row) => Number(row.id));
+    }
+    if (!groupIds.length) return false;
+
+    const DepartmentGroup = require('./DepartmentGroup');
+    let flow;
+    if (flowCache && flowCache.has(applicantId)) {
+      flow = flowCache.get(applicantId);
+    } else {
+      const groups = await DepartmentGroup.findByUserId(applicantId);
+      flow = groups && groups.length ? await DepartmentGroup.getApprovalFlow(groups[0].id) : [];
+      if (flowCache) flowCache.set(applicantId, flow);
+    }
+
+    return flow.some((step) => (
+      ['approver_1', 'approver_2', 'approver_3'].includes(step.level)
+      && step.delegation_group_id
+      && groupIds.includes(Number(step.delegation_group_id))
+    ));
+  }
+
+  static async listPendingByApplicant(applicantId) {
+    const applications = await knex('outdoor_work_applications')
+      .leftJoin('users', 'outdoor_work_applications.user_id', 'users.id')
+      .select(
+        'outdoor_work_applications.*',
+        knex.raw('outdoor_work_applications.id as transaction_id'),
+        'users.employee_number as user_employee_number',
+        'users.employee_number as applicant_employee_number',
+        'users.surname as user_surname',
+        'users.given_name as user_given_name',
+        'users.display_name as user_display_name',
+        'users.display_name as applicant_display_name'
+      )
+      .where('outdoor_work_applications.status', 'pending')
+      .where('outdoor_work_applications.user_id', applicantId)
+      .orderBy('outdoor_work_applications.created_at', 'asc');
+
+    return applications.map(formatApplication);
+  }
+
   static async create(applicationData) {
     const payload = {
       ...applicationData,
@@ -230,12 +299,25 @@ class OutdoorWorkApplication {
 
     // HR Group 可查看有權限的待批核申請；只有當前階段輪到自己才可批，其餘只供查看
     if (isHRMember) {
+      const userDelegationGroups = await knex('delegation_groups')
+        .whereRaw('? = ANY(delegation_groups.user_ids)', [Number(userId)])
+        .select('id');
+      const userDelegationGroupIds = userDelegationGroups.map(g => Number(g.id));
+      const flowCache = new Map();
       const filteredApplications = [];
       for (const app of allApplications) {
         const canView = await User.canViewOutdoorWorkApplication(userId, app.id);
         if (!canView) continue;
         const canApproveNow = await User.canApproveOutdoorWork(userId, app.id);
+        const isApprover123 = await this.userIsApprover123(
+          userId,
+          app.user_id,
+          app,
+          userDelegationGroupIds,
+          flowCache
+        );
         app.can_approve = !!canApproveNow;
+        app.can_bulk_view = !!(canApproveNow || isApprover123);
         if (!canApproveNow) {
           app.view_only = true;
         }
@@ -255,9 +337,11 @@ class OutdoorWorkApplication {
       (await DepartmentGroup.getSupervisedApplicantIds(userId)).map((id) => Number(id))
     );
 
-    // 過濾出當前階段輪到該用戶批核的申請；supervisor 可查看群組成員所有未完成階段
+    // 過濾出當前階段輪到該用戶批核的申請；supervisor 可查看群組成員所有未完成階段。
+    // Approver 1/2/3 即使未輪到自己，亦可查看以便批量閱覽。
     const filteredApplications = [];
     const currentUserId = Number(userId);
+    const flowCache = new Map();
 
     for (const app of allApplications) {
       // 確定當前批核階段
@@ -335,7 +419,16 @@ class OutdoorWorkApplication {
           canApprove = false;
         }
       }
-      if (canApprove || isSupervisorView || app.view_only) {
+      const isApprover123 = await this.userIsApprover123(
+        currentUserId,
+        app.user_id,
+        app,
+        userDelegationGroupIds,
+        flowCache
+      );
+      app.can_bulk_view = !!(canApprove || isApprover123);
+
+      if (canApprove || isSupervisorView || app.view_only || isApprover123) {
         app.can_approve = !!canApprove;
         if (!canApprove) {
           app.view_only = true;

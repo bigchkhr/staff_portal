@@ -372,13 +372,7 @@ const OutdoorWorkBulkApproval = () => {
                 </TableHead>
                 <TableBody>
                   {applications.map(app => (
-                    <TableRow
-                      key={app.id}
-                      hover
-                      sx={{
-                        opacity: permissionsLoaded ? (canSelectMap[app.id] ? 1 : 0.45) : 1
-                      }}
-                    >
+                    <TableRow key={app.id} hover>
                       <TableCell padding="checkbox">
                         <Checkbox
                           checked={selectedIds.includes(app.id)}

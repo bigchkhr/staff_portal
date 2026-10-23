@@ -52,16 +52,16 @@ const ApprovalList = () => {
   const navigate = useNavigate();
 
   const handleView = async (app) => {
-    // 外勤工作：只有真正可批核的人，多於一筆時才進入批量批核。Supervisor 只讀，直接看單筆詳情。
-    if (app.application_type === 'outdoor_work' && app.can_approve === true) {
+    // 外勤工作：輪到自己批核，或自己是 Approver 1/2/3，同一申請人有多過一筆待批時進入批量頁。
+    // 只供查看、又不是 Approver 1/2/3 的人，仍然直接看單筆詳情。
+    if (app.application_type === 'outdoor_work' && (app.can_approve === true || app.can_bulk_view === true)) {
       const applicantId = app.user_id;
       if (applicantId) {
         try {
           setOpeningId(app.id);
           const res = await axios.get(`/api/approvals/pending/outdoor-work/applicant/${applicantId}`);
           const apps = res.data.applications || [];
-          const approvableCount = apps.filter((item) => item.can_approve === true).length;
-          if (approvableCount > 1) {
+          if (apps.length > 1) {
             navigate(`/approval/outdoor-work/bulk/${applicantId}`);
             return;
           }

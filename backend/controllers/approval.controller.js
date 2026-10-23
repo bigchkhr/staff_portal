@@ -462,12 +462,33 @@ class ApprovalController {
         return res.status(400).json({ message: '無效的申請人 ID' });
       }
 
-      const outdoorWorkApplications = await OutdoorWorkApplication.getPendingApprovals(req.user.id);
-      const filtered = (outdoorWorkApplications || [])
-        .filter(app => Number(app.user_id) === applicantId)
-        .map(app => ({ ...app, application_type: 'outdoor_work' }));
+      const visible = (await OutdoorWorkApplication.getPendingApprovals(req.user.id) || [])
+        .filter(app => Number(app.user_id) === applicantId);
+      const isApprover123 = await OutdoorWorkApplication.userIsApprover123(req.user.id, applicantId);
+      const canAct = visible.some(app => app.can_approve === true);
+      const canBulkView = isApprover123 || canAct;
 
-      return res.json({ applications: filtered });
+      let applications = visible.map(app => ({ ...app, application_type: 'outdoor_work' }));
+      if (isApprover123) {
+        const allPending = await OutdoorWorkApplication.listPendingByApplicant(applicantId);
+        const visibleById = new Map(visible.map(app => [Number(app.id), app]));
+        applications = await Promise.all(allPending.map(async (app) => {
+          const existing = visibleById.get(Number(app.id));
+          if (existing) {
+            return { ...existing, application_type: 'outdoor_work', can_bulk_view: true };
+          }
+          const canApprove = await User.canApproveOutdoorWork(req.user.id, app.id);
+          return {
+            ...app,
+            application_type: 'outdoor_work',
+            can_approve: !!canApprove,
+            view_only: !canApprove,
+            can_bulk_view: true
+          };
+        }));
+      }
+
+      return res.json({ applications, can_bulk_view: canBulkView });
     } catch (error) {
       console.error('Get pending outdoor work approvals by applicant error:', error);
       return res.status(500).json({ message: '獲取待批核外勤工作申請時發生錯誤' });

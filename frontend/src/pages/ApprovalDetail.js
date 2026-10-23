@@ -244,11 +244,12 @@ const ApprovalDetail = () => {
       return;
     }
     
+    let canApproveFromBackend = false;
     try {
       const response = await axios.get(`/api/users/can-approve/${id}`, {
         params: { application_type: applicationType }
       });
-      const canApproveFromBackend = !!response.data?.canApprove;
+      canApproveFromBackend = !!response.data?.canApprove;
       setCanApproveThis(canApproveFromBackend);
       setCanRejectThis(canApproveFromBackend);
       setUserApprovalStage(canApproveFromBackend ? currentStage : null);
@@ -257,6 +258,22 @@ const ApprovalDetail = () => {
       setCanApproveThis(false);
       setCanRejectThis(false);
       setUserApprovalStage(null);
+    }
+
+    // 直入單筆網址時，可批核者或 Approver 1/2/3 若同一申請人有多過一筆待批外勤，改去批量頁閱覽。
+    if (applicationType === 'outdoor_work' && application.user_id) {
+      try {
+        const pendingRes = await axios.get(
+          `/api/approvals/pending/outdoor-work/applicant/${application.user_id}`
+        );
+        const pendingApps = pendingRes.data.applications || [];
+        const canBulkView = !!pendingRes.data.can_bulk_view || canApproveFromBackend;
+        if (canBulkView && pendingApps.length > 1) {
+          navigate(`/approval/outdoor-work/bulk/${application.user_id}`, { replace: true });
+        }
+      } catch (pendingError) {
+        console.error('Detect outdoor work bulk redirect error:', pendingError);
+      }
     }
   };
 
