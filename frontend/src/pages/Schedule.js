@@ -159,7 +159,6 @@ const Schedule = ({ noLayout = false }) => {
   const [editStoreId, setEditStoreId] = useState(null);
   const [editRemarks, setEditRemarks] = useState('');
   const [stores, setStores] = useState([]);
-  const [selectedDefaultStoreId, setSelectedDefaultStoreId] = useState(null); // 控制面板選擇的店舖（不存到資料庫）
   const [csvImportDialogOpen, setCsvImportDialogOpen] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -198,11 +197,8 @@ const Schedule = ({ noLayout = false }) => {
     return groupMembers.filter((m) => idSet.has(Number(m.id)));
   }, [editMode, groupMembers, editMemberIds]);
   const helperUsers = useMemo(() => {
-    const selectedId = selectedDefaultStoreId ? Number(selectedDefaultStoreId) : null;
     const byUser = {};
     (helperSchedules || []).forEach((helper) => {
-      const loanIds = Array.isArray(helper.loan_store_ids) ? helper.loan_store_ids.map(Number) : [];
-      if (selectedId && Number(helper.store_id) !== selectedId && !loanIds.includes(selectedId)) return;
       const userId = helper.user_id;
       if (!byUser[userId]) {
         byUser[userId] = {
@@ -223,7 +219,7 @@ const Schedule = ({ noLayout = false }) => {
       if (dateStr) byUser[userId].schedules[dateStr] = helper;
     });
     return Object.values(byUser);
-  }, [helperSchedules, selectedDefaultStoreId]);
+  }, [helperSchedules]);
   const selectedCellKeySet = useMemo(() => new Set(selectedCellKeys), [selectedCellKeys]);
   const findSelectedGroup = (groups = departmentGroups) =>
     (groups || []).find((g) => Number(g.id) === Number(selectedGroupId));
@@ -260,7 +256,7 @@ const Schedule = ({ noLayout = false }) => {
       fetchGroupMembers();
       fetchSchedules();
     }
-  }, [selectedGroupId, startDate, endDate, selectedDefaultStoreId]);
+  }, [selectedGroupId, startDate, endDate]);
 
   useEffect(() => {
     if (!canViewDuty && workMode === 'duty') {
@@ -286,7 +282,6 @@ const Schedule = ({ noLayout = false }) => {
           start_date: start,
           end_date: end
         };
-        if (selectedDefaultStoreId) params.store_id = selectedDefaultStoreId;
         const response = await axios.get('/api/schedules/daily-duties', { params });
         if (cancelled) return;
         const map = {};
@@ -303,7 +298,7 @@ const Schedule = ({ noLayout = false }) => {
     return () => {
       cancelled = true;
     };
-  }, [workMode, selectedGroupId, startDate, endDate, selectedDefaultStoreId, dutyRefresh, canViewDuty]);
+  }, [workMode, selectedGroupId, startDate, endDate, dutyRefresh, canViewDuty]);
 
   useEffect(() => {
     if (selectedGroupId) {
@@ -464,7 +459,6 @@ const Schedule = ({ noLayout = false }) => {
           start_date: startDateStr,
           end_date: endDateStr
         };
-        if (selectedDefaultStoreId) helperParams.store_id = selectedDefaultStoreId;
         const helperResponse = await axios.get('/api/schedules/helpers', { params: helperParams });
         helperSchedulesData = helperResponse.data.helperSchedules || [];
       } catch (error) {
@@ -1321,7 +1315,7 @@ const Schedule = ({ noLayout = false }) => {
       });
       return;
     }
-    setBatchStoreId(selectedDefaultStoreId);
+    setBatchStoreId(null);
     setBatchEditDialogOpen(true);
   };
 
@@ -1403,7 +1397,7 @@ const Schedule = ({ noLayout = false }) => {
       setSelectedCellKeys([key]);
       setSelectionAnchor({ rowIndex, colIndex, userId: member.id, dateStr });
     }
-    setBatchStoreId(selectedDefaultStoreId);
+    setBatchStoreId(null);
     setBatchEditDialogOpen(true);
   };
 
@@ -1663,16 +1657,11 @@ const Schedule = ({ noLayout = false }) => {
         const hours = parseInt(parts[0], 10);
         if (!isNaN(hours) && hours >= 0 && hours <= 32) {
           setEditStartTime(value);
-          // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
-          if (selectedDefaultStoreId && !editStoreId) {
-            setEditStoreId(selectedDefaultStoreId);
-          }
           return; // 還未輸入完整，不自動計算
         }
         // 3 位純數字（如 094）允許暫存，輸入第 4 位即會觸發 4 位轉 09:45
         if (value.length === 3 && /^\d{3}$/.test(value)) {
           setEditStartTime(value);
-          if (selectedDefaultStoreId && !editStoreId) setEditStoreId(selectedDefaultStoreId);
           return;
         }
       } else if (parts.length === 2) {
@@ -1701,10 +1690,6 @@ const Schedule = ({ noLayout = false }) => {
             shouldAutoCalculate = true;
           } else {
             setEditStartTime(value);
-            // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
-            if (selectedDefaultStoreId && !editStoreId) {
-              setEditStoreId(selectedDefaultStoreId);
-            }
             return; // 還未輸入完整，不自動計算
           }
         }
@@ -1722,10 +1707,6 @@ const Schedule = ({ noLayout = false }) => {
         if (calculatedEndTime) {
           setEditEndTime(calculatedEndTime);
         }
-      }
-      // 如果控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
-      if (selectedDefaultStoreId && !editStoreId) {
-        setEditStoreId(selectedDefaultStoreId);
       }
     }
   };
@@ -2315,16 +2296,11 @@ const Schedule = ({ noLayout = false }) => {
         const hours = parseInt(parts[0], 10);
         if (!isNaN(hours) && hours >= 0 && hours <= 32) {
           setBatchStartTime(value);
-          // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
-          if (selectedDefaultStoreId && !batchStoreId) {
-            setBatchStoreId(selectedDefaultStoreId);
-          }
           return; // 還未輸入完整，不自動計算
         }
         // 3 位純數字（如 094）允許暫存，輸入第 4 位即會觸發 4 位轉 09:45
         if (value.length === 3 && /^\d{3}$/.test(value)) {
           setBatchStartTime(value);
-          if (selectedDefaultStoreId && !batchStoreId) setBatchStoreId(selectedDefaultStoreId);
           return;
         }
       } else if (parts.length === 2) {
@@ -2349,10 +2325,6 @@ const Schedule = ({ noLayout = false }) => {
             shouldAutoCalculate = true;
           } else {
             setBatchStartTime(value);
-            // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
-            if (selectedDefaultStoreId && !batchStoreId) {
-              setBatchStoreId(selectedDefaultStoreId);
-            }
             return; // 還未輸入完整，不自動計算
           }
         }
@@ -2367,10 +2339,6 @@ const Schedule = ({ noLayout = false }) => {
         if (calculatedEndTime) {
           setBatchEndTime(calculatedEndTime);
         }
-      }
-      // 如果控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
-      if (selectedDefaultStoreId && !batchStoreId) {
-        setBatchStoreId(selectedDefaultStoreId);
       }
     }
   };
@@ -3355,7 +3323,7 @@ const Schedule = ({ noLayout = false }) => {
             }}
           >
             <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>{t('schedule.selectGroup')}</InputLabel>
                   <Select
@@ -3385,7 +3353,7 @@ const Schedule = ({ noLayout = false }) => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <DatePicker timezone={HK_TZ}
                   label={t('schedule.startDate')}
                   value={startDate}
@@ -3403,7 +3371,7 @@ const Schedule = ({ noLayout = false }) => {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <DatePicker timezone={HK_TZ}
                   label={t('schedule.endDate')}
                   value={endDate}
@@ -3422,30 +3390,6 @@ const Schedule = ({ noLayout = false }) => {
                     } 
                   }}
                 />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>{t('schedule.selectStoreForHelper') || t('schedule.store')}</InputLabel>
-                  <Select
-                    value={selectedDefaultStoreId || ''}
-                    onChange={(e) => setSelectedDefaultStoreId(e.target.value || null)}
-                    label={t('schedule.selectStoreForHelper') || t('schedule.store')}
-                    disabled={editMode}
-                    sx={{
-                      bgcolor: 'background.paper',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <MenuItem value="">
-                      <em>{t('schedule.allStores')}</em>
-                    </MenuItem>
-                    {[...stores].sort((a, b) => (a.store_short_name_ || '').localeCompare(b.store_short_name_ || '')).map(store => (
-                      <MenuItem key={store.id} value={store.id}>
-                        {store.store_short_name_ || store.store_code} {store.store_short_name_ ? `(${store.store_code})` : ''}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -4440,11 +4384,6 @@ const Schedule = ({ noLayout = false }) => {
                         // 如果清空假期類型，也清空時段
                         if (!newLeaveTypeId) {
                           setEditLeaveSession(null);
-                        } else {
-                          // 如果選擇了假期類型，且控制面板已選擇店舖，且編輯排班中的店舖為空，則自動設置為控制面板選擇的店舖
-                          if (selectedDefaultStoreId && !editStoreId) {
-                            setEditStoreId(selectedDefaultStoreId);
-                          }
                         }
                       }}
                       label={t('schedule.leaveType')}
@@ -4832,10 +4771,6 @@ const Schedule = ({ noLayout = false }) => {
                           setBatchLeaveSession(null);
                         } else {
                           setBatchLeaveTypeId(Number(value));
-                          // 如果選擇了假期類型，且控制面板已選擇店舖，且批量編輯中的店舖為空，則自動設置為控制面板選擇的店舖
-                          if (selectedDefaultStoreId && !batchStoreId) {
-                            setBatchStoreId(selectedDefaultStoreId);
-                          }
                         }
                       }}
                       label={t('schedule.leaveType')}
@@ -4957,7 +4892,7 @@ const Schedule = ({ noLayout = false }) => {
                 key={dutyFocusDate}
                 embedded
                 groupId={selectedGroupId}
-                storeId={selectedDefaultStoreId || ''}
+                storeId=""
                 anchorDate={dutyFocusDate}
                 fixedView="day"
                 onDirtyChange={setDutyDirty}

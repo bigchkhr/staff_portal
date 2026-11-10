@@ -78,6 +78,24 @@ async function resolveEntitlementLeaveType(kind) {
   return null;
 }
 
+async function resolveStoreDepartmentGroupId(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const groupId = parseInt(value, 10);
+  if (Number.isNaN(groupId)) {
+    const error = new Error('部門群組不正確');
+    error.status = 400;
+    throw error;
+  }
+  const group = await knex('department_groups').where('id', groupId).first('id');
+  if (!group) {
+    const error = new Error('部門群組不存在');
+    error.status = 400;
+    throw error;
+  }
+  return groupId;
+}
+
 class AdminController {
   async createUser(req, res) {
     try {
@@ -720,7 +738,14 @@ class AdminController {
   // ===== Stores 管理 =====
   async getStores(req, res) {
     try {
-      const stores = await knex('stores').orderBy('store_code');
+      const stores = await knex('stores')
+        .leftJoin('department_groups', 'stores.department_group_id', 'department_groups.id')
+        .select(
+          'stores.*',
+          'department_groups.name as department_group_name',
+          'department_groups.name_zh as department_group_name_zh'
+        )
+        .orderBy('stores.store_code');
       res.json({ stores });
     } catch (error) {
       console.error('Get stores error:', error);
@@ -740,12 +765,15 @@ class AdminController {
         open_date,
         close_date,
         district,
-        is_closed
+        is_closed,
+        department_group_id
       } = req.body;
 
       if (!store_code) {
         return res.status(400).json({ message: '請填寫店舖編號（store_code）' });
       }
+
+      const departmentGroupId = await resolveStoreDepartmentGroupId(department_group_id);
 
       const existing = await knex('stores').where('store_code', store_code).first('id');
       if (existing) {
@@ -762,7 +790,8 @@ class AdminController {
         open_date: open_date || null,
         close_date: close_date || null,
         district: district || null,
-        is_closed: is_closed !== undefined ? !!is_closed : false
+        is_closed: is_closed !== undefined ? !!is_closed : false,
+        department_group_id: departmentGroupId
       };
 
       const [store] = await knex('stores').insert(insertData).returning('*');
@@ -773,7 +802,10 @@ class AdminController {
       });
     } catch (error) {
       console.error('Create store error:', error);
-      res.status(500).json({ message: '建立店舖時發生錯誤', error: error.message });
+      res.status(error.status || 500).json({
+        message: error.status ? error.message : '建立店舖時發生錯誤',
+        error: error.message
+      });
     }
   }
 
@@ -801,6 +833,12 @@ class AdminController {
         updateData.is_closed = !!updateData.is_closed;
       }
 
+      if (updateData.department_group_id !== undefined) {
+        updateData.department_group_id = await resolveStoreDepartmentGroupId(updateData.department_group_id);
+      }
+      delete updateData.department_group_name;
+      delete updateData.department_group_name_zh;
+
       await knex('stores').where('id', id).update(updateData);
       const store = await knex('stores').where('id', id).first();
 
@@ -810,7 +848,10 @@ class AdminController {
       });
     } catch (error) {
       console.error('Update store error:', error);
-      res.status(500).json({ message: '更新店舖時發生錯誤', error: error.message });
+      res.status(error.status || 500).json({
+        message: error.status ? error.message : '更新店舖時發生錯誤',
+        error: error.message
+      });
     }
   }
 

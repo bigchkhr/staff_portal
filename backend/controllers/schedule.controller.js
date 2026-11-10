@@ -416,49 +416,30 @@ class ScheduleController {
     }
   }
 
-  async _groupStoreIds(groupId, startDate, endDate) {
-    const rows = await knex('schedules')
+  async _ownedStoreIds(groupId) {
+    const rows = await knex('stores')
       .where('department_group_id', groupId)
-      .whereBetween('schedule_date', [startDate, endDate])
-      .whereNotNull('store_id')
-      .distinct('store_id');
-    return rows.map((row) => Number(row.store_id)).filter((id) => !Number.isNaN(id));
+      .select('id');
+    return rows.map((row) => Number(row.id)).filter((id) => !Number.isNaN(id));
   }
 
-  _whereHelpingGroup(builder, groupId, startDate, endDate, storeId) {
-    if (storeId) {
-      builder.where(function () {
-        this.where('schedules.store_id', storeId)
-          .orWhereExists(function () {
-            this.select(knex.raw('1'))
-              .from('schedule_duty_assignments')
-              .whereRaw('schedule_duty_assignments.schedule_id = schedules.id')
-              .where('schedule_duty_assignments.loan_store_id', storeId);
-          });
-      });
-      return;
-    }
-
+  // 幫舖：其他群組的更，當日 store_id 或借舖屬於本群組的店。
+  // storeId 只篩選本群組其中一間店；唔屬於本群組的店不會配對到任何人。
+  _whereHelpingGroup(builder, groupId, _startDate, _endDate, storeId) {
     builder.where(function () {
       this.whereExists(function () {
         this.select(knex.raw('1'))
-          .from('schedules as own_shift')
-          .where('own_shift.department_group_id', groupId)
-          .whereRaw('own_shift.schedule_date = schedules.schedule_date')
-          .whereNotNull('own_shift.store_id')
-          .whereRaw('own_shift.store_id = schedules.store_id');
+          .from('stores as shift_store')
+          .whereRaw('shift_store.id = schedules.store_id')
+          .where('shift_store.department_group_id', groupId);
+        if (storeId) this.where('shift_store.id', storeId);
       }).orWhereExists(function () {
         this.select(knex.raw('1'))
           .from('schedule_duty_assignments')
+          .join('stores as loan_store', 'schedule_duty_assignments.loan_store_id', 'loan_store.id')
           .whereRaw('schedule_duty_assignments.schedule_id = schedules.id')
-          .whereNotNull('schedule_duty_assignments.loan_store_id')
-          .whereExists(function () {
-            this.select(knex.raw('1'))
-              .from('schedules as own_shift')
-              .where('own_shift.department_group_id', groupId)
-              .whereRaw('own_shift.schedule_date = schedules.schedule_date')
-              .whereRaw('own_shift.store_id = schedule_duty_assignments.loan_store_id');
-          });
+          .where('loan_store.department_group_id', groupId);
+        if (storeId) this.where('loan_store.id', storeId);
       });
     });
   }
@@ -490,25 +471,21 @@ class ScheduleController {
         return res.status(400).json({ message: '群組不正確' });
       }
 
-      let targetStoreIds = [];
-      if (store_id !== undefined && store_id !== null && store_id !== '') {
-        const storeId = parseInt(store_id, 10);
-        if (Number.isNaN(storeId)) {
-          return res.status(400).json({ message: '店舖不正確' });
-        }
-        targetStoreIds = [storeId];
-      } else {
-        targetStoreIds = await this._groupStoreIds(groupId, start_date, end_date);
-      }
-
       const canView = await this.canViewGroupSchedule(userId, groupId, req.user.is_system_admin);
       if (!canView) {
         return res.status(403).json({ message: '您沒有權限查看此群組的排班表' });
       }
 
-      const explicitStoreId = targetStoreIds.length === 1 && store_id !== undefined && store_id !== null && store_id !== ''
-        ? targetStoreIds[0]
-        : null;
+      const ownedStoreIds = await this._ownedStoreIds(groupId);
+      let explicitStoreId = null;
+      if (store_id !== undefined && store_id !== null && store_id !== '') {
+        const storeId = parseInt(store_id, 10);
+        if (Number.isNaN(storeId)) {
+          return res.status(400).json({ message: '店舖不正確' });
+        }
+        if (ownedStoreIds.includes(storeId)) explicitStoreId = storeId;
+      }
+      const targetStoreIds = explicitStoreId ? [explicitStoreId] : ownedStoreIds;
 
       const helperSchedulesQuery = await knex('schedules')
         .leftJoin('users', 'schedules.user_id', 'users.id')

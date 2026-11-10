@@ -1063,7 +1063,10 @@ const DailyShiftDuties = ({
                   <Select
                     value={selectedGroupId}
                     label={t('dailyShiftDuties.selectGroup')}
-                    onChange={(e) => guarded(() => setSelectedGroupId(e.target.value))}
+                    onChange={(e) => guarded(() => {
+                      setSelectedGroupId(e.target.value);
+                      setSelectedStoreId('');
+                    })}
                   >
                     {departmentGroups.map((group) => (
                       <MenuItem key={group.id} value={group.id}>
@@ -1082,7 +1085,9 @@ const DailyShiftDuties = ({
                     onChange={(e) => guarded(() => setSelectedStoreId(e.target.value))}
                   >
                     <MenuItem value="">{t('dailyShiftDuties.noHelperStore')}</MenuItem>
-                    {stores.map((store) => (
+                    {stores
+                      .filter((store) => !selectedGroupId || Number(store.department_group_id) === Number(selectedGroupId))
+                      .map((store) => (
                       <MenuItem key={store.id} value={store.id}>
                         {store.store_code}{store.store_short_name_ ? ` · ${store.store_short_name_}` : ''}
                       </MenuItem>

@@ -38,7 +38,8 @@ const emptyForm = {
   open_date: '',
   close_date: '',
   district: '',
-  is_closed: false
+  is_closed: false,
+  department_group_id: ''
 };
 
 const AdminStores = () => {
@@ -49,10 +50,27 @@ const AdminStores = () => {
   const [formData, setFormData] = useState(emptyForm);
   const [searchText, setSearchText] = useState('');
   const [districtFilter, setDistrictFilter] = useState('all');
+  const [departmentGroups, setDepartmentGroups] = useState([]);
 
   useEffect(() => {
     fetchStores();
+    fetchDepartmentGroups();
   }, []);
+
+  const fetchDepartmentGroups = async () => {
+    try {
+      const response = await axios.get('/api/groups/department');
+      setDepartmentGroups(response.data.groups || []);
+    } catch (error) {
+      console.error('Fetch department groups error:', error);
+    }
+  };
+
+  const groupLabel = (group) => {
+    if (!group) return '';
+    const name = group.name_zh || group.name || '';
+    return group.closed ? `${name}（${t('adminStores.groupClosed')}）` : name;
+  };
 
   const fetchStores = async () => {
     try {
@@ -82,7 +100,8 @@ const AdminStores = () => {
       open_date: store.open_date ? String(store.open_date).slice(0, 10) : '',
       close_date: store.close_date ? String(store.close_date).slice(0, 10) : '',
       district: store.district || '',
-      is_closed: !!store.is_closed
+      is_closed: !!store.is_closed,
+      department_group_id: store.department_group_id ? String(store.department_group_id) : ''
     });
     setOpen(true);
   };
@@ -108,7 +127,8 @@ const AdminStores = () => {
       open_date: formData.open_date || null,
       close_date: formData.close_date || null,
       district: formData.district?.trim() || null,
-      is_closed: !!formData.is_closed
+      is_closed: !!formData.is_closed,
+      department_group_id: formData.department_group_id ? Number(formData.department_group_id) : null
     };
   }, [formData]);
 
@@ -134,7 +154,9 @@ const AdminStores = () => {
         s.store_short_name_,
         s.district,
         s.tel,
-        s.email
+        s.email,
+        s.department_group_name,
+        s.department_group_name_zh
       ]
         .filter(Boolean)
         .map((v) => String(v).toLowerCase())
@@ -251,6 +273,7 @@ const AdminStores = () => {
               >
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.storeCode')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.shortName')}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.departmentGroup')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.district')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.tel')}</TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('adminStores.email')}</TableCell>
@@ -263,7 +286,7 @@ const AdminStores = () => {
             <TableBody>
               {filteredStores.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 4 }}>
                     <Typography variant="body2" color="text.secondary">
                       {t('adminStores.noStores')}
                     </Typography>
@@ -281,6 +304,7 @@ const AdminStores = () => {
                   >
                     <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{store.store_code}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.store_short_name_ || '-'}</TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.department_group_name_zh || store.department_group_name || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.district || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.tel || '-'}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{store.email || '-'}</TableCell>
@@ -338,6 +362,25 @@ const AdminStores = () => {
               onChange={handleChange('store_short_name_')}
               fullWidth
             />
+            <FormControl fullWidth>
+              <InputLabel>{t('adminStores.departmentGroup')}</InputLabel>
+              <Select
+                label={t('adminStores.departmentGroup')}
+                value={formData.department_group_id}
+                onChange={handleChange('department_group_id')}
+              >
+                <MenuItem value="">
+                  <em>{t('adminStores.noDepartmentGroup')}</em>
+                </MenuItem>
+                {[...departmentGroups]
+                  .sort((a, b) => groupLabel(a).localeCompare(groupLabel(b)))
+                  .map((group) => (
+                    <MenuItem key={group.id} value={String(group.id)}>
+                      {groupLabel(group)}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
             <TextField
               label={t('adminStores.district')}
               value={formData.district}

@@ -20,7 +20,8 @@ router.get('/', authenticate, async (req, res) => {
         'address_chi',
         'open_date',
         'close_date',
-        'is_closed'
+        'is_closed',
+        'department_group_id'
       );
     
     res.json({ stores });
