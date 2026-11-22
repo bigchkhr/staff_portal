@@ -186,6 +186,27 @@ export default function StepEditor({ step, index, total, onChange, onRemove, onM
     updateField(fieldIndex, { options: options.length ? options : defaultOptions() });
   }
 
+  function moveListItem(items, itemIndex, direction) {
+    const next = [...items];
+    const target = itemIndex + direction;
+    if (target < 0 || target >= next.length) return null;
+    const [item] = next.splice(itemIndex, 1);
+    next.splice(target, 0, item);
+    return next;
+  }
+
+  function moveOption(fieldIndex, optionIndex, direction) {
+    const field = (step.form_schema || [])[fieldIndex];
+    const options = moveListItem(field?.options || [], optionIndex, direction);
+    if (options) updateField(fieldIndex, { options });
+  }
+
+  function moveAxisItem(fieldIndex, axis, itemIndex, direction) {
+    const field = (step.form_schema || [])[fieldIndex];
+    const items = moveListItem(field?.[axis] || [], itemIndex, direction);
+    if (items) updateField(fieldIndex, { [axis]: items });
+  }
+
   function setAssigneeMode(mode) {
     if (mode === 'user') {
       update({
@@ -529,9 +550,29 @@ export default function StepEditor({ step, index, total, onChange, onRemove, onM
                         placeholder={t('step.option', { n: optionIndex + 1 })}
                       />
                       {!readOnly && (
-                        <button className="icon-button danger" onClick={() => removeOption(fieldIndex, optionIndex)}>
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="field-actions option-actions">
+                          <button
+                            type="button"
+                            className="icon-button"
+                            disabled={optionIndex === 0}
+                            title={t('step.moveOptionUp')}
+                            onClick={() => moveOption(fieldIndex, optionIndex, -1)}
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button"
+                            disabled={optionIndex === (field.options || []).length - 1}
+                            title={t('step.moveOptionDown')}
+                            onClick={() => moveOption(fieldIndex, optionIndex, 1)}
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                          <button type="button" className="icon-button danger" title={t('step.removeOption')} onClick={() => removeOption(fieldIndex, optionIndex)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -558,9 +599,29 @@ export default function StepEditor({ step, index, total, onChange, onRemove, onM
                             placeholder={t(axis === 'rows' ? 'step.row' : 'step.column', { n: itemIndex + 1 })}
                           />
                           {!readOnly && (
-                            <button className="icon-button danger" onClick={() => removeAxisItem(fieldIndex, axis)(itemIndex)}>
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="field-actions option-actions">
+                              <button
+                                type="button"
+                                className="icon-button"
+                                disabled={itemIndex === 0}
+                                title={t('step.moveItemUp')}
+                                onClick={() => moveAxisItem(fieldIndex, axis, itemIndex, -1)}
+                              >
+                                <ChevronUp size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-button"
+                                disabled={itemIndex === (field[axis] || []).length - 1}
+                                title={t('step.moveItemDown')}
+                                onClick={() => moveAxisItem(fieldIndex, axis, itemIndex, 1)}
+                              >
+                                <ChevronDown size={14} />
+                              </button>
+                              <button type="button" className="icon-button danger" title={t('step.removeItem')} onClick={() => removeAxisItem(fieldIndex, axis)(itemIndex)}>
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
