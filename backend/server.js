@@ -92,6 +92,7 @@ const storeRoutes = require('./routes/store.routes');
 const monthlyAttendanceSummaryRoutes = require('./routes/monthlyAttendanceSummary.routes');
 const monthlyAttendanceReportRoutes = require('./routes/monthlyAttendanceReport.routes');
 const systemYearRoutes = require('./routes/systemYear.routes');
+const eProcessRoutes = require('./eProcess');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -118,6 +119,7 @@ app.use('/api/stores', storeRoutes);
 app.use('/api/monthly-attendance-summaries', monthlyAttendanceSummaryRoutes);
 app.use('/api/monthly-attendance-reports', monthlyAttendanceReportRoutes);
 app.use('/api/system-years', systemYearRoutes);
+app.use('/api/e-process', eProcessRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

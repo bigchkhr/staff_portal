@@ -17,6 +17,8 @@ router.delete('/department/:id/members/:userId', authenticate, groupController.r
 
 // Department Group Approval Flow
 router.get('/department/:id/approval-flow', authenticate, groupController.getDepartmentGroupApprovalFlow);
+router.get('/department/:id/assignable-groups', authenticate, groupController.getAssignableGroups);
+router.put('/department/:id/assignable-groups', authenticate, groupController.updateAssignableGroups);
 
 // ========== Delegation Groups ==========
 router.get('/delegation', authenticate, groupController.getDelegationGroups);

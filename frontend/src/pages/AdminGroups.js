@@ -135,6 +135,7 @@ const AdminGroups = () => {
   const [memberSearchKeyword, setMemberSearchKeyword] = useState('');
   const [rolesOpen, setRolesOpen] = useState(false);
   const [rolesGroup, setRolesGroup] = useState(null);
+  const [assignableIds, setAssignableIds] = useState([]);
   const [roleForm, setRoleForm] = useState({
     checker_id: '',
     supervisor_id: '',
@@ -231,8 +232,9 @@ const AdminGroups = () => {
     setOpen(true);
   };
 
-  const handleOpenRoles = (group) => {
+  const handleOpenRoles = async (group) => {
     setRolesGroup(group);
+    setAssignableIds([]);
     setRoleForm({
       checker_id: group.checker_id || '',
       supervisor_id: group.supervisor_id || '',
@@ -242,12 +244,21 @@ const AdminGroups = () => {
       approver_3_id: group.approver_3_id || ''
     });
     setRolesOpen(true);
+    try {
+      const response = await axios.get(`/api/groups/department/${group.id}/assignable-groups`);
+      setAssignableIds((response.data.target_group_ids || []).map(Number));
+    } catch (error) {
+      console.error('Fetch assignable groups error:', error);
+    }
   };
 
   const handleSaveRoles = async () => {
     if (!rolesGroup) return;
     try {
       await axios.put(`/api/groups/department/${rolesGroup.id}`, roleForm);
+      await axios.put(`/api/groups/department/${rolesGroup.id}/assignable-groups`, {
+        target_group_ids: assignableIds
+      });
       setRolesOpen(false);
       fetchGroups();
     } catch (error) {
@@ -653,6 +664,29 @@ const AdminGroups = () => {
                 </Select>
               </FormControl>
             ))}
+            <FormControl fullWidth>
+              <InputLabel>{t('adminGroups.assignableGroups')}</InputLabel>
+              <Select
+                multiple
+                value={assignableIds}
+                label={t('adminGroups.assignableGroups')}
+                onChange={(e) => setAssignableIds(e.target.value.map(Number))}
+                renderValue={(selected) => selected.map((id) => {
+                  const group = departmentGroups.find((item) => Number(item.id) === Number(id));
+                  if (!group) return id;
+                  return i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name);
+                }).join('、')}
+              >
+                {departmentGroups.filter((group) => !group.closed && Number(group.id) !== Number(rolesGroup?.id)).map((group) => (
+                  <MenuItem key={group.id} value={Number(group.id)}>
+                    {i18n.language === 'en' ? (group.name || group.name_zh) : (group.name_zh || group.name)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Typography variant="caption" color="text.secondary">
+              {t('adminGroups.assignableGroupsHint')}
+            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>

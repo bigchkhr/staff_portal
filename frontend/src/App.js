@@ -62,6 +62,7 @@ import MonthlyAttendanceReportExport from './pages/MonthlyAttendanceReportExport
 import MonthlyAttendanceReportBulk from './pages/MonthlyAttendanceReportBulk';
 import StoreDirectory from './pages/StoreDirectory';
 import YearManagement from './pages/YearManagement';
+import EProcessApp from './eProcess/EProcessApp';
 import StoreHoursReport from './pages/StoreHoursReport';
 import StoreWageCostReport from './pages/StoreWageCostReport';
 // 設定後端 API 地址
@@ -151,6 +152,7 @@ function App() {
             <Route path="/monthly-attendance-report" element={<PrivateRoute><MonthlyAttendanceReport /></PrivateRoute>} />
             <Route path="/monthly-attendance-report-export" element={<PrivateRoute><MonthlyAttendanceReportExport /></PrivateRoute>} />
             <Route path="/admin/years" element={<PrivateRoute><YearManagement /></PrivateRoute>} />
+            <Route path="/e-process/*" element={<PrivateRoute><EProcessApp /></PrivateRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

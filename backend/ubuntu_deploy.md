@@ -15,7 +15,7 @@ Linkup to serve
 
 chmod 400 bigcstaffportal.pem
 <!-- ssh -i bigcstaffportal.pem ubuntu@3.1.139.29 -->
-ssh -i "bigcstaffportal.pem" ubuntu@ec2-3-1-139-29.ap-southeast-1.compute.amazonaws.com
+ssh -i "bigcstaffportal.pem" ubuntu@ec2-52-74-6-118.ap-southeast-1.compute.amazonaws.com
 hostname
 sudo hostnamectl set-hostname postgresql-server
 

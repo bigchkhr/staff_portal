@@ -478,6 +478,53 @@ class GroupController {
     }
   }
 
+  async getAssignableGroups(req, res) {
+    try {
+      if (!req.user?.is_system_admin) {
+        return res.status(403).json({ message: '需要系統管理員權限' });
+      }
+      const knex = require('../config/database');
+      const ids = await knex('department_group_assignable_groups')
+        .where({ source_group_id: Number(req.params.id) })
+        .pluck('target_group_id');
+      return res.json({ target_group_ids: ids.map(Number) });
+    } catch (error) {
+      console.error('Get assignable groups error:', error);
+      return res.status(500).json({ message: '讀取可指派群組時發生錯誤' });
+    }
+  }
+
+  async updateAssignableGroups(req, res) {
+    try {
+      if (!req.user?.is_system_admin) {
+        return res.status(403).json({ message: '需要系統管理員權限' });
+      }
+      const knex = require('../config/database');
+      const sourceId = Number(req.params.id);
+      const source = await knex('department_groups').where({ id: sourceId }).first('id');
+      if (!source) return res.status(404).json({ message: '部門群組不存在' });
+
+      const requested = [...new Set((req.body.target_group_ids || []).map(Number))]
+        .filter((id) => Number.isInteger(id) && id > 0 && id !== sourceId);
+      const existing = requested.length
+        ? (await knex('department_groups').whereIn('id', requested).pluck('id')).map(Number)
+        : [];
+
+      await knex.transaction(async (trx) => {
+        await trx('department_group_assignable_groups').where({ source_group_id: sourceId }).del();
+        if (existing.length) {
+          await trx('department_group_assignable_groups').insert(
+            existing.map((target_group_id) => ({ source_group_id: sourceId, target_group_id }))
+          );
+        }
+      });
+      return res.json({ message: '可指派群組已更新', target_group_ids: existing });
+    } catch (error) {
+      console.error('Update assignable groups error:', error);
+      return res.status(500).json({ message: '更新可指派群組時發生錯誤' });
+    }
+  }
+
   // ========== User Group Info ==========
   
   async getUserGroups(req, res) {

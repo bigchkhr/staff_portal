@@ -1148,6 +1148,137 @@ class EmailService {
       await this.sendBulkEmails(emails, { subject, html });
     }
   }
+
+  async sendEProcessStageAssignment({
+    to,
+    assigneeName,
+    runName,
+    runNumber,
+    workflowName,
+    stageTitle,
+    runUrl,
+    reassigned,
+    returned,
+    reason,
+    returnedByName,
+    needsAccept,
+    groupName,
+  }) {
+    const safeRun = this._escapeHtml(runName || 'Run');
+    const safeStage = this._escapeHtml(stageTitle || 'Stage');
+    const safeWorkflow = this._escapeHtml(workflowName || '');
+    const safeNumber = this._escapeHtml(runNumber || '');
+    const safeName = this._escapeHtml(assigneeName || '');
+    const safeGroup = this._escapeHtml(groupName || '');
+    const safeReason = this._escapeHtml(reason || '');
+    const safeReturner = this._escapeHtml(returnedByName || '');
+    const subject = returned
+      ? `[Staff Portal] Stage returned / [員工系統] 階段已退回 - ${runName || ''}`.trim()
+      : reassigned
+        ? `[Staff Portal] Stage assignee updated / [員工系統] 階段負責人已更新 - ${runName || ''}`.trim()
+        : `[Staff Portal] A stage is assigned to you / [員工系統] 有階段已指派給你 - ${runName || ''}`.trim();
+    const lead = returned
+      ? (safeGroup
+        ? `A stage assigned to your group <strong>${safeGroup}</strong> has been returned.<br>指派給你群組 <strong>${safeGroup}</strong> 的階段已被退回。`
+        : `A stage assigned to you has been returned.<br>指派給你的階段已被退回。`)
+      : safeGroup
+        ? (reassigned
+          ? `This stage is now assigned to your group <strong>${safeGroup}</strong>.<br>這個階段現已指派給你的群組 <strong>${safeGroup}</strong>。`
+          : `A run has reached a stage assigned to your group <strong>${safeGroup}</strong>.<br>有一個流程執行已進行到指派給你群組 <strong>${safeGroup}</strong> 的階段。`)
+        : (reassigned
+          ? `You are now the assignee of this stage.<br>你已成為這個階段的負責人。`
+          : `A run has reached a stage assigned to you.<br>有一個流程執行已進行到指派給你的階段。`);
+    const returnNote = returned
+      ? `<p><strong>Returned by / 退回人:</strong> ${safeReturner || '-'}</p><p><strong>Reason / 原因:</strong><br>${safeReason}</p>`
+      : '';
+    const acceptNote = needsAccept
+      ? (safeGroup
+        ? `<p>Any member of the group can open the run and accept this assignment.<br>群組內任何成員都可以打開這個執行並接受指派。</p>`
+        : `<p>Please open the run and accept the assignment before you work on it.<br>請先打開這個執行並接受指派，然後先開始處理。</p>`)
+      : '';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
+            <h2>${returned ? 'e-Process stage returned / 階段已退回' : 'e-Process assignment / 流程指派'}</h2>
+          </div>
+          <div style="background-color: #f9f9f9; padding: 20px; margin-top: 20px;">
+            <p>Hello ${safeName} 您好，</p>
+            <p>${lead}</p>
+            ${safeNumber ? `<p><strong>Run no. / 執行編號:</strong> ${safeNumber}</p>` : ''}
+            <p><strong>Run / 執行:</strong> ${safeRun}</p>
+            ${safeWorkflow ? `<p><strong>Workflow / 流程:</strong> ${safeWorkflow}</p>` : ''}
+            <p><strong>Stage / 階段:</strong> ${safeStage}</p>
+            ${returnNote}
+            ${acceptNote}
+            <p style="margin-top: 20px;">
+              <a href="${runUrl}" style="background-color: #1565c0; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                Open run / 打開執行
+              </a>
+            </p>
+          </div>
+          <p style="margin-top: 20px; color: #666; font-size: 12px; text-align: center;">
+            This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    await this.sendEmail({ to, subject, html });
+  }
+
+  async sendEProcessFlowEnded({
+    to,
+    assigneeName,
+    runName,
+    runNumber,
+    workflowName,
+    runUrl,
+    reason,
+    endedByName,
+  }) {
+    const safeRun = this._escapeHtml(runName || 'Run');
+    const safeNumber = this._escapeHtml(runNumber || '');
+    const safeWorkflow = this._escapeHtml(workflowName || '');
+    const safeName = this._escapeHtml(assigneeName || '');
+    const safeReason = this._escapeHtml(reason || '');
+    const safeEnder = this._escapeHtml(endedByName || '');
+    const subject = `[Staff Portal] Flow ended / [員工系統] 流程已結束 - ${runName || ''}`.trim();
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #6d4c41; color: white; padding: 20px; text-align: center;">
+            <h2>e-Process flow ended / 流程已結束</h2>
+          </div>
+          <div style="background-color: #f9f9f9; padding: 20px; margin-top: 20px;">
+            <p>Hello ${safeName} 您好，</p>
+            <p>A flow you are involved in has been ended.<br>你參與的一個流程已經結束。</p>
+            ${safeNumber ? `<p><strong>Run no. / 執行編號:</strong> ${safeNumber}</p>` : ''}
+            <p><strong>Run / 執行:</strong> ${safeRun}</p>
+            ${safeWorkflow ? `<p><strong>Workflow / 流程:</strong> ${safeWorkflow}</p>` : ''}
+            <p><strong>Ended by / 結束人:</strong> ${safeEnder || '-'}</p>
+            <p><strong>Reason / 原因:</strong><br>${safeReason}</p>
+            <p style="margin-top: 20px;">
+              <a href="${runUrl}" style="background-color: #6d4c41; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                Open run / 打開執行
+              </a>
+            </p>
+          </div>
+          <p style="margin-top: 20px; color: #666; font-size: 12px; text-align: center;">
+            This is an automated email. Please do not reply directly. / 這是一封自動發送的郵件，請勿直接回覆。
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    await this.sendEmail({ to, subject, html });
+  }
 }
 
 // 導出單例

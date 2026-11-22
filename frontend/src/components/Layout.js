@@ -69,18 +69,21 @@ const Layout = ({ children }) => {
   const [pendingCount, setPendingCount] = useState(0);
   const [returnedLeaveCount, setReturnedLeaveCount] = useState(0);
   const [schedulePendingCount, setSchedulePendingCount] = useState(0);
+  const [eProcessPendingCount, setEProcessPendingCount] = useState(0);
   const [isApprovalMember, setIsApprovalMember] = useState(false);
 
   useEffect(() => {
     fetchPendingCount();
     fetchSchedulePendingCount();
     fetchReturnedLeaveCount();
+    fetchEProcessPendingCount();
     checkApprovalMembership();
     // 設置定時刷新，減少更新頻率
     const interval = setInterval(() => {
       fetchPendingCount();
       fetchSchedulePendingCount();
       fetchReturnedLeaveCount();
+      fetchEProcessPendingCount();
     }, 60000); // 改為每60秒更新一次
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +99,9 @@ const Layout = ({ children }) => {
     }
     if (location.pathname === '/my-applications' || location.pathname.startsWith('/leave/history') || location.pathname.startsWith('/approval')) {
       fetchReturnedLeaveCount();
+    }
+    if (location.pathname.startsWith('/e-process')) {
+      fetchEProcessPendingCount();
     }
   }, [location.pathname]);
 
@@ -123,6 +129,16 @@ const Layout = ({ children }) => {
     } catch (error) {
       console.error('獲取待批核數量錯誤:', error);
       setPendingCount(0);
+    }
+  };
+
+  const fetchEProcessPendingCount = async () => {
+    try {
+      const response = await axios.get('/api/e-process/runs/mine/assignments/pending-count');
+      setEProcessPendingCount(Number(response.data?.pendingCount || 0));
+    } catch (error) {
+      console.error('獲取 E-Process 待辦數量錯誤:', error);
+      setEProcessPendingCount(0);
     }
   };
 
@@ -202,6 +218,11 @@ const Layout = ({ children }) => {
       ), path: '/shift-management', show: true },
     { key: 'myDocuments', icon: <DescriptionIcon />, path: '/documents/my', show: true },
     { key: 'tools', icon: <BuildIcon />, path: '/tools', show: true },
+    { key: 'eProcess', icon: (
+        <Badge badgeContent={eProcessPendingCount} color="error" max={99999}>
+          <WorkIcon />
+        </Badge>
+      ), path: '/e-process', show: true },
     { key: 'documentUpload', icon: <DescriptionIcon />, path: '/documents/upload', show: isSystemAdmin },
     { key: 'manualApproval', icon: <AssignmentIcon />, path: '/manual-approval', show: isSystemAdmin },
     { key: 'systemMaintenance', icon: <SettingsIcon />, path: '/system-maintenance', show: isSystemAdmin }
