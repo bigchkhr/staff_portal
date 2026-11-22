@@ -8,6 +8,7 @@ const {
   canAssignUserGroups,
   canEditWorkflow,
   canViewWorkflow,
+  canViewWorkflowContent,
   canUseWorkflow,
   applyVisibleWorkflowFilter,
 } = require('../access');
@@ -104,6 +105,7 @@ function parseWorkflowBody(body) {
     const allow_delete = DELETABLE_STEP_TYPES.has(type) && step?.allow_delete === true;
     const allow_skip = step?.allow_skip === true;
     const allow_review = step?.allow_review !== false;
+    const visible_to_starter = step?.visible_to_starter !== false;
 
     return {
       id: step.id || undefined,
@@ -114,6 +116,7 @@ function parseWorkflowBody(body) {
       allow_skip,
       allow_review,
       allow_delete,
+      visible_to_starter,
       form_schema,
       condition,
       assignee_mode,
@@ -130,12 +133,13 @@ function db() {
 }
 
 function withCapabilities(ctx, workflow) {
-    const canEdit = canEditWorkflow(ctx, workflow);
+  const canEdit = canEditWorkflow(ctx, workflow);
   const canView = canViewWorkflow(ctx, workflow);
   return {
     ...workflow,
     canEdit,
     canView,
+    canViewContent: canViewWorkflowContent(ctx, workflow),
     canRun: canUseWorkflow(ctx, workflow),
     canDelete: canEdit,
     canAssignAudience: canAssignUserGroups(ctx, workflow.group_id),
@@ -324,6 +328,7 @@ function stepInsertRow(workflowId, step, index) {
     allow_skip: step.allow_skip === true,
     allow_review: step.allow_review !== false,
     allow_delete: step.allow_delete === true,
+    visible_to_starter: step.visible_to_starter !== false,
     form_schema: JSON.stringify(step.form_schema),
     condition: step.condition ? JSON.stringify(step.condition) : null,
     assignee_mode: step.assignee_mode || 'unassigned',
@@ -367,8 +372,23 @@ router.get(
     }
 
     const rows = await query;
+    const ids = rows.map((workflow) => workflow.id);
+    const delegationLinks = ids.length
+      ? await knex('workflow_audience_delegations')
+        .whereIn('workflow_id', ids)
+        .select('workflow_id', 'delegation_group_id')
+      : [];
+    const delegationsByWorkflow = new Map();
+    delegationLinks.forEach((link) => {
+      const list = delegationsByWorkflow.get(link.workflow_id) || [];
+      list.push(link.delegation_group_id);
+      delegationsByWorkflow.set(link.workflow_id, list);
+    });
     const workflows = rows
-      .map((workflow) => withCapabilities(ctx, workflow))
+      .map((workflow) => withCapabilities(ctx, {
+        ...workflow,
+        audience_delegation_group_ids: delegationsByWorkflow.get(workflow.id) || [],
+      }))
       .filter((workflow) => workflow.canView);
     return res.json({ workflows });
   })
@@ -445,8 +465,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const workflow = await getWorkflowDetails(db(req), req.params.id);
     if (!workflow) return res.status(404).json({ message: 'Workflow not found.' });
-    if (!canViewWorkflow(req.eProcess, workflow)) {
-      return res.status(403).json({ message: 'You do not have access to this workflow.' });
+    if (!canViewWorkflowContent(req.eProcess, workflow)) {
+      return res.status(403).json({ message: 'Only members of an added delegation group can open this workflow.' });
     }
     const enriched = withCapabilities(req.eProcess, workflow);
     return res.json({
@@ -774,6 +794,7 @@ router.post(
           allow_skip: step.allow_skip === true,
           allow_review: step.allow_review !== false,
           allow_delete: step.allow_delete === true,
+          visible_to_starter: step.visible_to_starter !== false,
           form_schema: JSON.stringify(step.form_schema || []),
           condition: step.condition ? JSON.stringify(step.condition) : null,
           status: 'blocked',

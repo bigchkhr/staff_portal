@@ -158,14 +158,17 @@ export default function WorkflowsPage() {
           </div>
           {workflows.map((workflow) => {
             const menuOpen = menuOpenId === workflow.id;
+            const canOpen = workflow.canViewContent !== false;
             const audience = workflow.status === 'published'
               ? (workflow.audience === 'user_groups' ? t('eProcess.common.userGroups') : t('eProcess.common.everyone'))
               : t('eProcess.common.draft');
             return (
               <article
-                className="workflow-row"
+                className={canOpen ? 'workflow-row' : 'workflow-row workflow-row-locked'}
                 key={workflow.id}
-                onClick={() => navigate(`/e-process/workflows/${workflow.id}`)}
+                onClick={() => {
+                  if (canOpen) navigate(`/e-process/workflows/${workflow.id}`);
+                }}
               >
                 <div className="workflow-row-main">
                   <div className="workflow-icon"><Workflow size={18} /></div>
@@ -201,9 +204,11 @@ export default function WorkflowsPage() {
                     </button>
                     {menuOpen && (
                       <div className="card-menu-panel" role="menu">
-                        <button type="button" role="menuitem" onClick={() => navigate(`/e-process/workflows/${workflow.id}`)}>
-                          {t('eProcess.common.open')}
-                        </button>
+                        {canOpen && (
+                          <button type="button" role="menuitem" onClick={() => navigate(`/e-process/workflows/${workflow.id}`)}>
+                            {t('eProcess.common.open')}
+                          </button>
+                        )}
                         {workflow.status === 'published' && workflow.canRun !== false && (
                           <button type="button" role="menuitem" onClick={(e) => openStartRun(e, workflow)}>
                             <Play size={15} /> {t('eProcess.common.run')}

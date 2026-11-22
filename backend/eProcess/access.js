@@ -166,6 +166,14 @@ function canViewWorkflow(ctx, workflow) {
   return (ctx.audienceWorkflowIds || []).includes(String(workflow.id));
 }
 
+function canViewWorkflowContent(ctx, workflow) {
+  if (ctx.isSupervisor) return true;
+  if (canEditWorkflow(ctx, workflow)) return true;
+  const mine = new Set((ctx.delegationGroupIds || []).map((id) => String(id)));
+  const allowed = workflow.audience_delegation_group_ids || [];
+  return allowed.some((id) => mine.has(String(id)));
+}
+
 function canUseWorkflow(ctx, workflow) {
   if (workflow.status !== 'published') return false;
   return canViewWorkflow(ctx, workflow);
@@ -272,6 +280,7 @@ module.exports = {
   applyVisibleProcedureFilter,
   canEditWorkflow,
   canViewWorkflow,
+  canViewWorkflowContent,
   canUseWorkflow,
   canViewRun,
   applyRunsVisibility,

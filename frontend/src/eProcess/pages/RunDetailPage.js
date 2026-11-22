@@ -353,6 +353,7 @@ export default function RunDetailPage() {
     [data, currentStage]
   );
   const viewingPast = isPastTask(selectedTask);
+  const starterHidden = Boolean(selectedTask?.starter_hidden);
   const contentHidden = Boolean(viewingPast && (selectedTask?.content_hidden || selectedTask?.allow_review === false));
   const canEditSelected = Boolean(selectedTask?.canWork && isOpenTask(selectedTask));
 
@@ -1006,7 +1007,9 @@ export default function RunDetailPage() {
                   ))}
                 </div>
               )}
-              {contentHidden ? (
+              {starterHidden ? (
+                <p className="muted">{t('eProcess.run.starterBlocked')}</p>
+              ) : contentHidden ? (
                 <p className="muted">{t('eProcess.run.titleOnly')}</p>
               ) : (
               <>

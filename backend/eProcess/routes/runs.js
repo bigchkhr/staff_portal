@@ -301,6 +301,15 @@ function canWorkTask(ctx, task) {
   return !task.assignment_status || task.assignment_status === 'accepted';
 }
 
+function hideStepFromStarter(ctx, run, task) {
+  if (task.visible_to_starter !== false) return false;
+  if (Number(run.started_by) !== Number(ctx.userId)) return false;
+  const assigneeWorking = Number(task.assigned_to) === Number(ctx.userId)
+    && (!task.assignment_status || task.assignment_status === 'accepted')
+    && ['pending', 'in_progress'].includes(task.status);
+  return !assigneeWorking;
+}
+
 function isOpenTask(task) {
   return ['pending', 'in_progress'].includes(task.status);
 }
@@ -556,6 +565,7 @@ router.get(
         'tr.allow_skip',
         'tr.allow_review',
         'tr.allow_delete',
+        'tr.visible_to_starter',
         'tr.form_schema',
         'tr.condition',
         'tr.assigned_to',
@@ -625,7 +635,8 @@ router.get(
 
     const enriched = tasks.map((task) => {
       const terminal = ['completed', 'rejected', 'skipped'].includes(task.status);
-      const contentHidden = terminal && task.allow_review === false;
+      const starterHidden = hideStepFromStarter(req.eProcess, run, task);
+      const contentHidden = starterHidden || (terminal && task.allow_review === false);
       const visible = contentHidden
         ? {
           ...task,
@@ -639,6 +650,7 @@ router.get(
       return withTaskTimeFields({
       ...visible,
       content_hidden: contentHidden,
+      starter_hidden: starterHidden,
       attachments: contentHidden ? [] : (attachmentsByTask[task.id] || []),
       stage_returns: returnsByTask[task.id] || [],
       assignee_group_name: task.assignee_is_work_group ? run.group_name : task.assignee_group_name,
@@ -1216,6 +1228,12 @@ router.get(
     if (!run) return res.status(404).json({ message: 'Run not found.' });
     if (!(await userCanAccessRun(knex, req.eProcess, run))) {
       return res.status(403).json({ message: 'You do not have access to this run.' });
+    }
+
+    const task = await getTask(knex, run.id, req.params.taskId);
+    if (!task) return res.status(404).json({ message: 'Task not found.' });
+    if (hideStepFromStarter(req.eProcess, run, task)) {
+      return res.status(403).json({ message: 'This step is hidden from the person who started the run.' });
     }
 
     const att = await knex('e_process_task_attachments')

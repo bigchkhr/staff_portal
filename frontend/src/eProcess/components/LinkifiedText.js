@@ -26,5 +26,5 @@ export default function LinkifiedText({ text, className }) {
   }
   if (cursor < source.length) nodes.push(source.slice(cursor));
 
-  return <span className={className}>{nodes}</span>;
+  return <span className={['pre-wrap', className].filter(Boolean).join(' ')}>{nodes}</span>;
 }

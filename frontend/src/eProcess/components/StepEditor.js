@@ -345,6 +345,20 @@ export default function StepEditor({ step, index, total, onChange, onRemove, onM
           {t('step.reviewHidden')}
         </p>
       )}
+      <label className="checkbox" style={{ marginTop: 8 }}>
+        <input
+          type="checkbox"
+          checked={step.visible_to_starter !== false}
+          disabled={readOnly}
+          onChange={(e) => update({ visible_to_starter: e.target.checked })}
+        />
+        {t('step.visibleToStarter')}
+      </label>
+      {step.visible_to_starter === false && (
+        <p className="muted" style={{ marginTop: 6, marginBottom: 0 }}>
+          {t('step.starterHiddenHint')}
+        </p>
+      )}
 
       {DELETABLE_STEP_TYPES.has(step.type) && (
         <label className="checkbox" style={{ marginTop: 12 }}>
